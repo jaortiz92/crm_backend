@@ -19,7 +19,7 @@ class CreditBase(BaseModel):
     payment_value: float = Field(...,
         description='Payment value'
     )
-    balance: float = Field(...,
+    balance: Optional[float] = Field(...,
         description='Balance remaining'
     )
     paid: Optional[bool] = Field(False,
