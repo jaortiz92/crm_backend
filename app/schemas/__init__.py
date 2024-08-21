@@ -16,3 +16,8 @@ from .role import Role
 from .storeType import StoreType
 from .task import Task
 from .user import User
+from .advance import Advance
+from .invoice import Invoice
+from .invoiceDetail import InvoiceDetail
+from .credit import Credit
+from .shipment import Shipment
