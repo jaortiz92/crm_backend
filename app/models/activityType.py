@@ -15,3 +15,5 @@ class ActivityType(Base):
     activity = Column(String(100), nullable=False)
     mandatory = Column(Boolean, nullable=False)
     activity_order = Column(Integer, nullable=False)
+
+    customer = relationship("customer", back_populates="activity_types")

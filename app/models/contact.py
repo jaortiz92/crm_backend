@@ -2,7 +2,7 @@
 from sqlalchemy import (
     Column, ForeignKey,
     Integer, String,
-    Float, Date
+    Float, Date, Boolean
 )
 from sqlalchemy.orm import relationship
 
@@ -19,10 +19,11 @@ class Contact(Base):
     document = Column(Float, nullable=False)
     email = Column(String(100))
     phone = Column(String(20))
-    id_store_type = Column(Integer, ForeignKey("store_types.id_store_type"))
     id_role = Column(Integer, ForeignKey("roles.id_role"))
     birth_date = Column(Date)
+    id_city = Column(Integer, ForeignKey("cities.id_city"))
+    active = Column(Boolean)
 
     customer = relationship("Customer", back_populates="contacts")
-    store_type = relationship("StoreType", back_populates="contacts")
     role = relationship("Role", back_populates="contacts")
+    city = relationship("City", back_populates="customers")

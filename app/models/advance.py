@@ -16,7 +16,7 @@ class Advance(Base):
     id_order = Column(Integer, ForeignKey("orders.id_order"))
     payment_date = Column(Date, nullable=False)
     advance_type = Column(Float, nullable=False)
-    value = Column(Integer, nullable=False)
+    amount = Column(Integer, nullable=False)
     payment = Column(Integer, default=0)
     balance = Column(Integer)
     paid = Column(Boolean, default=False)

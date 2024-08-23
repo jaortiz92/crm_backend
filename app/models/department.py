@@ -15,3 +15,5 @@ class Department(Base):
     department_code = Column(String(2), unique=True, index=True)
     department_name = Column(String(80))
 
+    city = relationship("City", back_populates="departments")
+

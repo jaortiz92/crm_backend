@@ -17,3 +17,7 @@ class Invoice(Base):
     id_order = Column(Integer, ForeignKey("orders.id_order"))
 
     order = relationship("Order", back_populates="invoices")
+
+    invoiceDetail = relationship("InvoiceDetail", back_populates="invoices")
+    credit = relationship("Credit", back_populates="invoices")
+    shipment = relationship("Shipment", back_populates="invoices")

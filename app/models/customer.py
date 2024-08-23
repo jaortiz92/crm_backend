@@ -25,9 +25,16 @@ class Customer(Base):
     id_brand = Column(Integer, ForeignKey("brands.id_brand"))
     id_seller = Column(Integer, ForeignKey("users.id_user"))
     id_city = Column(Integer, ForeignKey("cities.id_city"))
+    stores = Column(Integer)
     active = Column(Boolean)
 
     store_type = relationship("StoreType", back_populates="customers")
     brand = relationship("Brand", back_populates="customers")
     seller = relationship("User", back_populates="customers")
     city = relationship("City", back_populates="customers")
+
+    customer_trip = relationship("CustomerTrip", back_populates="customers")
+    contact = relationship("Contacts", back_populates="customers")
+    task = relationship("Tasks", back_populates="customers")
+    rating = relationship("Rating", back_populates="customers")
+    

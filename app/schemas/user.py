@@ -43,7 +43,7 @@ class UserBase(BaseModel):
     birth_date: Optional[date] = Field(None,
         description='Users birth date'
     )
-    is_active: bool = Field(...,
+    active: bool = Field(...,
         description='Indicates whether the user is active or not'
     )
 

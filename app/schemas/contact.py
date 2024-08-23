@@ -28,16 +28,19 @@ class ContactBase(BaseModel):
         max_length=20,
         description='phone number (max 20 characters)'
     )
-    store_type_id: int = Field(...,
-        gt=0,
-        description='ID of the store type associated with the contact'
-    )
     role_id: int = Field(...,
         gt=0,
         description='ID of the role assigned to the contact'
     )
     birth_date: Optional[date] = Field(None,
         description='birth date'
+    )
+    city_id: int = Field(...,
+        gt=0,
+        description='ID of the city the Customer resides in'
+    )
+    active: bool = Field(...,
+        description='Indicates whether the user is active or not'
     )
 
 class ContactCreate(ContactBase):

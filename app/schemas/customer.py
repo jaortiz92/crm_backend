@@ -36,11 +36,15 @@ class CustomerBase(BaseModel):
         gt=0,
         description='ID of the seller associated with the Customer'
     )
+    stores: int = Field(...,
+        gt=0,
+        description='Stores associated with the Customer'
+    )
     city_id: int = Field(...,
         gt=0,
         description='ID of the city the Customer resides in'
     )
-    is_active: bool = Field(...,
+    active: bool = Field(...,
         description='Indicates whether the user is active or not'
     )
 

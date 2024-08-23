@@ -15,7 +15,7 @@ class Order(Base):
     id_order = Column(Integer, primary_key=True, index=True)
     id_customer_trip = Column(Integer, ForeignKey("customer_trips.id_customer_trip"))
     id_seller = Column(Integer, ForeignKey("users.id_user"))
-    date = Column(Date, nullable=False)
+    date_order = Column(Date, nullable=False)
     id_payment_method = Column(Integer, ForeignKey("payment_methods.id_payment_method"))
     quantities = Column(Integer, nullable=False)
     system_quantities = Column(Integer)

@@ -12,3 +12,5 @@ class StoreType(Base):
 
     id_store_type = Column(Integer, primary_key=True, index=True)
     store_type = Column(String(100))
+
+    customer = relationship("Customer", back_populates="store_types")

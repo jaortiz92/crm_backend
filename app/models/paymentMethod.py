@@ -12,3 +12,5 @@ class PaymentMethod(Base):
 
     id_payment_method = Column(Integer, primary_key=True, index=True)
     payment_method = Column(String(100))
+
+    order = relationship("Order", back_populates="payment_methods")

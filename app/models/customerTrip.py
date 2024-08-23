@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship
 # APP
 from db import Base
 
-class customerTrip(Base):
+class CustomerTrip(Base):
     __tablename__ = "customer_trips"
 
     id_customer_trip = Column(Integer, primary_key=True, index=True)
@@ -23,3 +23,6 @@ class customerTrip(Base):
     customer = relationship("customer", back_populates="customer_trips")
     seller = relationship("User", back_populates="customer_trips")
     collection = relationship("Collection", back_populates="customer_trips")
+
+    customer_trip = relationship("CustomerTrip", back_populates="customer_trips")
+    order = relationship("Order", back_populates="customer_trips")

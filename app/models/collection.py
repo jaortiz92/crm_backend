@@ -11,10 +11,12 @@ class Collection(Base):
     __tablename__ = "collections"
 
     id_collection = Column(Integer, primary_key=True, index=True)
-    id_brand = Column(Integer, ForeignKey("brands.id_brand"))
+    id_line = Column(Integer, ForeignKey("lines.id_line"))
     collection_name = Column(String(30), nullable=False)
     short_collection_name = Column(String(10), nullable=False)
     year = Column(Integer, nullable=False)
     quarter = Column(Integer, nullable=False)
 
-    brand = relationship("Brand", back_populates="collections")
+    line = relationship("Line", back_populates="collections")
+    
+    customer_trip = relationship("CustomerTrip", back_populates="collections")

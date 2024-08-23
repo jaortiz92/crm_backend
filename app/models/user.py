@@ -27,3 +27,10 @@ class User(Base):
 
     role = relationship("Role", back_populates="users")
     city = relationship("City", back_populates="users")
+
+    customer = relationship("Customer", back_populates="users")
+    Activity = relationship("Activity", back_populates="users")
+    order = relationship("Order", back_populates="users")
+    creator = relationship("Creator", back_populates="users")
+    responsible = relationship("Responsible", back_populates="users")
+    customerTrip = relationship("CustomerTrip", back_populates="users")
