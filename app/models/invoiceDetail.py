@@ -7,8 +7,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 # APP
-from db import Base
-from core import Gender
+from app.db import Base
+from app.core import Gender
 
 class InvoiceDetail(Base):
     __tablename__ = "invoice_details"

@@ -5,7 +5,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 # APP
-from db import Base
+from app.db import Base
 
 class Line(Base):
     __tablename__ = "lines"

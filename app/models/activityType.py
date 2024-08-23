@@ -6,7 +6,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 # APP
-from db import Base
+from app.db import Base
 
 class ActivityType(Base):
     __tablename__ = "activity_types"

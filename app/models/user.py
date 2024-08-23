@@ -8,8 +8,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 # APP
-from db import Base
-from core import Gender
+from app.db import Base
+from app.core import Gender
 
 class User(Base):
     __tablename__ = "users"

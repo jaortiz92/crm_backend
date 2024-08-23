@@ -7,7 +7,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 # APP
-from db import Base
+from app.db import Base
 
 class Rating(Base):
     __tablename__ = "ratings"

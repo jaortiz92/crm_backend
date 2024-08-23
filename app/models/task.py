@@ -7,7 +7,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 # APP
-from db import Base
+from app.db import Base
 
 class Task(Base):
     __tablename__ = "tasks"
