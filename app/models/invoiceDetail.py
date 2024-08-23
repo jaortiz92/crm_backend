@@ -1,12 +1,14 @@
 # SQLalchemy
 from sqlalchemy import (
     Column, ForeignKey,
-    Integer, String, Float
+    Integer, String, 
+    Float, Enum
 )
 from sqlalchemy.orm import relationship
 
 # APP
 from db import Base
+from core import Gender
 
 class InvoiceDetail(Base):
     __tablename__ = "invoice_details"
@@ -17,7 +19,7 @@ class InvoiceDetail(Base):
     color = Column(String(50), nullable=False)
     size = Column(String(50), nullable=False)
     id_brand = Column(Integer, ForeignKey("brands.id_brand"))
-    gender = Column(String, nullable=False)  # 'M', 'F', 'U'
+    gender = Column(Enum(Gender), nullable=False)  # 'M', 'F', 'U'
     unit_value = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False)
     value_without_vat = Column(Float, nullable=False)

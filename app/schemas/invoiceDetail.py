@@ -5,6 +5,9 @@ from typing import Optional, List, Dict, Literal
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from core import Gender
+
 class InvoiceDetailBase(BaseModel):
     invoice_id: int = Field(...,
         gt=0,
@@ -26,8 +29,8 @@ class InvoiceDetailBase(BaseModel):
         gt=0,
         description='ID of the brand'
     )
-    gender: Literal['M', 'F', 'U'] = Field(...,
-        description='Gender (M, F, U)'
+    gender: Gender = Field(...,
+        description='gender'
     )
     unit_value: float = Field(...,
         description='Unit value'

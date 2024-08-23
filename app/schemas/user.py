@@ -5,6 +5,9 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, EmailStr, Field
 
+# App
+from core import Gender
+
 class UserBase(BaseModel):
     username: str = Field(...,
         max_length=100,
@@ -24,6 +27,9 @@ class UserBase(BaseModel):
     )
     document: float = Field(...,
         description='Document number'
+    )
+    gender: Gender = Field(...,
+        description='gender'
     )
     role_id: int = Field(...,
         gt=0,
@@ -46,6 +52,7 @@ class UserBase(BaseModel):
     active: bool = Field(...,
         description='Indicates whether the user is active or not'
     )
+    
 
 class UserCreate(UserBase):
     pass

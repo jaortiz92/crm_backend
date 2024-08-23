@@ -2,12 +2,14 @@
 from sqlalchemy import (
     Column, ForeignKey,
     Integer, String,
-    Float, Date, Boolean
+    Float, Date, Boolean,
+    Enum
 )
 from sqlalchemy.orm import relationship
 
 # APP
 from db import Base
+from core import Gender
 
 class User(Base):
     __tablename__ = "users"
@@ -18,6 +20,7 @@ class User(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     document = Column(Float, nullable=False)
+    gender = Column(Enum(Gender), nullable=False)  # 'M', 'F', 'U'
     id_role = Column(Integer, ForeignKey("roles.id_role"))
     email = Column(String(100), nullable=False)
     phone = Column(String(20))

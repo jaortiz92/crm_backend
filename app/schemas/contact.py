@@ -5,6 +5,9 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field, EmailStr
 
+# App
+from core import Gender
+
 class ContactBase(BaseModel):
     client_id: int = Field(...,
         gt=0,
@@ -20,6 +23,9 @@ class ContactBase(BaseModel):
     )
     document: float = Field(...,
         description='document number'
+    )
+    gender: Gender = Field(...,
+        description='gender'
     )
     email: Optional[EmailStr] = Field(None,
         description='email address'
