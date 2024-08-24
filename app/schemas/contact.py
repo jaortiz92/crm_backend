@@ -6,54 +6,69 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, EmailStr
 
 # App
-from core import Gender
+from app.core import Gender
+
 
 class ContactBase(BaseModel):
-    client_id: int = Field(...,
+    client_id: int = Field(
+        ...,
         gt=0,
         description='ID of the client the contact belongs to'
     )
-    first_name: str = Field(...,
+    first_name: str = Field(
+        ...,
         max_length=100,
         description='first name (max 100 characters)'
     )
-    last_name: str = Field(...,
+    last_name: str = Field(
+        ...,
         max_length=100,
         description='last name (max 100 characters)'
     )
-    document: float = Field(...,
+    document: float = Field(
+        ...,
         description='document number'
     )
-    gender: Gender = Field(...,
+    gender: Gender = Field(
+        ...,
         description='gender'
     )
-    email: Optional[EmailStr] = Field(None,
+    email: Optional[EmailStr] = Field(
+        None,
         description='email address'
     )
-    phone: Optional[str] = Field(None,
+    phone: Optional[str] = Field(
+        None,
         max_length=20,
         description='phone number (max 20 characters)'
     )
-    role_id: int = Field(...,
+    role_id: int = Field(
+        ...,
         gt=0,
         description='ID of the role assigned to the contact'
     )
-    birth_date: Optional[date] = Field(None,
+    birth_date: Optional[date] = Field(
+        None,
         description='birth date'
     )
-    city_id: int = Field(...,
+    city_id: int = Field(
+        ...,
         gt=0,
         description='ID of the city the Customer resides in'
     )
-    active: bool = Field(...,
+    active: bool = Field(
+        ...,
         description='Indicates whether the user is active or not'
     )
+
 
 class ContactCreate(ContactBase):
     pass
 
+
 class Contact(ContactBase):
-    id_contact: int = Field(...,
+    id_contact: int = Field(
+        ...,
         gt=0
     )
 

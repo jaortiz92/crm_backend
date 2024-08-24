@@ -5,17 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 # App
 from .db import engine, Base
 from .models import *
+from .api import *
 
 
 Base.metadata.create_all(bind=engine)
 
 
-app = FastAPI()
+app = FastAPI(
+    docs_url="/"
+)
 
-@app.get("/")
-def read_root():
-    return {"message": "Hello World"}
-
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str = None):
-    return {"item_id": item_id, "q": q}
+app.include_router(user)

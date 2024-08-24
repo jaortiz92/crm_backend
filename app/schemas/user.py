@@ -6,59 +6,74 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, EmailStr, Field
 
 # App
-from core import Gender
+from app.core import Gender
+
 
 class UserBase(BaseModel):
-    username: str = Field(...,
+    username: str = Field(
+        ...,
         max_length=100,
         description='Unique username (max 100 characters)'
     )
-    password: str = Field(...,
-        max_length=500, 
+    password: str = Field(
+        ...,
+        max_length=500,
         description='Password hash (max 500 characters)'
     )
-    first_name: str = Field(...,
+    first_name: str = Field(
+        ...,
         max_length=100,
         description='First name (max 100 characters)'
     )
-    last_name: str = Field(...,
+    last_name: str = Field(
+        ...,
         max_length=100,
         description='Last name (max 100 characters)'
     )
-    document: float = Field(...,
+    document: float = Field(
+        ...,
         description='Document number'
     )
-    gender: Gender = Field(...,
+    gender: Gender = Field(
+        ...,
         description='gender'
     )
-    role_id: int = Field(...,
+    role_id: int = Field(
+        ...,
         gt=0,
         description='ID of the role assigned to the user'
     )
-    email: EmailStr = Field(...,
+    email: EmailStr = Field(
+        ...,
         description='Email address'
     )
-    phone: Optional[str] = Field(None,
+    phone: Optional[str] = Field(
+        None,
         max_length=20,
         description='Phone number (max 20 characters)'
     )
-    city_id: int = Field(...,
+    city_id: int = Field(
+        ...,
         gt=0,
         description='ID of the city the user resides in'
     )
-    birth_date: Optional[date] = Field(None,
+    birth_date: Optional[date] = Field(
+        None,
         description='Users birth date'
     )
-    active: bool = Field(...,
+    active: bool = Field(
+        ...,
         description='Indicates whether the user is active or not'
     )
-    
+
 
 class UserCreate(UserBase):
     pass
 
+
 class User(UserBase):
-    id_user: int = Field(...,
+    id_user: int = Field(
+        ...,
         gt=0
     )
 
