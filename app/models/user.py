@@ -20,7 +20,7 @@ class User(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     document = Column(Float, nullable=False)
-    gender = Column(Enum(Gender), nullable=False)  # 'M', 'F', 'U'
+    gender = Column(Enum(Gender), nullable=False)
     id_role = Column(Integer, ForeignKey("roles.id_role"))
     email = Column(String(100), nullable=False)
     phone = Column(String(20))

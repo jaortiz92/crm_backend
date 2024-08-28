@@ -73,3 +73,35 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     Returns a JSON with the created user in the app.
     """
     return crud.create_user(db, user)
+
+@user.put("/users/{id_user}", response_model=User)
+def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
+    """
+    Update a User
+
+    This path operation updates the details of a user in the app
+
+    Parameters:
+    - Register path parameter:
+        - id_user: int - The ID of the user to be updated
+    - Request body:
+        - user: UserCreate - The schema containing the updated user details
+
+    Returns a JSON with the updated user in the app.
+    """
+    return crud.update_user(db, id_user, user)
+
+@user.delete("/users/{id_user}", response_model=User)
+def delete_user(id_user: int, db: Session = Depends(get_db)):
+    """
+    Delete a User
+
+    This path operation deletes a user from the app
+
+    Parameters:
+    - Register path parameter:
+        - id_user: int - The ID of the user to be deleted
+
+    Returns a JSON with the deleted user in the app.
+    """
+    return crud.delete_user(db, id_user)
