@@ -14,8 +14,8 @@ user = APIRouter(
 )
 
 
-@user.get("/{user_id}", response_model=User)
-def show_user(user_id: int, db: Session = Depends(get_db)):
+@user.get("/{id_user}", response_model=User)
+def show_user(id_user: int, db: Session = Depends(get_db)):
     """
     Show a User
 
@@ -23,7 +23,7 @@ def show_user(user_id: int, db: Session = Depends(get_db)):
 
     Parameters:
     - Register path parameter
-        - user_id: int
+        - id_user: int
 
     Returns a JSON with a user in the app, with the following keys:
     - id_user: int
@@ -32,14 +32,14 @@ def show_user(user_id: int, db: Session = Depends(get_db)):
     - last_name: str
     - document: float
     - gender: Gender
-    - role_id: int
+    - id_role: int
     - email: str
     - phone: Optional[str]
-    - city_id: int
+    - id_city: int
     - birth_date: Optional[date]
     - active: bool
     """
-    return crud.get_user_by_id(db, user_id)
+    return crud.get_user_by_id(db, id_user)
 
 
 @user.get("/", response_model=List[User])

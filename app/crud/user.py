@@ -15,8 +15,8 @@ def create_user(db: Session, user: UserCreate) -> UserModel:
     return db_user
 
 
-def get_user_by_id(db: Session, user_id: int) -> UserModel:
-    return db.query(UserModel).filter(UserModel.id_user == user_id).first()
+def get_user_by_id(db: Session, id_user: int) -> UserModel:
+    return db.query(UserModel).filter(UserModel.id_user == id_user).first()
 
 
 def get_users(db: Session, skip: int = 0, limit: int = 10) -> list[UserModel]:
@@ -27,12 +27,12 @@ def get_all_users(db: Session) -> list[UserModel]:
     return db.query(UserModel).all()
 
 
-def update_user(db: Session, user_id: int, user: UserCreate) -> UserSchema:
-    db_user = db.query(UserModel).filter(UserModel.id_user == user_id).first()
+def update_user(db: Session, id_user: int, user: UserCreate) -> UserSchema:
+    db_user = db.query(UserModel).filter(UserModel.id_user == id_user).first()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with id {user_id} not found"
+            detail=f"User with id {id_user} not found"
         )
     for key, value in user.model_dump(exclude_unset=True).items():
         setattr(db_user, key, value)
@@ -41,12 +41,12 @@ def update_user(db: Session, user_id: int, user: UserCreate) -> UserSchema:
     return db_user
 
 
-def delete_user(db: Session, user_id: int) -> UserSchema:
-    db_user = db.query(UserModel).filter(UserModel.id_user == user_id).first()
+def delete_user(db: Session, id_user: int) -> UserSchema:
+    db_user = db.query(UserModel).filter(UserModel.id_user == id_user).first()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with id {user_id} not found"
+            detail=f"User with id {id_user} not found"
         )
     db.delete(db_user)
     db.commit()
