@@ -15,5 +15,6 @@ class Brand(Base):
     brand_name = Column(String(100))
 
     line = relationship("Line", back_populates="brands")
-    customer = relationship("Customer", back_populates="brands")
-    invoice_detail = relationship("InvoiceDetail", back_populates="brands")
+
+    customers = relationship("Customer", back_populates="brand")
+    invoice_details = relationship("InvoiceDetail", back_populates="brand")

@@ -16,4 +16,4 @@ class ActivityType(Base):
     mandatory = Column(Boolean, nullable=False)
     activity_order = Column(Integer, nullable=False)
 
-    customer = relationship("customer", back_populates="activity_types")
+    activities = relationship("Activity", back_populates="activity_type")

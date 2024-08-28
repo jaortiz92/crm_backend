@@ -14,5 +14,5 @@ class Role(Base):
     role_name = Column(String(50))
     access_type = Column(String(10))
 
-    contact = relationship("Contact", back_populates="roles")
-    user = relationship("User", back_populates="roles")
+    contacts = relationship("Contact", back_populates="role")
+    users = relationship("User", back_populates="role")

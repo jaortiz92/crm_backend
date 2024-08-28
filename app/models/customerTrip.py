@@ -20,9 +20,9 @@ class CustomerTrip(Base):
     ordered = Column(Boolean)
     comment = Column(Text)
 
-    customer = relationship("customer", back_populates="customer_trips")
+    customer = relationship("Customer", back_populates="customer_trips")
     seller = relationship("User", back_populates="customer_trips")
     collection = relationship("Collection", back_populates="customer_trips")
 
-    customer_trip = relationship("CustomerTrip", back_populates="customer_trips")
-    order = relationship("Order", back_populates="customer_trips")
+    orders = relationship("Order", back_populates="customer_trip")
+    activities = relationship("Activity", back_populates="customer_trip")

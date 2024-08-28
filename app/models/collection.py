@@ -19,4 +19,4 @@ class Collection(Base):
 
     line = relationship("Line", back_populates="collections")
     
-    customer_trip = relationship("CustomerTrip", back_populates="collections")
+    customer_trips = relationship("CustomerTrip", back_populates="collection")

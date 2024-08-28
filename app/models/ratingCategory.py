@@ -14,4 +14,4 @@ class RatingCategory(Base):
     rating_category = Column(String(20), nullable=False)
     level = Column(Integer, nullable=False)
 
-    rating = relationship("Rating", back_populates="rating_categories")
+    ratings = relationship("Rating", back_populates="rating_category")

@@ -33,8 +33,8 @@ class Customer(Base):
     seller = relationship("User", back_populates="customers")
     city = relationship("City", back_populates="customers")
 
-    customer_trip = relationship("CustomerTrip", back_populates="customers")
-    contact = relationship("Contacts", back_populates="customers")
-    task = relationship("Tasks", back_populates="customers")
-    rating = relationship("Rating", back_populates="customers")
+    customer_trips = relationship("CustomerTrip", back_populates="customer")
+    contacts = relationship("Contact", back_populates="customer")
+    tasks = relationship("Task", back_populates="customer")
+    ratings = relationship("Rating", back_populates="customer")
     

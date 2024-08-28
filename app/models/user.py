@@ -31,9 +31,10 @@ class User(Base):
     role = relationship("Role", back_populates="users")
     city = relationship("City", back_populates="users")
 
-    customer = relationship("Customer", back_populates="users")
-    Activity = relationship("Activity", back_populates="users")
-    order = relationship("Order", back_populates="users")
-    creator = relationship("Creator", back_populates="users")
-    responsible = relationship("Responsible", back_populates="users")
-    customerTrip = relationship("CustomerTrip", back_populates="users")
+    customers = relationship("Customer", back_populates="seller")
+    activities = relationship("Activity", back_populates="user")
+    orders = relationship("Order", back_populates="seller")
+    creator_tasks = relationship("Task", foreign_keys='Task.id_creator', back_populates="creator_tasks")
+    responsible_tasks = relationship("Task", foreign_keys='Task.id_responsible', back_populates="responsible_task")
+    customer_trips = relationship("CustomerTrip", back_populates="seller")
+    

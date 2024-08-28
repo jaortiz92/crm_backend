@@ -13,5 +13,5 @@ class Line(Base):
     id_line = Column(Integer, primary_key=True, index=True)
     line_name = Column(String(100))
 
-    brand = relationship("Brand", back_populates="lines")
-    collection = relationship("Collection", back_populates="lines")
+    brands = relationship("Brand", back_populates="line")
+    collections = relationship("Collection", back_populates="line")

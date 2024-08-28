@@ -18,6 +18,6 @@ class Invoice(Base):
 
     order = relationship("Order", back_populates="invoices")
 
-    invoiceDetail = relationship("InvoiceDetail", back_populates="invoices")
-    credit = relationship("Credit", back_populates="invoices")
-    shipment = relationship("Shipment", back_populates="invoices")
+    invoice_details = relationship("InvoiceDetail", back_populates="invoice")
+    credits = relationship("Credit", back_populates="invoice")
+    shipments = relationship("Shipment", back_populates="invoice")

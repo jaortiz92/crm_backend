@@ -20,6 +20,7 @@ class City(Base):
     longitude = Column(Float)
 
     department = relationship("Department", back_populates="cities")
-    customer = relationship("Customer", back_populates="cities")
-    contact = relationship("Contact", back_populates="cities")
-    user = relationship("User", back_populates="cities")
+
+    customers = relationship("Customer", back_populates="city")
+    contacts = relationship("Contact", back_populates="city")
+    users = relationship("User", back_populates="city")

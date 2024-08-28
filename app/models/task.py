@@ -23,5 +23,5 @@ class Task(Base):
     comment = Column(Text)
 
     customer = relationship("Customer", back_populates="tasks")
-    creator = relationship("User", foreign_keys=[id_creator], back_populates="created_tasks")
-    responsible = relationship("User", foreign_keys=[id_responsible], back_populates="responsible_tasks")
+    creator_tasks = relationship("User", foreign_keys=[id_creator], back_populates="creator_tasks")
+    responsible_task = relationship("User", foreign_keys=[id_responsible], back_populates="responsible_tasks")

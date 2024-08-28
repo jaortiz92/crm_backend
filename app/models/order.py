@@ -27,5 +27,5 @@ class Order(Base):
     seller = relationship("User", back_populates="orders")
     payment_method = relationship("PaymentMethod", back_populates="orders")
 
-    invoice = relationship("Invoice", back_populates="orders")
-    advance = relationship("Advance", back_populates="orders")
+    invoices = relationship("Invoice", back_populates="order")
+    advances = relationship("Advance", back_populates="order")

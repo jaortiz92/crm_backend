@@ -18,5 +18,5 @@ class Rating(Base):
     date = Column(Date, nullable=False)
     comments = Column(Text)
 
-    customer = relationship("customer", back_populates="ratings")
+    customer = relationship("Customer", back_populates="ratings")
     rating_category = relationship("RatingCategory", back_populates="ratings")

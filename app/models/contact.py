@@ -29,4 +29,4 @@ class Contact(Base):
 
     customer = relationship("Customer", back_populates="contacts")
     role = relationship("Role", back_populates="contacts")
-    city = relationship("City", back_populates="customers")
+    city = relationship("City", back_populates="contacts")
