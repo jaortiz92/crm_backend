@@ -6,7 +6,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class BrandBase(BaseModel):
-    line_id: int = Field(...,
+    id_line: int = Field(...,
         gt=0,
         description='ID of the line associated with the brand'
     )

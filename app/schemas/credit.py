@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Literal
 from pydantic import BaseModel, Field
 
 class CreditBase(BaseModel):
-    invoice_id: int = Field(...,
+    id_invoice: int = Field(...,
         gt=0,
         description='ID of the invoice'
     )

@@ -14,7 +14,7 @@ class InvoiceBase(BaseModel):
     invoice_date: date = Field(...,
         description='Date of the invoice'
     )
-    order_id: int = Field(...,
+    id_order: int = Field(...,
         gt=0,
         description='ID of the order'
     )

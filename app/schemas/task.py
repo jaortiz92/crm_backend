@@ -6,15 +6,15 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class TaskBase(BaseModel):
-    client_id: int = Field(...,
+    id_client: int = Field(...,
         gt=0,
         description='ID of the client'
     )
-    creator_user_id: int = Field(...,
+    id_creator_user: int = Field(...,
         gt=0,
         description='ID of the user who created the task'
     )
-    responsible_user_id: int = Field(...,
+    id_responsible_user: int = Field(...,
         gt=0,
         description='ID of the user responsible for the task'
     )

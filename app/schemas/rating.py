@@ -6,11 +6,11 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class RatingBase(BaseModel):
-    client_id: int = Field(...,
+    id_client: int = Field(...,
         gt=0,
         description='ID of the client'
     )
-    rating_category_id: int = Field(...,
+    id_rating_category: int = Field(...,
         gt=0,
         description='ID of the rating category'
     )

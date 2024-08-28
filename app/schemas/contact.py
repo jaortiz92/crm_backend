@@ -10,7 +10,7 @@ from app.core import Gender
 
 
 class ContactBase(BaseModel):
-    client_id: int = Field(
+    id_client: int = Field(
         ...,
         gt=0,
         description='ID of the client the contact belongs to'
@@ -42,7 +42,7 @@ class ContactBase(BaseModel):
         max_length=20,
         description='phone number (max 20 characters)'
     )
-    role_id: int = Field(
+    id_role: int = Field(
         ...,
         gt=0,
         description='ID of the role assigned to the contact'
@@ -51,7 +51,7 @@ class ContactBase(BaseModel):
         None,
         description='birth date'
     )
-    city_id: int = Field(
+    id_city: int = Field(
         ...,
         gt=0,
         description='ID of the city the Customer resides in'

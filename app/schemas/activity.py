@@ -6,15 +6,15 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class ActivityBase(BaseModel):
-    client_trip_id: int = Field(...,
+    id_client_trip: int = Field(...,
         gt=0,
         description='ID of the client trip'
     )
-    activity_type_id: int = Field(...,
+    id_activity_type: int = Field(...,
         gt=0,
         description='ID of the activity type'
     )
-    user_id: int = Field(...,
+    id_user: int = Field(...,
         gt=0,
         description='ID of the user responsible for the activity'
     )

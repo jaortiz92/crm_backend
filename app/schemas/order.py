@@ -6,18 +6,18 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, EmailStr, Field
 
 class OrderBase(BaseModel):
-    client_trip_id: int = Field(...,
+    id_client_trip: int = Field(...,
         gt=0,
         description='ID of the client trip'
     )
-    seller_id: int = Field(...,
+    id_seller: int = Field(...,
         gt=0,
         description='ID of the seller'
     )
     date_order: date = Field(...,
         description='Date of the order'
     )
-    payment_method_id: int = Field(...,
+    id_payment_method: int = Field(...,
         gt=0,
         description='ID of the payment method'
     )

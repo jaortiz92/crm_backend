@@ -38,7 +38,7 @@ class UserBase(BaseModel):
         ...,
         description='gender'
     )
-    role_id: int = Field(
+    id_role: int = Field(
         ...,
         gt=0,
         description='ID of the role assigned to the user'
@@ -52,7 +52,7 @@ class UserBase(BaseModel):
         max_length=20,
         description='Phone number (max 20 characters)'
     )
-    city_id: int = Field(
+    id_city: int = Field(
         ...,
         gt=0,
         description='ID of the city the user resides in'

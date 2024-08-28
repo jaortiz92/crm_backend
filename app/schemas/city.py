@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from .department import Department
 
 class CityBase(BaseModel):
-    department_id: int = Field(...,
+    id_department: int = Field(...,
             gt=0,
             description='ID of the department the city belongs to'
     )

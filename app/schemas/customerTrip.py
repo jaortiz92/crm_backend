@@ -7,15 +7,15 @@ from pydantic import BaseModel, Field
 
 
 class CustomerTripBase(BaseModel):
-    Customer_id: int = Field(...,
+    id_Customer: int = Field(...,
         gt=0,
         description='ID of the Customer'
     )
-    seller_id: int = Field(...,
+    id_seller: int = Field(...,
         gt=0,
         description='ID of the seller'
     )
-    collection_id: int = Field(...,
+    id_collection: int = Field(...,
         gt=0,
         description='ID of the collection'
     )

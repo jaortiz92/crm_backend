@@ -6,7 +6,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class AdvanceBase(BaseModel):
-    order_id: int = Field(...,
+    id_order: int = Field(...,
         gt=0,
         description='ID of the order'
     )

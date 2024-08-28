@@ -10,7 +10,7 @@ from app.core import Gender
 
 
 class InvoiceDetailBase(BaseModel):
-    invoice_id: int = Field(
+    id_invoice: int = Field(
         ...,
         gt=0,
         description='ID of the invoice'
@@ -30,7 +30,7 @@ class InvoiceDetailBase(BaseModel):
         max_length=50,
         description='Size of the product (max 50 characters)'
     )
-    brand_id: int = Field(
+    id_brand: int = Field(
         ...,
         gt=0,
         description='ID of the brand'

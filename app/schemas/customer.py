@@ -20,7 +20,7 @@ class CustomerBase(BaseModel):
         max_length=20,
         description='phone number (max 20 characters)'
     )
-    store_type_id: int = Field(...,
+    id_store_type: int = Field(...,
         gt=0,
         description='ID of the store type associated with the Customer'
     )
@@ -28,11 +28,11 @@ class CustomerBase(BaseModel):
         max_length=255,
         description='address (max 255 characters)'
     )
-    brand_id: int = Field(...,
+    id_brand: int = Field(...,
         gt=0,
         description='ID of the brand associated with the Customer'
     )
-    seller_id: int = Field(...,
+    id_seller: int = Field(...,
         gt=0,
         description='ID of the seller associated with the Customer'
     )
@@ -40,7 +40,7 @@ class CustomerBase(BaseModel):
         gt=0,
         description='Stores associated with the Customer'
     )
-    city_id: int = Field(...,
+    id_city: int = Field(...,
         gt=0,
         description='ID of the city the Customer resides in'
     )

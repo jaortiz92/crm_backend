@@ -5,7 +5,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, EmailStr, Field
 
 class CollectionBase(BaseModel):
-    line_id: int = Field(...,
+    id_line: int = Field(...,
         gt=0,
         description='ID of the line'
     )
