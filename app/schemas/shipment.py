@@ -41,4 +41,4 @@ class Shipment(ShipmentBase):
     )
 
     class Config:
-        orm_mode = True
+        from_attributes = True

@@ -38,4 +38,4 @@ class Credit(CreditBase):
     )
 
     class Config:
-        orm_mode = True
+        from_attributes = True
