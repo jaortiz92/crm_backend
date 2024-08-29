@@ -74,7 +74,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     """
     return crud.create_user(db, user)
 
-@user.put("/users/{id_user}", response_model=User)
+@user.put("/{id_user}", response_model=User)
 def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     """
     Update a User
@@ -91,7 +91,7 @@ def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     """
     return crud.update_user(db, id_user, user)
 
-@user.delete("/users/{id_user}", response_model=User)
+@user.delete("/{id_user}", response_model=User)
 def delete_user(id_user: int, db: Session = Depends(get_db)):
     """
     Delete a User

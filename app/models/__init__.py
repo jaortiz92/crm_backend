@@ -5,7 +5,7 @@ from .user import User
 from .storeType import StoreType
 from .line import Line
 from .brand import Brand
-from .collection import Collection, Base
+from .collection import Collection
 from .customer import Customer
 from .contact import Contact
 from .ratingCategory import RatingCategory

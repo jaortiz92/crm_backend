@@ -4,7 +4,7 @@ from .brand import Brand
 from .city import City
 from .collection import Collection
 from .contact import Contact
-from .customer import Customer
+from .customer import Customer, CustomerCreate
 from .customerTrip import CustomerTrip
 from .department import Department
 from .line import Line

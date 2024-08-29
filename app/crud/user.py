@@ -15,11 +15,11 @@ def create_user(db: Session, user: UserCreate) -> UserModel:
     return db_user
 
 
-def get_user_by_id(db: Session, id_user: int) -> UserModel:
+def get_user_by_id(db: Session, id_user: int) -> UserSchema:
     return db.query(UserModel).filter(UserModel.id_user == id_user).first()
 
 
-def get_users(db: Session, skip: int = 0, limit: int = 10) -> list[UserModel]:
+def get_users(db: Session, skip: int = 0, limit: int = 10) -> list[UserSchema]:
     return db.query(UserModel).offset(skip).limit(limit).all()
 
 

@@ -33,7 +33,7 @@ class CustomerTripCreate(CustomerTripBase):
     pass
 
 class CustomerTrip(CustomerTripBase):
-    id_Customer_trip: int = Field(..., 
+    id_customer_trip: int = Field(..., 
         gt=0
     )
 

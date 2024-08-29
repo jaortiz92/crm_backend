@@ -6,7 +6,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, EmailStr
 
 class CustomerBase(BaseModel):
-    business_name: str = Field(...,
+    company_name: str = Field(...,
         max_length=100,
         description='Business name (max 100 characters)'
     )
@@ -52,7 +52,7 @@ class CustomerCreate(CustomerBase):
     pass
 
 class Customer(CustomerBase):
-    id_Customer: int = Field(...,
+    id_customer: int = Field(...,
         gt=0
     )
 
