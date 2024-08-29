@@ -11,6 +11,6 @@ class PaymentMethod(Base):
     __tablename__ = "payment_methods"
 
     id_payment_method = Column(Integer, primary_key=True, index=True)
-    payment_method = Column(String(100))
+    payment_method = Column(String(100), unique=True, index=True)
 
     orders = relationship("Order", back_populates="payment_method")

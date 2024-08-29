@@ -12,7 +12,7 @@ class Brand(Base):
 
     id_brand = Column(Integer, primary_key=True, index=True)
     id_line = Column(Integer, ForeignKey("lines.id_line"))
-    brand_name = Column(String(100))
+    brand_name = Column(String(100), unique=True, index=True)
 
     line = relationship("Line", back_populates="brands")
 

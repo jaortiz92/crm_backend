@@ -3,7 +3,7 @@ from sqlalchemy import (
     Column, ForeignKey,
     Integer, String,
     Float, Date, Boolean,
-    Enum
+    Enum, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 
@@ -19,7 +19,7 @@ class User(Base):
     password = Column(String(500), unique=True, nullable=False)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
-    document = Column(Float, nullable=False)
+    document = Column(Float, unique=True, index=True, nullable=False)
     gender = Column(Enum(Gender), nullable=False)
     id_role = Column(Integer, ForeignKey("roles.id_role"))
     email = Column(String(100), nullable=False)

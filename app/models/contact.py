@@ -18,8 +18,8 @@ class Contact(Base):
     id_customer = Column(Integer, ForeignKey("customers.id_customer"))
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
-    document = Column(Float, nullable=False)
-    gender = Column(Enum(Gender), nullable=False)  # 'M', 'F', 'U'
+    document = Column(Float, unique=True, index=True, nullable=False)
+    gender = Column(Enum(Gender), nullable=False)
     email = Column(String(100))
     phone = Column(String(20))
     id_role = Column(Integer, ForeignKey("roles.id_role"))

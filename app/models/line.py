@@ -11,7 +11,7 @@ class Line(Base):
     __tablename__ = "lines"
 
     id_line = Column(Integer, primary_key=True, index=True)
-    line_name = Column(String(100))
+    line_name = Column(String(100), unique=True, index=True)
 
     brands = relationship("Brand", back_populates="line")
     collections = relationship("Collection", back_populates="line")

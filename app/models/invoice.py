@@ -12,7 +12,7 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id_invoice = Column(Integer, primary_key=True, index=True)
-    invoice_number = Column(String(20), nullable=False)
+    invoice_number = Column(String(20), unique=True, index=True, nullable=False)
     invoice_date = Column(Date, nullable=False)
     id_order = Column(Integer, ForeignKey("orders.id_order"))
 

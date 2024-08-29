@@ -11,7 +11,7 @@ class Role(Base):
     __tablename__ = "roles"
 
     id_role = Column(Integer, primary_key=True, index=True)
-    role_name = Column(String(50))
+    role_name = Column(String(50), unique=True, index=True)
     access_type = Column(String(10))
 
     contacts = relationship("Contact", back_populates="role")

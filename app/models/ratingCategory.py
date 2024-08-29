@@ -11,7 +11,7 @@ class RatingCategory(Base):
     __tablename__ = "rating_categories"
 
     id_rating_category = Column(Integer, primary_key=True, index=True)
-    rating_category = Column(String(20), nullable=False)
+    rating_category = Column(String(20), unique=True, index=True, nullable=False)
     level = Column(Integer, nullable=False)
 
     ratings = relationship("Rating", back_populates="rating_category")
