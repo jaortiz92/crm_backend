@@ -6,7 +6,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class ActivityBase(BaseModel):
-    id_client_trip: int = Field(...,
+    id_customer_trip: int = Field(...,
         gt=0,
         description='ID of the client trip'
     )
@@ -17,6 +17,9 @@ class ActivityBase(BaseModel):
     id_user: int = Field(...,
         gt=0,
         description='ID of the user responsible for the activity'
+    )
+    creation_date: Optional[date] = Field(...,
+        description='Creation date for the activity'
     )
     estimated_date: date = Field(...,
         description='Estimated date for the activity'

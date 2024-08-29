@@ -6,7 +6,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class ActivityTypeBase(BaseModel):
-    activity_name: str = Field(...,
+    activity: str = Field(...,
         max_length=100,
         description='Activity name (max 100 characters)'
     )

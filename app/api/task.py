@@ -54,7 +54,7 @@ def get_tasks(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
 
     Returns a JSON with a list of task in the app.
     """
-    return crud.get_customers(db, skip=skip, limit=limit)
+    return crud.get_tasks(db, skip=skip, limit=limit)
 
 @task.post("/", response_model=Task)
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):

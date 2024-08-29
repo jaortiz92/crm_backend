@@ -17,7 +17,7 @@ def create_task(db: Session, task: TaskCreate) -> TaskSchema:
 def get_task_by_id(db: Session, task_id: int) -> list[TaskSchema]:
     return db.query(TaskModel).filter(TaskModel.id_task == task_id).first()
 
-def get_customers(db: Session, skip: int = 0, limit: int = 10) -> list[TaskSchema]:
+def get_tasks(db: Session, skip: int = 0, limit: int = 10) -> list[TaskSchema]:
     return db.query(TaskModel).order_by(
         TaskModel.creation_date.desc()
     ).offset(skip).limit(limit).all()

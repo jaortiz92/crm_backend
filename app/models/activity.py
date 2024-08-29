@@ -5,6 +5,7 @@ from sqlalchemy import (
     Date, Text, Boolean
 )
 from sqlalchemy.orm import relationship
+from datetime import date
 
 # APP
 from app.db import Base
@@ -16,6 +17,7 @@ class Activity(Base):
     id_customer_trip = Column(Integer, ForeignKey("customer_trips.id_customer_trip"))
     id_activity_type = Column(Integer, ForeignKey("activity_types.id_activity_type"))
     id_user = Column(Integer, ForeignKey("users.id_user"))
+    creation_date = Column(Date, default=date.today(), nullable=False)
     estimated_date = Column(Date, nullable=False)
     execution_date = Column(Date)
     completed = Column(Boolean, default=False)

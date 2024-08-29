@@ -27,3 +27,5 @@ except Exception as e:
 app.include_router(customer)
 app.include_router(user)
 app.include_router(task)
+app.include_router(activity)
+app.include_router(activity_type)

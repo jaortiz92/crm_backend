@@ -19,6 +19,8 @@ def get_customer_by_id(db: Session, id_customer: int) -> CustomerSchema:
     return result
 
 def get_customers(db: Session, skip: int = 0, limit: int = 10) -> list[CustomerSchema]:
+    print(1)
+    print(db.query(CustomerModel))
     return db.query(CustomerModel).offset(skip).limit(limit).all()
 
 def update_customer(db: Session, id_customer: int, customer: CustomerCreate) -> CustomerSchema:

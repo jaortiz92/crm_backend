@@ -1,5 +1,5 @@
-from .activity import Activity
-from .activityType import ActivityType
+from .activity import Activity, ActivityCreate
+from .activityType import ActivityType, ActivityTypeCreate
 from .brand import Brand
 from .city import City
 from .collection import Collection
