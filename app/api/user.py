@@ -15,7 +15,7 @@ user = APIRouter(
 
 
 @user.get("/{id_user}", response_model=User)
-def show_user(id_user: int, db: Session = Depends(get_db)):
+def get_user(id_user: int, db: Session = Depends(get_db)):
     """
     Show a User
 
@@ -43,7 +43,7 @@ def show_user(id_user: int, db: Session = Depends(get_db)):
 
 
 @user.get("/", response_model=List[User])
-def show_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     Show Users
 
@@ -91,7 +91,7 @@ def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     """
     return crud.update_user(db, id_user, user)
 
-@user.delete("/{id_user}", response_model=User)
+@user.delete("/{id_user}")
 def delete_user(id_user: int, db: Session = Depends(get_db)):
     """
     Delete a User
@@ -104,4 +104,9 @@ def delete_user(id_user: int, db: Session = Depends(get_db)):
 
     Returns a JSON with the deleted user in the app.
     """
-    return crud.delete_user(db, id_user)
+    success = crud.delete_user(db, id_user)
+    if not success:
+        raise HTTPException(
+            status_code=404, detail=f"User id:{id_user} not found"
+        )
+    return {"message": "User deleted successfully"}

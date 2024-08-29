@@ -41,13 +41,10 @@ def update_user(db: Session, id_user: int, user: UserCreate) -> UserSchema:
     return db_user
 
 
-def delete_user(db: Session, id_user: int) -> UserSchema:
+def delete_user(db: Session, id_user: int) -> bool:
     db_user = db.query(UserModel).filter(UserModel.id_user == id_user).first()
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with id {id_user} not found"
-        )
-    db.delete(db_user)
-    db.commit()
-    return db_user
+    if db_user:
+        db.delete(db_user)
+        db.commit()
+        return True
+    return False

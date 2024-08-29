@@ -26,7 +26,7 @@ def get_customer(id_customer: int, db: Session = Depends(get_db)):
 
     Returns a JSON with a customer in the app:
     - id_Customer: int
-    - business_name: str
+    - company_name: str
     - document: float
     - email: EmailStr
     - phone: Optional[str]
@@ -44,7 +44,7 @@ def get_customer(id_customer: int, db: Session = Depends(get_db)):
     return db_customer
 
 @customer.get("/", response_model=List[Customer])
-def show_customers(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_customers(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     Show customers
 
@@ -110,7 +110,7 @@ def update_customer(id_customer: int, customer: CustomerCreate, db: Session = De
         - id_customer: int
     - Request body parameter
         - customer: CustomerCreate -> A JSON object containing the updated customer data:
-            - business_name: str
+            - company_name: str
             - document: float
             - email: EmailStr
             - phone: Optional[str]
@@ -124,7 +124,7 @@ def update_customer(id_customer: int, customer: CustomerCreate, db: Session = De
 
     Returns a JSON with the updated customer:
     - id_Customer: int
-    - business_name: str
+    - company_name: str
     - document: float
     - email: EmailStr
     - phone: Optional[str]
@@ -156,5 +156,8 @@ def delete_customer(id_customer: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_customer(db, id_customer)
     if not success:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Customer id:{id_customer} not found"
+        )
     return {"message": "Customer deleted successfully"}
