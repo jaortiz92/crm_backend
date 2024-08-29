@@ -14,7 +14,7 @@ from .rating import Rating
 from .ratingCategory import RatingCategory
 from .role import Role
 from .storeType import StoreType
-from .task import Task
+from .task import Task, TaskCreate
 from .user import User, UserCreate
 from .advance import Advance
 from .invoice import Invoice

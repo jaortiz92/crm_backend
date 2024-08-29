@@ -6,22 +6,22 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class TaskBase(BaseModel):
-    id_client: int = Field(...,
+    id_customer: int = Field(...,
         gt=0,
         description='ID of the client'
     )
-    id_creator_user: int = Field(...,
+    id_creator: int = Field(...,
         gt=0,
         description='ID of the user who created the task'
     )
-    id_responsible_user: int = Field(...,
+    id_responsible: int = Field(...,
         gt=0,
         description='ID of the user responsible for the task'
     )
     creation_date: date = Field(...,
         description='Creation date of the task'
     )
-    task_description: str = Field(...,
+    task: str = Field(...,
         description='Description of the task'
     )
     completed: Optional[bool] = Field(False,
