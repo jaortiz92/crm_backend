@@ -37,6 +37,7 @@ def get_activity_type_by_id(id_activity_type: int, db: Session = Depends(get_db)
         Exceptions.register_not_found("Activity type", id_activity_type)
     return db_activity_type
 
+
 @activity_type.get("/", response_model=List[ActivityType])
 def get_activity_types(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
@@ -52,6 +53,7 @@ def get_activity_types(skip: int = 0, limit: int = 10, db: Session = Depends(get
     Returns a JSON with a list of activities type in the app.
     """
     return crud.get_activity_types(db, skip=skip, limit=limit)
+
 
 @activity_type.post("/", response_model=ActivityType)
 def create_activity_type(activity_type: ActivityTypeCreate, db: Session = Depends(get_db)):
@@ -75,6 +77,7 @@ def create_activity_type(activity_type: ActivityTypeCreate, db: Session = Depend
     """
     return crud.create_activity_type(db, activity_type)
 
+
 @activity_type.put("/{id_activity_type}", response_model=ActivityType)
 def update_activity_type(id_activity_type: int, activity_type: ActivityTypeCreate, db: Session = Depends(get_db)):
     """
@@ -97,10 +100,12 @@ def update_activity_type(id_activity_type: int, activity_type: ActivityTypeCreat
     - mandatory: bool
     - activity_order: int
     """
-    db_activity_type = crud.update_activity_type(db, id_activity_type, activity_type)
+    db_activity_type = crud.update_activity_type(
+        db, id_activity_type, activity_type)
     if db_activity_type is None:
         Exceptions.register_not_found("Activity type", id_activity_type)
     return db_activity_type
+
 
 @activity_type.delete("/{id_activity_type}")
 def delete_activity_type(id_activity_type: int, db: Session = Depends(get_db)):
@@ -116,6 +121,12 @@ def delete_activity_type(id_activity_type: int, db: Session = Depends(get_db)):
     Returns a message confirming the deletion.
     """
     success = crud.delete_activity_type(db, id_activity_type)
-    if not success:
-        Exceptions.register_not_found("Activity type", id_activity_type)
+    if not success['deleted']:
+        if success['alimination_allow']:
+            Exceptions.register_not_found("Activity type", id_activity_type)
+        else:
+            Exceptions.conflict_with_register(
+                "Activity type", id_activity_type
+            )
+
     return {"message": "Activity type deleted successfully"}

@@ -5,7 +5,7 @@ from .city import City
 from .collection import Collection
 from .contact import Contact
 from .customer import Customer, CustomerCreate
-from .customerTrip import CustomerTrip
+from .customerTrip import CustomerTrip, CustomerTripCreate
 from .department import Department
 from .line import Line
 from .order import Order

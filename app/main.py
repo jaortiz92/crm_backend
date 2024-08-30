@@ -17,7 +17,7 @@ app = FastAPI(
 )
 
 
-# VAlidate Relationships
+# Validate Relationships
 try:
     configure_mappers()
     print("All mappers are configured correctly.")
@@ -29,3 +29,4 @@ app.include_router(user)
 app.include_router(task)
 app.include_router(activity)
 app.include_router(activity_type)
+app.include_router(customer_trip)
