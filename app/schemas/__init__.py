@@ -3,7 +3,7 @@ from .activityType import ActivityType, ActivityTypeCreate
 from .brand import Brand
 from .city import City
 from .collection import Collection
-from .contact import Contact
+from .contact import Contact, ContactCreate
 from .customer import Customer, CustomerCreate
 from .customerTrip import CustomerTrip, CustomerTripCreate
 from .department import Department

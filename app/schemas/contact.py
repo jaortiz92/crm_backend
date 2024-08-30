@@ -10,7 +10,7 @@ from app.core import Gender
 
 
 class ContactBase(BaseModel):
-    id_client: int = Field(
+    id_customer: int = Field(
         ...,
         gt=0,
         description='ID of the client the contact belongs to'
