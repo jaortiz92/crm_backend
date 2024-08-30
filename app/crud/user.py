@@ -29,15 +29,11 @@ def get_all_users(db: Session) -> list[UserModel]:
 
 def update_user(db: Session, id_user: int, user: UserCreate) -> UserSchema:
     db_user = db.query(UserModel).filter(UserModel.id_user == id_user).first()
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with id {id_user} not found"
-        )
-    for key, value in user.model_dump(exclude_unset=True).items():
-        setattr(db_user, key, value)
-    db.commit()
-    db.refresh(db_user)
+    if db_user:
+        for key, value in user.model_dump(exclude_unset=True).items():
+            setattr(db_user, key, value)
+        db.commit()
+        db.refresh(db_user)
     return db_user
 
 

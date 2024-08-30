@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -7,6 +7,7 @@ from typing import List
 from app.schemas import ActivityType, ActivityTypeCreate
 from app import get_db
 import app.crud as crud
+from app.api.utils import Exceptions
 
 activity_type = APIRouter(
     prefix="/activity_type",
@@ -33,7 +34,7 @@ def get_activity_type_by_id(id_activity_type: int, db: Session = Depends(get_db)
     """
     db_activity_type = crud.get_activity_type_by_id(db, id_activity_type)
     if db_activity_type is None:
-        raise HTTPException(status_code=404, detail="Activity type not found")
+        Exceptions.register_not_found("Activity type", id_activity_type)
     return db_activity_type
 
 @activity_type.get("/", response_model=List[ActivityType])
@@ -98,7 +99,7 @@ def update_activity_type(id_activity_type: int, activity_type: ActivityTypeCreat
     """
     db_activity_type = crud.update_activity_type(db, id_activity_type, activity_type)
     if db_activity_type is None:
-        raise HTTPException(status_code=404, detail="Activity type not found")
+        Exceptions.register_not_found("Activity type", id_activity_type)
     return db_activity_type
 
 @activity_type.delete("/{id_activity_type}")
@@ -116,8 +117,5 @@ def delete_activity_type(id_activity_type: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_activity_type(db, id_activity_type)
     if not success:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Activity type id:{id_activity_type} not found"
-        )
+        Exceptions.register_not_found("Activity type", id_activity_type)
     return {"message": "Activity type deleted successfully"}

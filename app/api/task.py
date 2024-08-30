@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -7,6 +7,7 @@ from typing import List
 from app.schemas import Task, TaskCreate
 from app import get_db
 import app.crud as crud
+from app.api.utils import Exceptions
 
 task = APIRouter(
     prefix="/task",
@@ -37,7 +38,7 @@ def get_task(id_task: int, db: Session = Depends(get_db)):
     """
     db_task = crud.get_task_by_id(db, id_task)
     if db_task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        Exceptions.register_not_found("Task", id_task)
     return db_task
 
 @task.get("/", response_model=List[Task])
@@ -122,7 +123,7 @@ def update_task(id_task: int, task: TaskCreate, db: Session = Depends(get_db)):
     """
     db_task = crud.update_task(db, id_task, task)
     if db_task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        Exceptions.register_not_found("Task", id_task)
     return db_task
 
 @task.delete("/{id_task}")
@@ -140,7 +141,5 @@ async def delete_task(id_task: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_task(db, id_task)
     if not success:
-        raise HTTPException(
-            status_code=404, detail=f"Task id:{id_task} not found"
-        )
+        Exceptions.register_not_found("Task", id_task)
     return {"message": "Task deleted successfully"}

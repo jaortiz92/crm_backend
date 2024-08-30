@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -7,6 +7,7 @@ from typing import List
 from app.schemas import Customer, CustomerCreate
 from app import get_db
 import app.crud as crud
+from app.api.utils import Exceptions
 
 customer = APIRouter(
     prefix="/customer",
@@ -40,7 +41,7 @@ def get_customer(id_customer: int, db: Session = Depends(get_db)):
     """
     db_customer = crud.get_customer_by_id(db, id_customer)
     if db_customer is None:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        Exceptions.register_not_found("Customes", id_customer)
     return db_customer
 
 @customer.get("/", response_model=List[Customer])
@@ -138,7 +139,7 @@ def update_customer(id_customer: int, customer: CustomerCreate, db: Session = De
     """
     db_customer = crud.update_customer(db, id_customer, customer)
     if db_customer is None:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        Exceptions.register_not_found("Customes", id_customer)
     return db_customer
 
 @customer.delete("/{id_customer}")
@@ -156,8 +157,5 @@ def delete_customer(id_customer: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_customer(db, id_customer)
     if not success:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Customer id:{id_customer} not found"
-        )
+        Exceptions.register_not_found("Customes", id_customer)
     return {"message": "Customer deleted successfully"}

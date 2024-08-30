@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -7,6 +7,7 @@ from typing import List
 from app.schemas import Activity, ActivityCreate
 from app import get_db
 import app.crud as crud
+from app.api.utils import Exceptions
 
 activity = APIRouter(
     prefix="/activity",
@@ -37,7 +38,7 @@ def get_activity_by_id(id_activity: int, db: Session = Depends(get_db)):
     """
     db_activity = crud.get_activity(db, id_activity)
     if db_activity is None:
-        raise HTTPException(status_code=404, detail="Activity not found")
+        Exceptions.register_not_found("Activity", id_activity)
     return db_activity
 
 @activity.get("/", response_model=List[Activity])
@@ -118,7 +119,7 @@ def update_activity(id_activity: int, activity: ActivityCreate, db: Session = De
     """
     db_activity = crud.update_activity(db, id_activity, activity)
     if db_activity is None:
-        raise HTTPException(status_code=404, detail="Activity not found")
+        Exceptions.register_not_found("Activity", id_activity)
     return db_activity
 
 @activity.delete("/{id_activity}")
@@ -136,8 +137,5 @@ def delete_activity(id_activity: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_activity(db, id_activity)
     if not success:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Activity id:{id_activity} not found"
-        )
+        Exceptions.register_not_found("Activity", id_activity)
     return {"message": "Activity deleted successfully"}

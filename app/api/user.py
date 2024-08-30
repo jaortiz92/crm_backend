@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -7,6 +7,7 @@ from typing import List
 from app.schemas import User, UserCreate
 from app import get_db
 import app.crud as crud
+from app.api.utils import Exceptions
 
 user = APIRouter(
     prefix="/user",
@@ -39,7 +40,10 @@ def get_user(id_user: int, db: Session = Depends(get_db)):
     - birth_date: Optional[date]
     - active: bool
     """
-    return crud.get_user_by_id(db, id_user)
+    db_user = crud.get_user_by_id(db, id_user)
+    if db_user is None:
+        Exceptions.register_not_found("User", id_user)
+    return db_user
 
 
 @user.get("/", response_model=List[User])
@@ -69,6 +73,17 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     Parameters:
     - Request body:
         - user: UserCreate - The schema containing the user details
+            - username: str
+            - first_name: str
+            - last_name: str
+            - document: float
+            - gender: Gender
+            - id_role: int
+            - email: str
+            - phone: Optional[str]
+            - id_city: int
+            - birth_date: Optional[date]
+            - active: bool
 
     Returns a JSON with the created user in the app.
     """
@@ -85,11 +100,36 @@ def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     - Register path parameter:
         - id_user: int - The ID of the user to be updated
     - Request body:
-        - user: UserCreate - The schema containing the updated user details
+        - username: str
+        - first_name: str
+        - last_name: str
+        - document: float
+        - gender: Gender
+        - id_role: int
+        - email: str
+        - phone: Optional[str]
+        - id_city: int
+        - birth_date: Optional[date]
+        - active: bool
 
     Returns a JSON with the updated user in the app.
+        - id_user: int
+        - username: str
+        - first_name: str
+        - last_name: str
+        - document: float
+        - gender: Gender
+        - id_role: int
+        - email: str
+        - phone: Optional[str]
+        - id_city: int
+        - birth_date: Optional[date]
+        - active: bool
     """
-    return crud.update_user(db, id_user, user)
+    db_user = crud.update_user(db, id_user, user)
+    if db_user is None:
+        Exceptions.register_not_found("User", id_user)
+    return db_user
 
 @user.delete("/{id_user}")
 def delete_user(id_user: int, db: Session = Depends(get_db)):
@@ -106,7 +146,5 @@ def delete_user(id_user: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_user(db, id_user)
     if not success:
-        raise HTTPException(
-            status_code=404, detail=f"User id:{id_user} not found"
-        )
+        Exceptions.register_not_found("User", id_user)
     return {"message": "User deleted successfully"}
