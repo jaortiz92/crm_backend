@@ -5,6 +5,7 @@ from sqlalchemy import (
     Date, Text, Boolean
 )
 from sqlalchemy.orm import relationship
+from datetime import date
 
 # APP
 from app.db import Base
@@ -16,7 +17,7 @@ class Task(Base):
     id_customer = Column(Integer, ForeignKey("customers.id_customer"))
     id_creator = Column(Integer, ForeignKey("users.id_user"))
     id_responsible = Column(Integer, ForeignKey("users.id_user"))
-    creation_date = Column(Date, nullable=False)
+    creation_date = Column(Date, default=date.today(), nullable=False)
     task = Column(Text, nullable=False)
     completed = Column(Boolean, default=False)
     closing_date = Column(Date)

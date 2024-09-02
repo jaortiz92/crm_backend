@@ -10,8 +10,8 @@ from .department import Department
 from .line import Line, LineCreate
 from .order import Order, OrderCreate
 from .paymentMethod import PaymentMethod
-from .rating import Rating
-from .ratingCategory import RatingCategory
+from .rating import Rating, RatingCreate
+from .ratingCategory import RatingCategory, RatingCategoryCreate
 from .role import Role
 from .storeType import StoreType, StoreTypeCreate
 from .task import Task, TaskCreate

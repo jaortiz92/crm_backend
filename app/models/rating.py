@@ -5,6 +5,7 @@ from sqlalchemy import (
     Text, Date    
 )
 from sqlalchemy.orm import relationship
+from datetime import date
 
 # APP
 from app.db import Base
@@ -15,7 +16,7 @@ class Rating(Base):
     id_rating = Column(Integer, primary_key=True, index=True)
     id_customer = Column(Integer, ForeignKey("customers.id_customer"))
     id_rating_category = Column(Integer, ForeignKey("rating_categories.id_rating_category"))
-    date = Column(Date, nullable=False)
+    date_updated = Column(Date, default=date.today(), nullable=False)
     comments = Column(Text)
 
     customer = relationship("Customer", back_populates="ratings")

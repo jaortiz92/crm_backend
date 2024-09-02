@@ -14,7 +14,7 @@ class RatingBase(BaseModel):
         gt=0,
         description='ID of the rating category'
     )
-    date_updated: date = Field(...,
+    date_updated: Optional[date] = Field(...,
         description='Date of the rating'
     )
     comments: Optional[str] = Field(None,

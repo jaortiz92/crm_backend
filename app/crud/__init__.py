@@ -10,3 +10,5 @@ from .line import *
 from .brand import *
 from .collection import *
 from .storeType import *
+from .ratingCategory import *
+from .rating import *

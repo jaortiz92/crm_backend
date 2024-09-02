@@ -9,12 +9,12 @@ from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
 
-storeType = APIRouter(
+store_type = APIRouter(
     prefix="/storeType",
     tags=["StoreType"],
 )
 
-@storeType.get("/{id_store_type}", response_model=StoreType)
+@store_type.get("/{id_store_type}", response_model=StoreType)
 def get_storeType_by_id(id_store_type: int, db: Session = Depends(get_db)):
     """
     Show a Store Type
@@ -34,7 +34,7 @@ def get_storeType_by_id(id_store_type: int, db: Session = Depends(get_db)):
         Exceptions.register_not_found("StoreType", id_store_type)
     return db_storeType
 
-@storeType.get("/", response_model=List[StoreType])
+@store_type.get("/", response_model=List[StoreType])
 def get_storeTypes(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     Show storeTypes
@@ -50,7 +50,7 @@ def get_storeTypes(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)
     """
     return crud.get_storeTypes(db, skip=skip, limit=limit)
 
-@storeType.post("/", response_model=StoreType)
+@store_type.post("/", response_model=StoreType)
 def create_storeType(storeType: StoreTypeCreate, db: Session = Depends(get_db)):
     """
     Create a Store Type
@@ -69,7 +69,7 @@ def create_storeType(storeType: StoreTypeCreate, db: Session = Depends(get_db)):
     return crud.create_storeType(db, storeType)
 
 
-@storeType.put("/{id_store_type}", response_model=StoreType)
+@store_type.put("/{id_store_type}", response_model=StoreType)
 def update_storeType(id_store_type: int, storeType: StoreTypeCreate, db: Session = Depends(get_db)):
     """
     Update a StoreType
@@ -92,7 +92,7 @@ def update_storeType(id_store_type: int, storeType: StoreTypeCreate, db: Session
         Exceptions.register_not_found("StoreType", id_store_type)
     return db_storeType
 
-@storeType.delete("/{id_store_type}")
+@store_type.delete("/{id_store_type}")
 def delete_storeType(id_store_type: int, db: Session = Depends(get_db)):
     """
     Delete a StoreType

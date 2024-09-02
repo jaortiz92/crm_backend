@@ -24,7 +24,6 @@ try:
 except Exception as e:
     print(f"Error in mapper configuration: {e}")
 
-app.include_router(storeType)
 app.include_router(customer)
 app.include_router(user)
 app.include_router(task)
@@ -36,3 +35,6 @@ app.include_router(order)
 app.include_router(line)
 app.include_router(brand)
 app.include_router(collection)
+app.include_router(rating)
+app.include_router(rating_category)
+app.include_router(store_type)

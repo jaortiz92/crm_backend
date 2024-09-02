@@ -18,7 +18,7 @@ class TaskBase(BaseModel):
         gt=0,
         description='ID of the user responsible for the task'
     )
-    creation_date: date = Field(...,
+    creation_date: Optional[date] = Field(...,
         description='Creation date of the task'
     )
     task: str = Field(...,
