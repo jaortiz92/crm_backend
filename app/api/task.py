@@ -15,7 +15,7 @@ task = APIRouter(
 )
 
 @task.get("/{id_task}", response_model=Task)
-def get_task(id_task: int, db: Session = Depends(get_db)):
+def get_task_by_id(id_task: int, db: Session = Depends(get_db)):
     """
     Show a Task
 

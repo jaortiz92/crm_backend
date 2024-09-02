@@ -9,19 +9,22 @@ class CollectionBase(BaseModel):
         gt=0,
         description='ID of the line'
     )
-    collection: str = Field(...,
+    collection_name: str = Field(...,
         max_length=30,
         description='Collection name (max 30 characters)'
     )
-    short_name: str = Field(...,
+    short_collection_name: str = Field(...,
         max_length=10,
         description='Short name of the collection (max 10 characters)'
     )
     year: int = Field(...,
-        description='Year of the collection'
+        description='Year of the collection',
+        ge=2018
     )
     quarter: int = Field(...,
-        description='Quarter of the collection'
+        description='Quarter of the collection',
+        ge=1,
+        le=4
     )
 
 class CollectionCreate(CollectionBase):

@@ -16,7 +16,7 @@ customer_trip = APIRouter(
 
 
 @customer_trip.get("/{id_customer_trip}", response_model=CustomerTrip)
-async def get_customer_trip(id_customer_trip: int, db: Session = Depends(get_db)):
+async def get_customer_trip_by_id(id_customer_trip: int, db: Session = Depends(get_db)):
     """
     Show a Customer Trip
 

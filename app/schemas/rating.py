@@ -6,9 +6,9 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 class RatingBase(BaseModel):
-    id_client: int = Field(...,
+    id_customer: int = Field(...,
         gt=0,
-        description='ID of the client'
+        description='ID of the customer'
     )
     id_rating_category: int = Field(...,
         gt=0,

@@ -15,7 +15,7 @@ customer = APIRouter(
 )
 
 @customer.get("/{id_customer}", response_model=Customer)
-def get_customer(id_customer: int, db: Session = Depends(get_db)):
+def get_customer_by_id(id_customer: int, db: Session = Depends(get_db)):
     """
     Show a Customer
 

@@ -103,7 +103,7 @@ def create_contact(contact: ContactCreate, db: Session = Depends(get_db)):
 
     Returns a JSON with the newly created contact:
     - id_customer: int
-    - id_client: int
+    - id_customer: int
     - first_name: str
     - last_name: str
     - document: float

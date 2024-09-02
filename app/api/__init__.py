@@ -5,3 +5,8 @@ from .activity import activity
 from .activityType import activity_type
 from .customerTrip import customer_trip
 from .contact import contact
+from .order import order
+from .line import line
+from .brand import brand
+from .collection import collection
+from .storeType import storeType

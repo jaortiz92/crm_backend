@@ -6,7 +6,7 @@ from datetime import date
 from pydantic import BaseModel, EmailStr, Field
 
 class StoreTypeBase(BaseModel):
-    store_type_name: str = Field(...,
+    store_type: str = Field(...,
         max_length=100,
         description='Store type name (max 100 characters)'
     )

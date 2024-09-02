@@ -16,7 +16,7 @@ user = APIRouter(
 
 
 @user.get("/{id_user}", response_model=User)
-def get_user(id_user: int, db: Session = Depends(get_db)):
+def get_user_by_id(id_user: int, db: Session = Depends(get_db)):
     """
     Show a User
 

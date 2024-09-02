@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class TaskBase(BaseModel):
     id_customer: int = Field(...,
         gt=0,
-        description='ID of the client'
+        description='ID of the customer'
     )
     id_creator: int = Field(...,
         gt=0,

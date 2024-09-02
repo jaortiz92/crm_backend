@@ -19,8 +19,8 @@ class Order(Base):
     id_payment_method = Column(Integer, ForeignKey("payment_methods.id_payment_method"))
     quantities = Column(Integer, nullable=False)
     system_quantities = Column(Integer)
-    value_without_vat = Column(Integer, nullable=False)
-    value_with_vat = Column(Integer, nullable=False)
+    value_without_tax = Column(Integer, nullable=False)
+    value_with_tax = Column(Integer, nullable=False)
     delivery_date = Column(Date, nullable=False)
 
     customer_trip = relationship("CustomerTrip", back_populates="orders")

@@ -13,7 +13,7 @@ class ContactBase(BaseModel):
     id_customer: int = Field(
         ...,
         gt=0,
-        description='ID of the client the contact belongs to'
+        description='ID of the customer the contact belongs to'
     )
     first_name: str = Field(
         ...,

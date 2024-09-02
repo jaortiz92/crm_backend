@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class ActivityBase(BaseModel):
     id_customer_trip: int = Field(...,
         gt=0,
-        description='ID of the client trip'
+        description='ID of the customer trip'
     )
     id_activity_type: int = Field(...,
         gt=0,
