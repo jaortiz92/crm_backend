@@ -12,3 +12,5 @@ from .collection import *
 from .storeType import *
 from .ratingCategory import *
 from .rating import *
+from .invoice import *
+from .invoiceDetail import *

@@ -22,9 +22,9 @@ class InvoiceDetail(Base):
     gender = Column(Enum(Gender), nullable=False)  # 'M', 'F', 'U'
     unit_value = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False)
-    value_without_vat = Column(Float, nullable=False)
+    value_without_tax = Column(Float, nullable=False)
     discount = Column(Float, nullable=False)
-    value_with_vat = Column(Float, nullable=False)
+    value_with_tax = Column(Float, nullable=False)
 
     invoice = relationship("Invoice", back_populates="invoice_details")
     brand = relationship("Brand", back_populates="invoice_details")

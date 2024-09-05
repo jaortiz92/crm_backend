@@ -18,6 +18,6 @@ from .task import Task, TaskCreate
 from .user import User, UserCreate
 from .advance import Advance, AdvanceCreate
 from .invoice import Invoice, InvoiceCreate
-from .invoiceDetail import InvoiceDetail
+from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate
 from .credit import Credit, CreditCreate
 from .shipment import Shipment, ShipmentCreate
