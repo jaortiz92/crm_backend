@@ -14,3 +14,6 @@ from .ratingCategory import rating_category
 from .rating import rating
 from .invoice import invoice
 from .invoiceDetail import invoice_detail
+from .advance import advance
+from .credit import credit
+from .shipment import shipment

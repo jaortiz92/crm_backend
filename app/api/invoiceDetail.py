@@ -17,13 +17,13 @@ invoice_detail = APIRouter(
 @invoice_detail.get("/{id_invoice_detail}", response_model=InvoiceDetail)
 def get_invoice_detail_by_id(id_invoice_detail: int, db: Session = Depends(get_db)):
     """
-    Show an InvoiceDetail
+    Show an Invoice Detail
 
     This path operation shows an invoice_detail in the app.
 
     Parameters:
     - Register path parameter
-        - invoice_detail_id: int
+        - id_invoice_detail: int
 
     Returns a JSON with the invoice_detail:
     - id_invoice_detail: int
@@ -33,7 +33,7 @@ def get_invoice_detail_by_id(id_invoice_detail: int, db: Session = Depends(get_d
     """
     db_invoice_detail = crud.get_invoice_detail_by_id(db, id_invoice_detail)
     if db_invoice_detail is None:
-        Exceptions.register_not_found("Customes", id_invoice_detail)
+        Exceptions.register_not_found("Invoice Detail", id_invoice_detail)
     return db_invoice_detail
 
 @invoice_detail.get("/", response_model=List[InvoiceDetail])
@@ -84,7 +84,7 @@ def update_invoice_detail(id_invoice_detail: int, invoice_detail: InvoiceDetailC
 
     Parameters:
     - Register path parameter
-        - invoice_detail_id: int
+        - id_invoice_detail: int
     - Request body parameter
         - invoice_detail: InvoiceDetailCreate -> A JSON object containing the updated invoice_detail data:
             - invoice_detail_number: str
@@ -99,7 +99,7 @@ def update_invoice_detail(id_invoice_detail: int, invoice_detail: InvoiceDetailC
     """
     db_invoice_detail = crud.update_invoice_detail(db, id_invoice_detail, invoice_detail)
     if db_invoice_detail is None:
-        Exceptions.register_not_found("Customes", id_invoice_detail)
+        Exceptions.register_not_found("Invoice Detail", id_invoice_detail)
     return db_invoice_detail
 
 @invoice_detail.delete("/{id_invoice_detail}")
@@ -111,11 +111,11 @@ def delete_invoice_detail(id_invoice_detail: int, db: Session = Depends(get_db))
 
     Parameters:
     - Register path parameter
-        - invoice_detail_id: int
+        - id_invoice_detail: int
 
     Returns a message confirming the deletion.
     """
     success = crud.delete_invoice_detail(db, id_invoice_detail)
     if not success:
-        Exceptions.register_not_found("Customes", id_invoice_detail)
+        Exceptions.register_not_found("Invoice Detail", id_invoice_detail)
     return {"message": "InvoiceDetail deleted successfully"}

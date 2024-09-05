@@ -24,7 +24,7 @@ class ShipmentBase(BaseModel):
     received_date: date = Field(...,
         description='Date the shipment was received'
     )
-    shipment_value: float = Field(...,
+    shipment_cost: float = Field(...,
         description='Shipment value'
     )
     details: Optional[str] = Field(None,

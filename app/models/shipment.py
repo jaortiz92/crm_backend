@@ -18,7 +18,7 @@ class Shipment(Base):
     carrier = Column(String(50), nullable=False)
     tracking_number = Column(String(100), nullable=False)
     received_date = Column(Date, nullable=False)
-    shipping_cost = Column(Float, nullable=False)
+    shipment_cost = Column(Float, nullable=False)
     details = Column(Text)
 
     invoice = relationship("Invoice", back_populates="shipments")

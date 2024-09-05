@@ -41,7 +41,7 @@ def get_customer_by_id(id_customer: int, db: Session = Depends(get_db)):
     """
     db_customer = crud.get_customer_by_id(db, id_customer)
     if db_customer is None:
-        Exceptions.register_not_found("Customes", id_customer)
+        Exceptions.register_not_found("Customer", id_customer)
     return db_customer
 
 @customer.get("/", response_model=List[Customer])
@@ -139,7 +139,7 @@ def update_customer(id_customer: int, customer: CustomerCreate, db: Session = De
     """
     db_customer = crud.update_customer(db, id_customer, customer)
     if db_customer is None:
-        Exceptions.register_not_found("Customes", id_customer)
+        Exceptions.register_not_found("Customer", id_customer)
     return db_customer
 
 @customer.delete("/{id_customer}")
@@ -157,5 +157,5 @@ def delete_customer(id_customer: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_customer(db, id_customer)
     if not success:
-        Exceptions.register_not_found("Customes", id_customer)
+        Exceptions.register_not_found("Customer", id_customer)
     return {"message": "Customer deleted successfully"}
