@@ -17,3 +17,4 @@ from .invoiceDetail import *
 from .advance import *
 from .credit import *
 from .shipment import *
+from .city import *

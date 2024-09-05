@@ -17,3 +17,4 @@ from .invoiceDetail import invoice_detail
 from .advance import advance
 from .credit import credit
 from .shipment import shipment
+from .city import city
