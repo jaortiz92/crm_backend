@@ -18,3 +18,6 @@ from .advance import *
 from .credit import *
 from .shipment import *
 from .city import *
+from .department import *
+from .role import *
+from .paymentMethod import *

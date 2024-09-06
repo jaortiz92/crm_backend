@@ -18,3 +18,6 @@ from .advance import advance
 from .credit import credit
 from .shipment import shipment
 from .city import city
+from .department import department
+from .role import role
+from .paymentMethod import payment_method

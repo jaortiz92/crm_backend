@@ -14,6 +14,7 @@ city = APIRouter(
     tags=["City"],
 )
 
+
 @city.get("/{id_city}", response_model=City)
 def get_city_by_id(id_city: int, db: Session = Depends(get_db)):
     """
@@ -37,6 +38,7 @@ def get_city_by_id(id_city: int, db: Session = Depends(get_db)):
     if db_city is None:
         Exceptions.register_not_found("City", id_city)
     return db_city
+
 
 @city.get("/", response_model=List[City])
 def get_cities(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
@@ -69,3 +71,21 @@ def get_cities_by_id_department(id_department: int, db: Session = Depends(get_db
     Returns a JSON with a list of citys in the app.
     """
     return crud.get_cities_by_id_department(db, id_department)
+
+
+@city.get("/name/{city_name}", response_model=List[City])
+def get_cities_by_name(city_name: str, db: Session = Depends(get_db)):
+    """
+    Show cities
+
+    This path operation shows a list of citys in the app with a limit on the number of cities.
+
+    Parameters:
+    - Query parameters:
+        - city_name: string
+
+    Returns a JSON with a list of citys in the app.
+    """
+    return crud.get_cities_by_name(
+        db, city_name
+    )

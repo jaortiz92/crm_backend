@@ -19,3 +19,9 @@ def get_cities(db: Session, skip: int = 0, limit: int = 10) -> list[CitySchema]:
 
 def get_cities_by_id_department(db: Session, id_department) -> list[CitySchema]:
     return db.query(CityModel).filter(CityModel.id_department == id_department).all()
+
+
+def get_cities_by_name(db: Session, city_name: str) -> list[CitySchema]:
+    search_pattern = f"%{city_name}%"
+    return db.query(CityModel).filter(
+        CityModel.city_name.ilike(search_pattern)).all()

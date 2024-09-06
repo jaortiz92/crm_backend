@@ -16,4 +16,3 @@ class Department(Base):
     department_name = Column(String(80))
 
     cities = relationship("City", back_populates="department")
-

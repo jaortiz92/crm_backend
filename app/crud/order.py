@@ -12,11 +12,11 @@ from app.models.paymentMethod import PaymentMethod
 import app.crud as crud
 
 
-def validate_foreign_keys(db: Session, order: OrderSchema) -> list | None:
+def validate_foreign_keys(db: Session, order: OrderSchema) -> list:  # | None:
     foreign_keys: list[list] = [
         [crud.get_customer_trip_by_id, order.id_customer_trip, "Custormer Trip"],
         [crud.get_user_by_id, order.id_seller, "User"],
-        #[crud.get_payment_method_by_id, order.id_payment_method, "Payment method"],
+        # [crud.get_payment_method_by_id, order.id_payment_method, "Payment method"],
     ]
     for foreign_key in foreign_keys:
         if not foreign_key[0](db, foreign_key[1]):
@@ -38,9 +38,9 @@ def get_orders_by_id_customer(db: Session, id_customer) -> list[OrderSchema]:
     ).all()
 
 
-def create_order(db: Session, order: OrderCreate) -> OrderSchema  | list:
+def create_order(db: Session, order: OrderCreate) -> OrderSchema:  # | list:
     validation: list | None = validate_foreign_keys(db, order)
-    if validation:
+    if len(validation) > 0:
         return validation
     else:
         db_order = OrderModel(**order.model_dump())
@@ -48,15 +48,15 @@ def create_order(db: Session, order: OrderCreate) -> OrderSchema  | list:
         db.commit()
         db.refresh(db_order)
         return db_order
-    
 
 
-def update_order(db: Session, id_order: int, order: OrderCreate) -> OrderSchema | list:
+# | list:
+def update_order(db: Session, id_order: int, order: OrderCreate) -> OrderSchema:
     db_order = db.query(OrderModel).filter(
         OrderModel.id_order == id_order).first()
     if db_order:
-        validation: list | None = validate_foreign_keys(db, order)
-        if validation:
+        validation: list = validate_foreign_keys(db, order)
+        if len(validation) > 0:
             return validation
         else:
             for key, value in order.model_dump().items():
