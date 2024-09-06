@@ -89,3 +89,29 @@ def get_cities_by_name(city_name: str, db: Session = Depends(get_db)):
     return crud.get_cities_by_name(
         db, city_name
     )
+
+
+@city.get("/{id_city}/department", response_model=City)
+def get_city_by_id_with_department(id_city: int, db: Session = Depends(get_db)):
+    """
+    Show a City
+
+    This path operation shows a city in the app
+
+    Parameters:
+    - Register path parameter
+        - id_city: int
+
+    Returns a JSON with a city in the app:
+    - id_city: int
+    - id_department: int
+    - city_code: string
+    - city_name: string
+    - latitude: float
+    - longitude: float
+    """
+    db_city = crud.get_city_by_id_with_department(db, id_city)
+    print(db_city.__dir__())
+    if db_city is None:
+        Exceptions.register_not_found("City", id_city)
+    return db_city
