@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import User, UserCreate
+from app.schemas import UserCreate, UserBaseOut, UserFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -15,7 +15,7 @@ user = APIRouter(
 )
 
 
-@user.get("/{id_user}", response_model=User)
+@user.get("/{id_user}", response_model=UserBaseOut)
 def get_user_by_id(id_user: int, db: Session = Depends(get_db)):
     """
     Show a User
@@ -46,7 +46,40 @@ def get_user_by_id(id_user: int, db: Session = Depends(get_db)):
     return db_user
 
 
-@user.get("/", response_model=List[User])
+@user.get("/full/{id_user}", response_model=UserFull)
+def get_user_by_id_full(id_user: int, db: Session = Depends(get_db)):
+    """
+    Show a User full
+
+    This path operation shows a user in the app
+
+    Parameters:
+    - Register path parameter
+        - id_user: int
+
+    Returns a JSON with a user in the app, with the following keys:
+    - id_user: int
+    - username: str
+    - first_name: str
+    - last_name: str
+    - document: float
+    - gender: Gender
+    - id_role: int
+    - email: str
+    - phone: Optional[str]
+    - id_city: int
+    - birth_date: Optional[date]
+    - active: bool
+    - role: RoleBase
+    - city: CityFull
+    """
+    db_user = crud.get_user_by_id(db, id_user)
+    if db_user is None:
+        Exceptions.register_not_found("User", id_user)
+    return db_user
+
+
+@user.get("/", response_model=List[UserBaseOut])
 def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     Show Users
@@ -62,8 +95,23 @@ def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     return crud.get_users(db, skip=skip, limit=limit)
 
+@user.get("/full/", response_model=List[UserFull])
+def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Show Users full
 
-@user.post("/", response_model=User)
+    This path operation shows a list of users full in the app with a limit on the number of users.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of users to retrieve (default: 10)
+
+    Returns a JSON with a list of users full in the app.
+    """
+    return crud.get_users(db, skip=skip, limit=limit)
+
+@user.post("/", response_model=UserBaseOut)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     """
     Create a User
@@ -89,7 +137,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     """
     return crud.create_user(db, user)
 
-@user.put("/{id_user}", response_model=User)
+@user.put("/{id_user}", response_model=UserBaseOut)
 def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     """
     Update a User

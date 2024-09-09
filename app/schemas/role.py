@@ -10,13 +10,14 @@ class RoleBase(BaseModel):
         max_length=50,
         description='Role name (max 50 characters)'
     )
+
+
+class RoleCreate(RoleBase):
     access_type: str = Field(...,
         max_length=10,
         description='Access type (max 10 characters)'
     )
 
-class RoleCreate(RoleBase):
-    pass
 
 class Role(RoleBase):
     id_role: int = Field(...,

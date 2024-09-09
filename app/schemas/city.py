@@ -6,7 +6,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 # App
-from .department import Department
+from .department import DepartmentBase
 
 class CityBase(BaseModel):
     id_department: int = Field(...,
@@ -44,5 +44,5 @@ class City(CityBase):
     class Config:
         from_attributes = True
 
-class CityWithDepartment(City):
-    department: Optional[Department]
+class CityFull(City):
+    department: Optional[DepartmentBase]

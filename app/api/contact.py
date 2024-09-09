@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import Contact, ContactCreate
+from app.schemas import Contact, ContactCreate, ContactFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -46,6 +46,40 @@ def get_contact_by_id(id_contact: int, db: Session = Depends(get_db)):
     return db_contact
 
 
+@contact.get("/full/{id_contact}", response_model=ContactFull)
+def get_contact_by_id(id_contact: int, db: Session = Depends(get_db)):
+    """
+    Show a Contact
+
+    This path operation shows a contact full in the app.
+
+    Parameters:
+    - Register path parameter
+        - id_contact: int
+
+    Returns a JSON with the contact:
+    - id_contact: int
+    - id_customer: int
+    - first_name: str
+    - last_name: str
+    - document: float
+    - gender: Gender
+    - email: Optional[EmailStr]
+    - phone: Optional[str]
+    - id_role: int
+    - birth_date: Optional[date]
+    - id_city: int
+    - active: bool
+    - customer: CustomerBase
+    - role: RoleBase
+    - city: CityFull
+    """
+    db_contact = crud.get_contact_by_id(db, id_contact)
+    if db_contact is None:
+        Exceptions.register_not_found("Contact", id_contact)
+    return db_contact
+
+
 @contact.get("/", response_model=List[Contact])
 def get_contacts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
@@ -63,7 +97,24 @@ def get_contacts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return crud.get_contacts(db, skip=skip, limit=limit)
 
 
-@contact.get("/customer/{id_customer}", response_model=List[Contact])
+@contact.get("/full/", response_model=List[ContactFull])
+def get_contacts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Show contacts full
+
+    This path operation shows a list of contacts full in the app with a limit on the number of contacts.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of contacts to retrieve (default: 10)
+
+    Returns a JSON with a list of contacts full in the app.
+    """
+    return crud.get_contacts(db, skip=skip, limit=limit)
+
+
+@contact.get("/customer/{id_customer}", response_model=List[ContactFull])
 def get_contacts_by_id_customer(id_customer: int, db: Session = Depends(get_db)):
     """
     Show contacts by customer

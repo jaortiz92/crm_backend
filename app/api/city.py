@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import City, CityWithDepartment
+from app.schemas import City, CityFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -91,7 +91,7 @@ def get_cities_by_name(city_name: str, db: Session = Depends(get_db)):
     )
 
 
-@city.get("/{id_city}/department", response_model=CityWithDepartment)
+@city.get("/{id_city}/department", response_model=CityFull)
 def get_city_by_id_with_department(id_city: int, db: Session = Depends(get_db)):
     """
     Show a City

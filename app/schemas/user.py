@@ -7,6 +7,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 # App
 from app.core import Gender
+from .city import CityFull
+from .role import RoleBase
 
 
 class UserBase(BaseModel):
@@ -29,18 +31,12 @@ class UserBase(BaseModel):
         description='gender'
     )
 
-
-class UserCreate(UserBase):
+class UserBaseOut(UserBase):
     username: str = Field(
         ...,
         max_length=100,
         description='Unique username (max 100 characters)'
     ),
-    password: str = Field(
-        ...,
-        max_length=500,
-        description='Password hash (max 500 characters)'
-    )
     id_role: int = Field(
         ...,
         gt=0,
@@ -69,6 +65,13 @@ class UserCreate(UserBase):
         description='Indicates whether the user is active or not'
     )
 
+class UserCreate(UserBaseOut):
+    password: str = Field(
+        ...,
+        max_length=500,
+        description='Password hash (max 500 characters)'
+    )
+
 
 class User(UserCreate):
     id_user: int = Field(
@@ -78,3 +81,9 @@ class User(UserCreate):
 
     class Config:
         from_attributes = True
+
+
+class UserFull(UserBaseOut):
+    id_user: int
+    city: Optional[CityFull]
+    role: Optional[RoleBase]

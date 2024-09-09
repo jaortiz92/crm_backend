@@ -5,6 +5,9 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from .line import LineBase
+
 class BrandBase(BaseModel):
     id_line: int = Field(...,
         gt=0,
@@ -25,3 +28,6 @@ class Brand(BrandBase):
 
     class Config:
         from_attributes = True
+
+class BrandFull(BrandBase):
+    line: LineBase

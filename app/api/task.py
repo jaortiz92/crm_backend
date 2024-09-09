@@ -43,7 +43,7 @@ def get_task_by_id(id_task: int, db: Session = Depends(get_db)):
     return db_task
 
 
-@task.get("/{id_task}/full", response_model=TaskFull)
+@task.get("/full/{id_task}", response_model=TaskFull)
 def get_task_by_id_full(id_task: int, db: Session = Depends(get_db)):
     """
     Show a Task

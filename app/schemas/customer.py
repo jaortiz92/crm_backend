@@ -5,6 +5,11 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field, EmailStr
 
+# App
+from .storeType import StoreTypeBase
+from .brand import BrandFull
+from .user import UserBase
+from .city import CityFull
 
 class CustomerBase(BaseModel):
     company_name: str = Field(...,
@@ -52,10 +57,16 @@ class CustomerCreate(CustomerBase):
         description='Indicates whether the user is active or not'
     )
 
-class Customer(CustomerBase):
+class Customer(CustomerCreate):
     id_customer: int = Field(...,
         gt=0
     )
 
     class Config:
         from_attributes = True
+
+class CustomerFull(Customer):
+    store_type: Optional[StoreTypeBase]
+    brand: Optional[BrandFull]
+    seller: Optional[UserBase]
+    city: Optional[CityFull]

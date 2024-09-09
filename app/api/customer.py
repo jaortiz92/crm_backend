@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import Customer, CustomerCreate
+from app.schemas import Customer, CustomerCreate, CustomerFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -13,6 +13,7 @@ customer = APIRouter(
     prefix="/customer",
     tags=["Customer"],
 )
+
 
 @customer.get("/{id_customer}", response_model=Customer)
 def get_customer_by_id(id_customer: int, db: Session = Depends(get_db)):
@@ -45,6 +46,41 @@ def get_customer_by_id(id_customer: int, db: Session = Depends(get_db)):
     return db_customer
 
 
+@customer.get("/full/{id_customer}", response_model=CustomerFull)
+def get_customer_by_id_full(id_customer: int, db: Session = Depends(get_db)):
+    """
+    Show a Customer
+
+    This path operation shows a customer in the app
+
+    Parameters:
+    - Register path parameter
+        - id_customer: int
+
+    Returns a JSON with a customer in the app:
+    - id_Customer: int
+    - company_name: str
+    - document: float
+    - email: EmailStr
+    - phone: Optional[str]
+    - id_store_type: int
+    - address: str
+    - id_brand: int
+    - id_seller: int
+    - stores: int
+    - id_city: int
+    - active: bool
+    - store_type: StoreTypeBase
+    - brand: BrandFull
+    - seller: UserBase
+    - city: CityFull
+    """
+    db_customer = crud.get_customer_by_id(db, id_customer)
+    if db_customer is None:
+        Exceptions.register_not_found("Customer", id_customer)
+    return db_customer
+    
+
 @customer.get("/", response_model=List[Customer])
 def get_customers(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
@@ -60,6 +96,24 @@ def get_customers(skip: int = 0, limit: int = 10, db: Session = Depends(get_db))
     Returns a JSON with a list of customers in the app.
     """
     return crud.get_customers(db, skip=skip, limit=limit)
+
+
+@customer.get("/full/", response_model=List[CustomerFull])
+def get_customers_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Show customers full
+
+    This path operation shows a list of customers full in the app with a limit on the number of customers.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of customers to retrieve (default: 10)
+
+    Returns a JSON with a list of customers full in the app.
+    """
+    return crud.get_customers(db, skip=skip, limit=limit)
+
 
 @customer.post("/", response_model=Customer)
 def create_customer(customer: CustomerCreate, db: Session = Depends(get_db)):
@@ -142,6 +196,7 @@ def update_customer(id_customer: int, customer: CustomerCreate, db: Session = De
     if db_customer is None:
         Exceptions.register_not_found("Customer", id_customer)
     return db_customer
+
 
 @customer.delete("/{id_customer}")
 def delete_customer(id_customer: int, db: Session = Depends(get_db)):

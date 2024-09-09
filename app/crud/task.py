@@ -54,8 +54,6 @@ def get_tasks_query(
         query = query.filter(TaskModel.closing_date >= closing_date_ge)
     if closing_date_le is not None:
         query = query.filter(TaskModel.closing_date <= closing_date_le)
-
-    
     return query.all()
 
 

@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field, EmailStr
 
 # App
 from app.core import Gender
+from .customer import CustomerBase
+from .role import RoleBase
+from .city import CityFull
 
 
 class ContactBase(BaseModel):
@@ -74,3 +77,9 @@ class Contact(ContactBase):
 
     class Config:
         from_attributes = True
+
+
+class ContactFull(Contact):
+    customer: Optional[CustomerBase]
+    role: Optional[RoleBase]
+    city: Optional[CityFull]
