@@ -1,7 +1,7 @@
 from .activity import Activity, ActivityCreate
 from .activityType import ActivityType, ActivityTypeCreate
 from .brand import Brand, BrandCreate
-from .city import City
+from .city import City, CityWithDepartment
 from .collection import Collection, CollectionCreate
 from .contact import Contact, ContactCreate
 from .customer import Customer, CustomerCreate
@@ -14,7 +14,7 @@ from .rating import Rating, RatingCreate
 from .ratingCategory import RatingCategory, RatingCategoryCreate
 from .role import Role
 from .storeType import StoreType, StoreTypeCreate
-from .task import Task, TaskCreate
+from .task import Task, TaskCreate, TaskFull
 from .user import User, UserCreate
 from .advance import Advance, AdvanceCreate
 from .invoice import Invoice, InvoiceCreate

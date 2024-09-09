@@ -43,3 +43,6 @@ class City(CityBase):
 
     class Config:
         from_attributes = True
+
+class CityWithDepartment(City):
+    department: Optional[Department]

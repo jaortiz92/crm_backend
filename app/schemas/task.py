@@ -5,6 +5,10 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from .customer import CustomerBase
+from .user import UserBase
+
 class TaskBase(BaseModel):
     id_customer: int = Field(...,
         gt=0,
@@ -45,3 +49,8 @@ class Task(TaskBase):
 
     class Config:
         from_attributes = True
+
+class TaskFull(Task):
+    customer: Optional[CustomerBase]
+    creator_tasks: Optional[UserBase]
+    responsible_task: Optional[UserBase]

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import City
+from app.schemas import City, CityWithDepartment
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -29,8 +29,8 @@ def get_city_by_id(id_city: int, db: Session = Depends(get_db)):
     Returns a JSON with a city in the app:
     - id_city: int
     - id_department: int
-    - city_code: string
-    - city_name: string
+    - city_code: str
+    - city_name: str
     - latitude: float
     - longitude: float
     """
@@ -82,7 +82,7 @@ def get_cities_by_name(city_name: str, db: Session = Depends(get_db)):
 
     Parameters:
     - Query parameters:
-        - city_name: string
+        - city_name: str
 
     Returns a JSON with a list of citys in the app.
     """
@@ -91,7 +91,7 @@ def get_cities_by_name(city_name: str, db: Session = Depends(get_db)):
     )
 
 
-@city.get("/{id_city}/department", response_model=City)
+@city.get("/{id_city}/department", response_model=CityWithDepartment)
 def get_city_by_id_with_department(id_city: int, db: Session = Depends(get_db)):
     """
     Show a City
@@ -105,13 +105,16 @@ def get_city_by_id_with_department(id_city: int, db: Session = Depends(get_db)):
     Returns a JSON with a city in the app:
     - id_city: int
     - id_department: int
-    - city_code: string
-    - city_name: string
+    - city_code: str
+    - city_name: str
     - latitude: float
     - longitude: float
+    - department:
+        - department_code: str
+        - department_name: str
+        - id_department: int
     """
-    db_city = crud.get_city_by_id_with_department(db, id_city)
-    print(db_city.__dir__())
+    db_city = crud.get_city_by_id(db, id_city)
     if db_city is None:
         Exceptions.register_not_found("City", id_city)
     return db_city

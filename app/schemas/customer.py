@@ -5,6 +5,7 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field, EmailStr
 
+
 class CustomerBase(BaseModel):
     company_name: str = Field(...,
         max_length=100,
@@ -13,6 +14,9 @@ class CustomerBase(BaseModel):
     document: float = Field(...,
         description='document number'
     )
+
+
+class CustomerCreate(CustomerBase):
     email: EmailStr = Field(...,
         description='email address'
     )
@@ -47,9 +51,6 @@ class CustomerBase(BaseModel):
     active: bool = Field(...,
         description='Indicates whether the user is active or not'
     )
-
-class CustomerCreate(CustomerBase):
-    pass
 
 class Customer(CustomerBase):
     id_customer: int = Field(...,

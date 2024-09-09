@@ -44,6 +44,7 @@ def get_customer_by_id(id_customer: int, db: Session = Depends(get_db)):
         Exceptions.register_not_found("Customer", id_customer)
     return db_customer
 
+
 @customer.get("/", response_model=List[Customer])
 def get_customers(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """

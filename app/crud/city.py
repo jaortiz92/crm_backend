@@ -1,6 +1,7 @@
 # Python
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 # App
 from app.models.city import City as CityModel
@@ -25,9 +26,3 @@ def get_cities_by_name(db: Session, city_name: str) -> list[CityModel]:
     search_pattern = f"%{city_name}%"
     return db.query(CityModel).filter(
         CityModel.city_name.ilike(search_pattern)).all()
-
-
-def get_city_by_id_with_department(db: Session, city_id: int) -> CityModel:
-    return db.query(CityModel).options(
-        joinedload(CityModel.department)
-    ).filter(CityModel.id_city == city_id).first()

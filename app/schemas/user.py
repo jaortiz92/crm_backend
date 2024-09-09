@@ -10,16 +10,6 @@ from app.core import Gender
 
 
 class UserBase(BaseModel):
-    username: str = Field(
-        ...,
-        max_length=100,
-        description='Unique username (max 100 characters)'
-    )
-    password: str = Field(
-        ...,
-        max_length=500,
-        description='Password hash (max 500 characters)'
-    )
     first_name: str = Field(
         ...,
         max_length=100,
@@ -37,6 +27,19 @@ class UserBase(BaseModel):
     gender: Gender = Field(
         ...,
         description='gender'
+    )
+
+
+class UserCreate(UserBase):
+    username: str = Field(
+        ...,
+        max_length=100,
+        description='Unique username (max 100 characters)'
+    ),
+    password: str = Field(
+        ...,
+        max_length=500,
+        description='Password hash (max 500 characters)'
     )
     id_role: int = Field(
         ...,
@@ -67,11 +70,7 @@ class UserBase(BaseModel):
     )
 
 
-class UserCreate(UserBase):
-    pass
-
-
-class User(UserBase):
+class User(UserCreate):
     id_user: int = Field(
         ...,
         gt=0
