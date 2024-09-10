@@ -5,6 +5,10 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from .invoice import InvoiceBase
+
+
 class ShipmentBase(BaseModel):
     id_invoice: int = Field(...,
         gt=0,
@@ -32,8 +36,10 @@ class ShipmentBase(BaseModel):
         description='Additional details (max 255 characters)'
     )
 
+
 class ShipmentCreate(ShipmentBase):
     pass
+
 
 class Shipment(ShipmentBase):
     id_shipment: int = Field(...,
@@ -42,3 +48,7 @@ class Shipment(ShipmentBase):
 
     class Config:
         from_attributes = True
+
+
+class ShipmentFull(Shipment):
+    invoice: InvoiceBase

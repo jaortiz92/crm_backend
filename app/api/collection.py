@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import Collection, CollectionCreate
+from app.schemas import Collection, CollectionCreate, CollectionFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -38,6 +38,33 @@ def get_collection_by_id(id_collection: int, db: Session = Depends(get_db)):
         Exceptions.register_not_found("Collection", id_collection)
     return db_collection
 
+
+@collection.get("/full/{id_collection}", response_model=CollectionFull)
+def get_collection_by_id_full(id_collection: int, db: Session = Depends(get_db)):
+    """
+    Show a Collection full
+
+    This path operation shows a collection in the app.
+
+    Parameters:
+    - Register path parameter
+        - collection_id: int
+
+    Returns a JSON with the collection:
+    - id_collection: int
+    - id_line: int
+    - collection_name: str
+    - short_collection_name: str
+    - year: int
+    - quarter: int
+    - line: LineBase
+    """
+    db_collection = crud.get_collection_by_id(db, id_collection)
+    if db_collection is None:
+        Exceptions.register_not_found("Collection", id_collection)
+    return db_collection
+
+
 @collection.get("/", response_model=List[Collection])
 def get_collections(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
@@ -53,6 +80,24 @@ def get_collections(skip: int = 0, limit: int = 10, db: Session = Depends(get_db
     Returns a JSON with a list of collections in the app.
     """
     return crud.get_collections(db, skip=skip, limit=limit)
+
+
+@collection.get("/full/", response_model=List[CollectionFull])
+def get_collections_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Show collections full
+
+    This path operation shows a list of collections full in the app with a limit on the number of collections full.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of collections to retrieve (default: 10)
+
+    Returns a JSON with a list of collections full in the app.
+    """
+    return crud.get_collections(db, skip=skip, limit=limit)
+
 
 @collection.post("/", response_model=Collection)
 def create_collection(collection: CollectionCreate, db: Session = Depends(get_db)):
@@ -111,6 +156,7 @@ def update_collection(id_collection: int, collection: CollectionCreate, db: Sess
     if db_collection is None:
         Exceptions.register_not_found("Collection", id_collection)
     return db_collection
+
 
 @collection.delete("/{id_collection}")
 def delete_collection(id_collection: int, db: Session = Depends(get_db)):

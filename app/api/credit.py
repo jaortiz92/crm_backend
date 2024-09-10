@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import Credit, CreditCreate
+from app.schemas import Credit, CreditCreate, CreditFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -13,6 +13,7 @@ credit = APIRouter(
     prefix="/credit",
     tags=["Credit"],
 )
+
 
 @credit.get("/{id_credit}", response_model=Credit)
 def get_credit_by_id(id_credit: int, db: Session = Depends(get_db)):
@@ -40,6 +41,35 @@ def get_credit_by_id(id_credit: int, db: Session = Depends(get_db)):
         Exceptions.register_not_found("Credit", id_credit)
     return db_credit
 
+
+@credit.get("/full/{id_credit}", response_model=CreditFull)
+def get_credit_by_id_full(id_credit: int, db: Session = Depends(get_db)):
+    """
+    Show a Credit full
+
+    This path operation shows a credit in the app.
+
+    Parameters:
+    - Register path parameter
+        - id_credit: int
+
+    Returns a JSON with the credit.
+    - id_credit: int
+    - id_invoice: int
+    - term: int
+    - credit_value: float
+    - payment_value: float
+    - balance: Optional[float]
+    - paid: Optional[bool]
+    - last_payment_date: Optional[date]
+    - invoice: InvoiceBase
+    """
+    db_credit = crud.get_credit_by_id(db, id_credit)
+    if db_credit is None:
+        Exceptions.register_not_found("Credit", id_credit)
+    return db_credit
+
+
 @credit.get("/", response_model=List[Credit])
 def get_credits(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
@@ -55,6 +85,24 @@ def get_credits(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     Returns a JSON with a list of credits in the app.
     """
     return crud.get_credits(db, skip=skip, limit=limit)
+
+
+@credit.get("/full/", response_model=List[CreditFull])
+def get_credits_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Show credits full
+
+    This path operation shows a list of credits full in the app with a limit on the number of credits full.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of credits full to retrieve (default: 10)
+
+    Returns a JSON with a list of credits full in the app.
+    """
+    return crud.get_credits(db, skip=skip, limit=limit)
+
 
 @credit.post("/", response_model=Credit)
 def create_credit(credit: CreditCreate, db: Session = Depends(get_db)):
@@ -121,6 +169,7 @@ def update_credit(id_credit: int, credit: CreditCreate, db: Session = Depends(ge
     if db_credit is None:
         Exceptions.register_not_found("Credit", id_credit)
     return db_credit
+
 
 @credit.delete("/{id_credit}")
 def delete_credit(id_credit: int, db: Session = Depends(get_db)):

@@ -5,6 +5,11 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from .ratingCategory import RatingCategoryBase
+from .customer import CustomerBase
+
+
 class RatingBase(BaseModel):
     id_customer: int = Field(...,
         gt=0,
@@ -21,13 +26,21 @@ class RatingBase(BaseModel):
         description='Comments about the rating'
     )
 
+
 class RatingCreate(RatingBase):
     pass
+
 
 class Rating(RatingBase):
     id_rating: int = Field(...,
         gt=0
     )
 
+
     class Config:
         from_attributes = True
+
+
+class RatingFull(Rating):
+    customer: CustomerBase
+    rating_category: RatingCategoryBase

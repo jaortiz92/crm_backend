@@ -54,7 +54,9 @@ def get_tasks_query(
         query = query.filter(TaskModel.closing_date >= closing_date_ge)
     if closing_date_le is not None:
         query = query.filter(TaskModel.closing_date <= closing_date_le)
-    return query.all()
+    return query.order_by(
+        TaskModel.creation_date.desc()
+    ).all()
 
 
 def update_task(db: Session, task_id: int, task: TaskCreate) -> TaskSchema:

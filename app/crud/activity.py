@@ -73,7 +73,9 @@ def get_activities_query(
         query = query.filter(ActivityModel.execution_date <= execution_date_le)
     if id_customer is not None:
         query = query.join(CustomerTripModel).filter(CustomerTripModel.id_customer == id_customer)
-    return query.all()
+    return query.order_by(
+        ActivityModel.estimated_date.desc()
+    ).all()
 
 
 def update_activity(db: Session, id_activity: int, activity: ActivityCreate) -> ActivitySchema:

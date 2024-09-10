@@ -91,8 +91,8 @@ def get_cities_by_name(city_name: str, db: Session = Depends(get_db)):
     )
 
 
-@city.get("/{id_city}/department", response_model=CityFull)
-def get_city_by_id_with_department(id_city: int, db: Session = Depends(get_db)):
+@city.get("/full/{id_city}/", response_model=CityFull)
+def get_city_by_id_full(id_city: int, db: Session = Depends(get_db)):
     """
     Show a City
 

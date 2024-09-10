@@ -5,6 +5,9 @@ from typing import Optional, List, Dict, Literal
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from .invoice import InvoiceBase
+
 class CreditBase(BaseModel):
     id_invoice: int = Field(...,
         gt=0,
@@ -39,3 +42,6 @@ class Credit(CreditBase):
 
     class Config:
         from_attributes = True
+
+class CreditFull(Credit):
+    invoice: InvoiceBase
