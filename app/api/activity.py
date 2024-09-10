@@ -1,10 +1,11 @@
 # Python
+from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 # App
-from app.schemas import Activity, ActivityCreate
+from app.schemas import Activity, ActivityCreate, ActivityFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -42,10 +43,59 @@ def get_activity_by_id(id_activity: int, db: Session = Depends(get_db)):
     return db_activity
 
 
+@activity.get("/full/{id_activity}", response_model=ActivityFull)
+def get_activity_by_id_full(id_activity: int, db: Session = Depends(get_db)):
+    """
+    Show an Activity
+
+    This path operation shows an activity in the app.
+
+    Parameters:
+    - Register path parameter
+        - id_activity: int
+
+    Returns a JSON with the activity:
+    - id_activity: int
+    - id_customer_trip: int
+    - id_activity_type: int
+    - id_user: int
+    - estimated_date: date
+    - execution_date: Optional[date]
+    - completed: Optional[bool]
+    - comment: Optional[str]
+    - customer_trip: CustomerTripBase
+    - activity_type: ActivityBase
+    - user: UserBase
+    """
+    db_activity = crud.get_activity_by_id(db, id_activity)
+    if db_activity is None:
+        Exceptions.register_not_found("Activity", id_activity)
+    print(db_activity)
+    print(db_activity.__dict__)
+    return db_activity
+
+
 @activity.get("/", response_model=List[Activity])
 def get_activities(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     Show activities
+
+    This path operation shows a list of activities in the app with a limit on the number of activities.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of activities to retrieve (default: 10)
+
+    Returns a JSON with a list of activities in the app.
+    """
+    return crud.get_activities(db, skip=skip, limit=limit)
+
+
+@activity.get("/full/", response_model=List[ActivityFull])
+def get_activities_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Show activities full
 
     This path operation shows a list of activities in the app with a limit on the number of activities.
 
@@ -89,6 +139,55 @@ def get_activities_by_id_activity_type(id_activity_type: int, db: Session = Depe
     Returns a JSON with a list of activities by activity type in the app.
     """
     return crud.get_activities_by_id_activity_type(db, id_activity_type)
+
+
+@activity.get("/query/", response_model=List[ActivityFull])
+def get_activities_query(
+        id_customer_trip: Optional[int] = None,
+        id_customer: Optional[int] = None,
+        id_activity_type: Optional[int] = None,
+        id_user: Optional[int] = None,
+        estimated_date_ge: Optional[date] = None,
+        estimated_date_le: Optional[date] = None,
+        completed: Optional[bool] = None,
+        execution_date_ge: Optional[date] = None,
+        execution_date_le: Optional[date] = None,
+        db: Session = Depends(get_db)
+    ):
+    """
+    Show activities
+
+    This path operation shows a list of activities in the app with a limit on the number of activities.
+
+    Parameters:
+    - Query parameters:
+        - id_customer_trip: int = None
+        - id_customer: int = None
+        - id_activity_type: int = None
+        - id_user: int = None
+        - estimated_date_ge: date = None
+        - estimated_date_le: date = None
+        - completed: bool = None
+        - execution_date_ge: date = None
+        - execution_date_le: date = None
+
+    Returns a JSON with a list of activities in the app.
+    """
+    db_activity = crud.get_activities_query(
+        db,
+        id_customer_trip,
+        id_customer,
+        id_activity_type,
+        id_user,
+        estimated_date_ge,
+        estimated_date_le,
+        completed,
+        execution_date_ge,
+        execution_date_le,
+    )
+    if db_activity is None:
+        Exceptions.register_not_found("Customer", id_customer)
+    return db_activity
 
 
 @activity.post("/", response_model=Activity)

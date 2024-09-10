@@ -35,7 +35,7 @@ def get_tasks_query(
         creation_date_le: date = None,
         completed: bool = None,
         closing_date_ge: date = None,
-        closing_date_le: date = None,    
+        closing_date_le: date = None,
     ) -> list[TaskSchema]:
     query = db.query(TaskModel)
     if id_customer is not None:

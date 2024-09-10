@@ -5,6 +5,11 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from .activityType import ActivityTypeBase
+from .user import UserBase
+from .customerTrip import CustomerTripFull
+
 class ActivityBase(BaseModel):
     id_customer_trip: int = Field(...,
         gt=0,
@@ -44,3 +49,8 @@ class Activity(ActivityBase):
 
     class Config:
         from_attributes = True
+
+class ActivityFull(Activity):
+    customer_trip: CustomerTripFull
+    activity_type: ActivityTypeBase
+    user: UserBase

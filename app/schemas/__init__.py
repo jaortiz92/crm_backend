@@ -1,4 +1,4 @@
-from .activity import Activity, ActivityCreate
+from .activity import Activity, ActivityCreate, ActivityFull
 from .activityType import ActivityType, ActivityTypeCreate
 from .brand import Brand, BrandCreate
 from .city import City, CityFull

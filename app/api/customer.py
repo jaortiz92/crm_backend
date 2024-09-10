@@ -78,6 +78,8 @@ def get_customer_by_id_full(id_customer: int, db: Session = Depends(get_db)):
     db_customer = crud.get_customer_by_id(db, id_customer)
     if db_customer is None:
         Exceptions.register_not_found("Customer", id_customer)
+    print(db_customer.__dict__)
+    
     return db_customer
     
 

@@ -4,6 +4,9 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, EmailStr, Field
 
+# App
+from .line import LineBase
+
 class CollectionBase(BaseModel):
     id_line: int = Field(...,
         gt=0,
@@ -37,3 +40,7 @@ class Collection(CollectionBase):
 
     class Config:
         from_attributes = True
+
+
+class CollectionFull(Collection):
+    line: LineBase

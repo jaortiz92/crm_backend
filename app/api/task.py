@@ -72,7 +72,7 @@ def get_task_by_id_full(id_task: int, db: Session = Depends(get_db)):
 
 
 
-@task.get("/query/", response_model=List[Task])
+@task.get("/query/", response_model=List[TaskFull])
 def get_tasks_query(
         id_customer: Optional[int] = None,
         id_creator: Optional[int] = None,
@@ -91,12 +91,18 @@ def get_tasks_query(
 
     Parameters:
     - Query parameters:
-        - skip: int - The number of records to skip (default: 0)
-        - limit: int - The maximum number of task to retrieve (default: 10)
+        - id_customer: int = None
+        - id_creator: int = None
+        - id_responsible: int = None
+        - creation_date_ge: date = None
+        - creation_date_le: date = None
+        - completed: bool = None
+        - closing_date_ge: date = None
+        - closing_date_le: date = None
 
     Returns a JSON with a list of task in the app.
     """
-    db_customer = crud.get_tasks_query(
+    db_task = crud.get_tasks_query(
         db,
         id_customer,
         id_creator,
@@ -107,9 +113,9 @@ def get_tasks_query(
         closing_date_ge,
         closing_date_le,
     )
-    if db_customer is None:
+    if db_task is None:
         Exceptions.register_not_found("Customer", id_customer)
-    return db_customer
+    return db_task
 
 
 @task.get("/", response_model=List[Task])
