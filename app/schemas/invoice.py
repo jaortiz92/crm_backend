@@ -5,6 +5,9 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field
 
+# App
+from .order import OrderFull
+
 
 class InvoiceBase(BaseModel):
     invoice_number: str = Field(...,
@@ -19,13 +22,26 @@ class InvoiceBase(BaseModel):
         description='ID of the order'
     )
 
+
 class InvoiceCreate(InvoiceBase):
     pass
+
 
 class Invoice(InvoiceBase):
     id_invoice: int = Field(...,
         gt=0
     )
 
+
     class Config:
         from_attributes = True
+
+
+class InvoiceShow(Invoice):
+    quantity: float
+    value_without_tax: float
+    value_with_tax: float
+
+
+class InvoiceFull(InvoiceShow):
+    order: OrderFull

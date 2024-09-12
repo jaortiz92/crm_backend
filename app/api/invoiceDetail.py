@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import InvoiceDetail, InvoiceDetailCreate
+from app.schemas import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -19,38 +19,98 @@ def get_invoice_detail_by_id(id_invoice_detail: int, db: Session = Depends(get_d
     """
     Show an Invoice Detail
 
-    This path operation shows an invoice_detail in the app.
+    This path operation shows an invoice detail in the app.
 
     Parameters:
     - Register path parameter
         - id_invoice_detail: int
 
-    Returns a JSON with the invoice_detail:
-    - id_invoice_detail: int
-    - invoice_detail_number: str
-    - invoice_detail_date: date
-    - id_order: int
+    Returns a JSON with the invoice detail:
+        - id_invoice integer
+        - product string
+        - color string
+        - size string
+        - id_brand integer
+        - gender integer
+        - unit_value float
+        - quantity integer
+        - value_without_tax float
+        - discount float
+        - value_with_tax float
+        - id_invoice_detail
     """
     db_invoice_detail = crud.get_invoice_detail_by_id(db, id_invoice_detail)
     if db_invoice_detail is None:
         Exceptions.register_not_found("Invoice Detail", id_invoice_detail)
     return db_invoice_detail
 
+
+@invoice_detail.get("/full/{id_invoice_detail}", response_model=InvoiceDetailFull)
+def get_invoice_detail_by_id_full(id_invoice_detail: int, db: Session = Depends(get_db)):
+    """
+    Show an Invoice Detail Full
+
+    This path operation shows an invoice detail full in the app.
+
+    Parameters:
+    - Register path parameter
+        - id_invoice_detail: int
+
+    Returns a JSON with the invoice detail full:
+        - id_invoice integer
+        - product string
+        - color string
+        - size string
+        - id_brand integer
+        - gender integer
+        - unit_value float
+        - quantity integer
+        - value_without_tax float
+        - discount float
+        - value_with_tax float
+        - id_invoice_detail
+        - invoice: InvoiceBase
+        - brand: BrandFull
+    """
+    db_invoice_detail = crud.get_invoice_detail_by_id(db, id_invoice_detail)
+    if db_invoice_detail is None:
+        Exceptions.register_not_found("Invoice Detail", id_invoice_detail)
+    return db_invoice_detail
+
+
 @invoice_detail.get("/", response_model=List[InvoiceDetail])
 def get_invoice_details(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
-    Show invoice_details
+    Show invoice details
 
-    This path operation shows a list of invoice_details in the app with a limit on the number of invoice_details.
+    This path operation shows a list of invoice details in the app with a limit on the number of invoice details.
 
     Parameters:
     - Query parameters:
         - skip: int - The number of records to skip (default: 0)
-        - limit: int - The maximum number of invoice_details to retrieve (default: 10)
+        - limit: int - The maximum number of invoice details to retrieve (default: 10)
 
-    Returns a JSON with a list of invoice_details in the app.
+    Returns a JSON with a list of invoice details in the app.
     """
     return crud.get_invoice_details(db, skip=skip, limit=limit)
+
+
+@invoice_detail.get("/full/", response_model=List[InvoiceDetailFull])
+def get_invoice_details_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Show invoice details full
+
+    This path operation shows a list of invoice details full in the app with a limit on the number of invoice details full.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of invoice details full to retrieve (default: 10)
+
+    Returns a JSON with a list of invoice details full in the app.
+    """
+    return crud.get_invoice_details(db, skip=skip, limit=limit)
+
 
 @invoice_detail.post("/", response_model=InvoiceDetail)
 def create_invoice_detail(invoice_detail: InvoiceDetailCreate, db: Session = Depends(get_db)):
@@ -101,6 +161,7 @@ def update_invoice_detail(id_invoice_detail: int, invoice_detail: InvoiceDetailC
     if db_invoice_detail is None:
         Exceptions.register_not_found("Invoice Detail", id_invoice_detail)
     return db_invoice_detail
+
 
 @invoice_detail.delete("/{id_invoice_detail}")
 def delete_invoice_detail(id_invoice_detail: int, db: Session = Depends(get_db)):

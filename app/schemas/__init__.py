@@ -5,10 +5,10 @@ from .city import City, CityFull
 from .collection import Collection, CollectionCreate, CollectionFull
 from .contact import Contact, ContactCreate, ContactFull
 from .customer import Customer, CustomerCreate, CustomerFull
-from .customerTrip import CustomerTrip, CustomerTripCreate
+from .customerTrip import CustomerTrip, CustomerTripCreate, CustomerTripFull
 from .department import Department
 from .line import Line, LineCreate
-from .order import Order, OrderCreate
+from .order import Order, OrderCreate, OrderFull
 from .paymentMethod import PaymentMethod
 from .rating import Rating, RatingCreate, RatingFull
 from .ratingCategory import RatingCategory, RatingCategoryCreate
@@ -17,7 +17,7 @@ from .storeType import StoreType, StoreTypeCreate
 from .task import Task, TaskCreate, TaskFull
 from .user import User, UserCreate, UserBaseOut, UserFull
 from .advance import Advance, AdvanceCreate
-from .invoice import Invoice, InvoiceCreate
-from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate
+from .invoice import Invoice, InvoiceCreate, InvoiceFull, InvoiceShow
+from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull
 from .credit import Credit, CreditCreate, CreditFull
 from .shipment import Shipment, ShipmentCreate, ShipmentFull

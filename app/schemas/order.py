@@ -5,6 +5,12 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, EmailStr, Field
 
+# App
+from .customerTrip import CustomerTripFull
+from .user import UserBase
+from .paymentMethod import PaymentMethodBase
+
+
 class OrderBase(BaseModel):
     id_customer_trip: int = Field(...,
         gt=0,
@@ -47,3 +53,8 @@ class Order(OrderBase):
 
     class Config:
         from_attributes = True
+
+class OrderFull(Order):
+    customer_trip: CustomerTripFull
+    seller: UserBase
+    payment_method: PaymentMethodBase
