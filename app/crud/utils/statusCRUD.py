@@ -1,5 +1,6 @@
 def statusRequest() -> dict[str, bool]:
     return {
         'deleted': False,
-        'alimination_allow': False
+        'elimination_allow': False,
+        'there_is_key_allow': False
     }

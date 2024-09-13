@@ -44,7 +44,7 @@ def update_activity_type(
 def delete_activity_type(db: Session, id_activity_type: int) -> dict[str, bool]:
     status = utils.statusRequest()
     if len(crud.get_activities_by_id_activity_type(db, id_activity_type)) == 0:
-        status['alimination_allow'] = True
+        status['elimination_allow'] = True
         db_activity_type = db.query(ActivityTypeModel).filter(
             ActivityTypeModel.id_activity_type == id_activity_type).first()
         if db_activity_type:

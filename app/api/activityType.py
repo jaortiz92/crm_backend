@@ -122,7 +122,7 @@ def delete_activity_type(id_activity_type: int, db: Session = Depends(get_db)):
     """
     success = crud.delete_activity_type(db, id_activity_type)
     if not success['deleted']:
-        if success['alimination_allow']:
+        if success['elimination_allow']:
             Exceptions.register_not_found("Activity type", id_activity_type)
         else:
             Exceptions.conflict_with_register(
