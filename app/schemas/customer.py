@@ -11,59 +11,81 @@ from .brand import BrandFull
 from .user import UserBase
 from .city import CityFull
 
+
 class CustomerBase(BaseModel):
     company_name: str = Field(...,
-        max_length=100,
-        description='Business name (max 100 characters)'
-    )
+                              max_length=100,
+                              description='Business name (max 100 characters)'
+                              )
     document: float = Field(...,
-        description='document number'
-    )
+                            description='document number'
+                            )
 
 
 class CustomerCreate(CustomerBase):
-    email: EmailStr = Field(...,
+    email: EmailStr = Field(
+        ...,
         description='email address'
     )
-    phone: Optional[str] = Field(None,
+    phone: Optional[str] = Field(
+        None,
         max_length=20,
         description='phone number (max 20 characters)'
     )
-    id_store_type: int = Field(...,
+    id_store_type: int = Field(
+        ...,
         gt=0,
         description='ID of the store type associated with the Customer'
     )
-    address: str = Field(...,
+    address: str = Field(
+        ...,
         max_length=255,
         description='address (max 255 characters)'
     )
-    id_brand: int = Field(...,
+    id_brand: int = Field(
+        ...,
         gt=0,
         description='ID of the brand associated with the Customer'
     )
-    id_seller: int = Field(...,
+    id_seller: int = Field(
+        ...,
         gt=0,
         description='ID of the seller associated with the Customer'
     )
-    stores: int = Field(...,
+    stores: int = Field(
+        ...,
         gt=0,
         description='Stores associated with the Customer'
     )
-    id_city: int = Field(...,
+    id_city: int = Field(
+        ...,
         gt=0,
         description='ID of the city the Customer resides in'
     )
-    active: bool = Field(...,
+    active: bool = Field(
+        ...,
         description='Indicates whether the user is active or not'
     )
 
+    credit_limit: Optional[float] = Field(
+        0,
+        description='Credit quota for customers'
+    )
+
+    with_documents: Optional[float] = Field(
+        False,
+        description='Credit quota for customers'
+    )
+
+
 class Customer(CustomerCreate):
     id_customer: int = Field(...,
-        gt=0
-    )
+                             gt=0
+                             )
 
     class Config:
         from_attributes = True
+
 
 class CustomerFull(Customer):
     store_type: Optional[StoreTypeBase]

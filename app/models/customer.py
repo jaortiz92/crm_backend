@@ -12,6 +12,7 @@ from sqlalchemy.orm import relationship
 # APP
 from app.db import Base
 
+
 class Customer(Base):
     __tablename__ = "customers"
 
@@ -26,6 +27,8 @@ class Customer(Base):
     id_seller = Column(Integer, ForeignKey("users.id_user"))
     id_city = Column(Integer, ForeignKey("cities.id_city"))
     stores = Column(Integer)
+    credit_limit = Column(Float, default=0)
+    with_documents = Column(Boolean, default=False)
     active = Column(Boolean)
 
     store_type = relationship("StoreType", back_populates="customers")
@@ -37,4 +40,3 @@ class Customer(Base):
     contacts = relationship("Contact", back_populates="customer")
     tasks = relationship("Task", back_populates="customer")
     ratings = relationship("Rating", back_populates="customer")
-    
