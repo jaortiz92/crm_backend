@@ -25,32 +25,13 @@ def create_invoice(db: Session, invoice: InvoiceCreate) -> InvoiceModel:
 
 
 def get_invoice_by_id(db: Session, id_invoice: int) -> InvoiceModel:
-    subquery = db.query(
-        InvoiceDetailModel.id_invoice,
-        func.sum(InvoiceDetailModel.quantity).label("quantity"),
-        func.sum(InvoiceDetailModel.value_without_tax).label(
-            "value_without_tax"),
-        func.sum(InvoiceDetailModel.value_with_tax).label("value_with_tax")
-    ).group_by(
-        InvoiceDetailModel.id_invoice
-    ).filter(InvoiceDetailModel.id_invoice == id_invoice).subquery()
-
-    return db.query(InvoiceModel).join(
-        subquery,
-        InvoiceModel.id_invoice == subquery.c.id_invoice
-    ).filter(
-        InvoiceModel.id_invoice == id_invoice
-    ).first()
+    result = db.query(InvoiceModel).filter(
+        InvoiceModel.id_invoice == id_invoice).first()
+    return result
 
 
 def get_invoices(db: Session, skip: int = 0, limit: int = 10) -> list[InvoiceModel]:
-    return db.query(
-        InvoiceModel,
-        func.sum(InvoiceDetailModel.quantity).label("quantity"),
-        func.sum(InvoiceDetailModel.value_without_tax).label(
-            "value_without_tax"),
-        func.sum(InvoiceDetailModel.value_with_tax).label("value_with_tax")
-    ).join(InvoiceDetailModel).group_by(InvoiceModel).order_by(InvoiceModel.invoice_date.desc()).offset(skip).limit(limit).all()
+    return db.query(InvoiceModel).offset(skip).limit(limit).all()
 
 
 def get_invoices_query(

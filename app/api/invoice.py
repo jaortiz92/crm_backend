@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 # App
-from app.schemas import Invoice, InvoiceCreate, InvoiceFull, InvoiceShow
+from app.schemas import Invoice, InvoiceCreate, InvoiceFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -15,7 +15,8 @@ invoice = APIRouter(
     tags=["Invoice"],
 )
 
-@invoice.get("/{id_invoice}", response_model=InvoiceShow)
+
+@invoice.get("/{id_invoice}", response_model=Invoice)
 def get_invoice_by_id(id_invoice: int, db: Session = Depends(get_db)):
     """
     Show an Invoice
@@ -33,9 +34,6 @@ def get_invoice_by_id(id_invoice: int, db: Session = Depends(get_db)):
     - id_order: int
     """
     db_invoice = crud.get_invoice_by_id(db, id_invoice)
-    print(db_invoice)
-    print(db_invoice.__dir__())
-    print(type(db_invoice))
     if db_invoice is None:
         Exceptions.register_not_found("Customes", id_invoice)
     return db_invoice
@@ -65,7 +63,7 @@ def get_invoice_by_id_full(id_invoice: int, db: Session = Depends(get_db)):
     return db_invoice
 
 
-@invoice.get("/", response_model=List[InvoiceShow])
+@invoice.get("/", response_model=List[Invoice])
 def get_invoices(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     Show invoices
@@ -101,16 +99,16 @@ def get_invoices_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_
 
 @invoice.get("/query/", response_model=List[InvoiceFull])
 def get_invoices_query(
-        id_customer: Optional[int] = None,
-        id_creator: Optional[int] = None,
-        id_responsible: Optional[int] = None,
-        creation_date_ge: Optional[date] = None,
-        creation_date_le: Optional[date] = None,
-        completed: Optional[bool] = None,
-        closing_date_ge: Optional[date] = None,
-        closing_date_le: Optional[date] = None,
-        db: Session = Depends(get_db)
-    ):
+    id_customer: Optional[int] = None,
+    id_creator: Optional[int] = None,
+    id_responsible: Optional[int] = None,
+    creation_date_ge: Optional[date] = None,
+    creation_date_le: Optional[date] = None,
+    completed: Optional[bool] = None,
+    closing_date_ge: Optional[date] = None,
+    closing_date_le: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
     """
     Show invoice
 

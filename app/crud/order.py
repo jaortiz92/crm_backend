@@ -10,6 +10,7 @@ from app.models.customer import Customer
 from app.models.user import User
 from app.models.paymentMethod import PaymentMethod
 import app.crud as crud
+from app.crud.utils import Constants
 
 
 def validate_foreign_keys(db: Session, order: OrderSchema) -> list:  # | None:
@@ -21,7 +22,7 @@ def validate_foreign_keys(db: Session, order: OrderSchema) -> list:  # | None:
     for foreign_key in foreign_keys:
         if not foreign_key[0](db, foreign_key[1]):
             return [foreign_key[2], foreign_key[1]]
-    return None
+    return Constants.STATUS_OK
 
 
 def get_order_by_id(db: Session, id_order: int) -> OrderSchema:
@@ -39,8 +40,8 @@ def get_orders_by_id_customer(db: Session, id_customer) -> list[OrderSchema]:
 
 
 def create_order(db: Session, order: OrderCreate) -> OrderSchema:  # | list:
-    validation: list | None = validate_foreign_keys(db, order)
-    if len(validation) > 0:
+    validation: list = validate_foreign_keys(db, order)
+    if validation != Constants.STATUS_OK:
         return validation
     else:
         db_order = OrderModel(**order.model_dump())
@@ -56,7 +57,7 @@ def update_order(db: Session, id_order: int, order: OrderCreate) -> OrderSchema:
         OrderModel.id_order == id_order).first()
     if db_order:
         validation: list = validate_foreign_keys(db, order)
-        if len(validation) > 0:
+        if validation != Constants.STATUS_OK:
             return validation
         else:
             for key, value in order.model_dump().items():

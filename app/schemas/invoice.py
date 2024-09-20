@@ -10,14 +10,17 @@ from .order import OrderFull
 
 
 class InvoiceBase(BaseModel):
-    invoice_number: str = Field(...,
+    invoice_number: str = Field(
+        ...,
         max_length=20,
         description='Invoice number (max 20 characters)'
     )
-    invoice_date: date = Field(...,
+    invoice_date: date = Field(
+        ...,
         description='Date of the invoice'
     )
-    id_order: int = Field(...,
+    id_order: int = Field(
+        ...,
         gt=0,
         description='ID of the order'
     )
@@ -28,20 +31,18 @@ class InvoiceCreate(InvoiceBase):
 
 
 class Invoice(InvoiceBase):
-    id_invoice: int = Field(...,
+    id_invoice: int = Field(
+        ...,
         gt=0
     )
-
 
     class Config:
         from_attributes = True
 
 
-class InvoiceShow(Invoice):
-    quantity: float
-    value_without_tax: float
-    value_with_tax: float
-
-
-class InvoiceFull(InvoiceShow):
+class InvoiceFull(Invoice):
+    total_quantity: float
+    total_without_tax: float
+    total_discount: float
+    total_with_tax: float
     order: OrderFull
