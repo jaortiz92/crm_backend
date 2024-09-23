@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.activityType import ActivityType as ActivityTypeModel
 from app.schemas.activityType import ActivityTypeCreate, ActivityType as ActivityTypeSchema
 import app.crud as crud
-from app.crud import utils
+from app.crud.utils import statusRequest
 
 
 def create_activity_type(db: Session, activity_type: ActivityTypeCreate) -> ActivityTypeSchema:
@@ -42,7 +42,7 @@ def update_activity_type(
 
 
 def delete_activity_type(db: Session, id_activity_type: int) -> dict[str, bool]:
-    status = utils.statusRequest()
+    status = statusRequest()
     if len(crud.get_activities_by_id_activity_type(db, id_activity_type)) == 0:
         status['elimination_allow'] = True
         db_activity_type = db.query(ActivityTypeModel).filter(

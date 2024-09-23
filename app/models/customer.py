@@ -29,7 +29,7 @@ class Customer(Base):
     stores = Column(Integer)
     credit_limit = Column(Float, default=0)
     with_documents = Column(Boolean, default=False)
-    active = Column(Boolean)
+    active = Column(Boolean, default=True)
 
     store_type = relationship("StoreType", back_populates="customers")
     brand = relationship("Brand", back_populates="customers")

@@ -14,3 +14,9 @@ class Exceptions:
             status_code=status.HTTP_409_CONFLICT,
             detail=f"{register} with reference '{value}' does not allow deletion"
         )
+    
+    def register_already_registered(register: str, value: str) -> None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{register} with reference '{value}' already registered"
+        )

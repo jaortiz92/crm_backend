@@ -8,12 +8,12 @@ from sqlalchemy import func
 from app.models.invoice import Invoice as InvoiceModel
 from app.schemas.invoice import InvoiceCreate
 from app.models.invoiceDetail import InvoiceDetail as InvoiceDetailModel
-from app.crud import utils
+from app.crud.utils import statusRequest
 import app.crud as crud
 
 
 def create_invoice(db: Session, invoice: InvoiceCreate) -> InvoiceModel:
-    status = utils.statusRequest()
+    status = statusRequest()
     db_invoice = InvoiceModel(**invoice.model_dump())
     if crud.get_order_by_id(db, db_invoice.id_order):
         db.add(db_invoice)

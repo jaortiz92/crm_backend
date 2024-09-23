@@ -135,7 +135,33 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
     Returns a JSON with the created user in the app.
     """
-    return crud.create_user(db, user)
+    success = crud.create_user(db, user)
+    if isinstance(success, dict):
+        value = 'username {} or document {:.0f}'.format(
+            user.username, user.document
+        )
+        Exceptions.register_already_registered("User", value)
+    else:
+        return success 
+
+
+@user.post("/login/")
+def login(username: str, password: str, db: Session = Depends(get_db)):
+    """
+    Login a User
+
+    This path operation login a user in the app
+
+    Parameters:
+    - Register path parameter:
+        - username: str - The username of the user to be login
+        - password: str - The password of the user to be login
+    
+    Returns a message
+    """
+    return crud.login_user(db, username, password)     
+
+
 
 @user.put("/{id_user}", response_model=UserBaseOut)
 def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
