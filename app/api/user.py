@@ -8,6 +8,7 @@ from app.schemas import UserCreate, UserBaseOut, UserFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
+from app.api.token import get_current_user
 
 user = APIRouter(
     prefix="/user",
@@ -145,24 +146,6 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         return success 
 
 
-@user.post("/login/")
-def login(username: str, password: str, db: Session = Depends(get_db)):
-    """
-    Login a User
-
-    This path operation login a user in the app
-
-    Parameters:
-    - Register path parameter:
-        - username: str - The username of the user to be login
-        - password: str - The password of the user to be login
-    
-    Returns a message
-    """
-    return crud.login_user(db, username, password)     
-
-
-
 @user.put("/{id_user}", response_model=UserBaseOut)
 def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     """
@@ -206,7 +189,11 @@ def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     return db_user
 
 @user.delete("/{id_user}")
-def delete_user(id_user: int, db: Session = Depends(get_db)):
+def delete_user(
+        id_user: int, 
+        db: Session = Depends(get_db), 
+        current_user: UserBaseOut = Depends(get_current_user)
+    ):
     """
     Delete a User
 

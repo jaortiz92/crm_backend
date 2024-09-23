@@ -4,4 +4,5 @@ def statusRequest() -> dict[str, bool]:
         'elimination_allow': False,
         'there_is_key_allow': False,
         'user_already_registered': False,
+        'username_or_password_ok': False
     }

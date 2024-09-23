@@ -20,3 +20,11 @@ class Exceptions:
             status_code=status.HTTP_409_CONFLICT,
             detail=f"{register} with reference '{value}' already registered"
         )
+
+
+    def credentials_exception() -> None:
+        raise  HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )

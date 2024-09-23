@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 # App
 from app.models.user import User as UserModel
 from app.schemas.user import UserCreate, User as UserSchema
+from app.schemas.token import Token as TokenSchema
 from app.crud.utils import statusRequest
 from app.core.hashing import get_password_hash, verify_password
+from app.core.auth import create_access_token
 
 
 def create_user(db: Session, user: UserCreate) -> UserModel:
@@ -30,13 +32,18 @@ def create_user(db: Session, user: UserCreate) -> UserModel:
         return db_user
 
 
-def login_user(db: Session, username: str, password: str) -> str:
+def login_user(db: Session, username: str, password: str) -> TokenSchema:
+    status = statusRequest()
     db_user = get_user_by_username(db, username.lower())
     if db_user:
         result = verify_password(db_user.password, password)
         if result:
-            return 'OK'
-    return 'Not OK'
+            access_token = create_access_token(data={"sub": username})
+            return TokenSchema(
+                access_token=access_token,
+                token_type="bearer"
+            )
+    return status
 
 
 def get_user_by_id(db: Session, id_user: int) -> UserSchema:

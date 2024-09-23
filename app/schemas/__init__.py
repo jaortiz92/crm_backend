@@ -21,3 +21,4 @@ from .invoice import Invoice, InvoiceCreate, InvoiceFull
 from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull
 from .credit import Credit, CreditCreate, CreditFull
 from .shipment import Shipment, ShipmentCreate, ShipmentFull
+from .token import Token, TokenData
