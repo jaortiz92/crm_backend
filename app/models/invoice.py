@@ -1,7 +1,8 @@
 # SQLalchemy
 from sqlalchemy import (
     Column, ForeignKey, Float,
-    Integer, String, Date
+    Integer, String, Date,
+    UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 
@@ -13,8 +14,8 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id_invoice = Column(Integer, primary_key=True, index=True)
-    invoice_number = Column(String(20), unique=True,
-                            index=True, nullable=False)
+    invoice_number = Column(String(20), nullable=False)
+    key = Column(Integer, nullable=False, default=1)
     invoice_date = Column(Date, nullable=False)
     id_order = Column(Integer, ForeignKey("orders.id_order"))
     total_quantity = Column(Float, default=0)
@@ -27,3 +28,7 @@ class Invoice(Base):
     invoice_details = relationship("InvoiceDetail", back_populates="invoice")
     credits = relationship("Credit", back_populates="invoice")
     shipments = relationship("Shipment", back_populates="invoice")
+
+    __table_args__ = (
+        UniqueConstraint('invoice_number', 'key', name='uix_invoice_number_key'),
+    )

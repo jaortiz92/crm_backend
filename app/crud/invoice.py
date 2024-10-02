@@ -15,20 +15,29 @@ import app.crud as crud
 def create_invoice(db: Session, invoice: InvoiceCreate) -> InvoiceModel:
     status = statusRequest()
     db_invoice = InvoiceModel(**invoice.model_dump())
-    if crud.get_order_by_id(db, db_invoice.id_order):
+    if get_invoice_by_number_and_key(
+        db, db_invoice.invoice_number, db_invoice.key
+    ):
+        status['value_already_registered'] = True
+        return status
+    elif crud.get_order_by_id(db, db_invoice.id_order):
         db.add(db_invoice)
         db.commit()
         db.refresh(db_invoice)
         return db_invoice
     else:
-        status
+        return status
 
 
 def get_invoice_by_id(db: Session, id_invoice: int) -> InvoiceModel:
-    result = db.query(InvoiceModel).filter(
+    return db.query(InvoiceModel).filter(
         InvoiceModel.id_invoice == id_invoice).first()
-    return result
 
+def get_invoice_by_number_and_key(db: Session, invoice_number: int, key: int) -> InvoiceModel:
+    return db.query(InvoiceModel).filter(
+        InvoiceModel.invoice_number == invoice_number, 
+        InvoiceModel.key == key
+    ).first()
 
 def get_invoices(db: Session, skip: int = 0, limit: int = 10) -> list[InvoiceModel]:
     return db.query(InvoiceModel).offset(skip).limit(limit).all()

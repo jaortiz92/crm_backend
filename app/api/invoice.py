@@ -163,7 +163,17 @@ def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
     - invoice_date: date
     - id_order: int
     """
-    return crud.create_invoice(db, invoice)
+    db_invoice =  crud.create_invoice(db, invoice)
+    if isinstance(db_invoice, dict):
+        if db_invoice["value_already_registered"]:
+            Exceptions.register_already_registered(
+                "Invoice", '{}-{}'.format(
+                    invoice.invoice_number, invoice.key
+                )
+            )
+        else:
+            Exceptions.register_not_found("Order", invoice.id_order)
+    return db_invoice
 
 
 @invoice.put("/{id_invoice}", response_model=Invoice)
