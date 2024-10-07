@@ -16,6 +16,7 @@ from .activity import Activity
 from .task import Task
 from .paymentMethod import PaymentMethod
 from .order import Order
+from .orderDetail import OrderDetail
 from .advance import Advance
 from .invoice import Invoice
 from .invoiceDetail import InvoiceDetail

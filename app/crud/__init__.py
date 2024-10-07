@@ -6,6 +6,7 @@ from .activityType import *
 from .customerTrip import *
 from .contact import *
 from .order import *
+from .orderDetail import *
 from .line import *
 from .brand import *
 from .collection import *

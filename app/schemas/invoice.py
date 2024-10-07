@@ -46,7 +46,7 @@ class Invoice(InvoiceBase):
 
 
 class InvoiceFull(Invoice):
-    total_quantity: float
+    total_quantities: float
     total_without_tax: float
     total_discount: float
     total_with_tax: float

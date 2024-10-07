@@ -7,15 +7,15 @@ from pydantic import BaseModel, Field
 
 # App
 from app.core import Gender
-from .invoice import InvoiceBase, InvoiceFull
+from .order import OrderBase, OrderFull
 from .brand import BrandFull
 
 
-class InvoiceDetailBase(BaseModel):
-    id_invoice: int = Field(
+class OrderDetailBase(BaseModel):
+    id_order: int = Field(
         ...,
         gt=0,
-        description='ID of the invoice'
+        description='ID of the order'
     )
     product: str = Field(
         ...,
@@ -53,22 +53,18 @@ class InvoiceDetailBase(BaseModel):
         ...,
         description='Value without tax'
     )
-    discount: float = Field(
-        ...,
-        description='Discount'
-    )
     value_with_tax: float = Field(
         ...,
         description='Value with tax'
     )
 
 
-class InvoiceDetailCreate(InvoiceDetailBase):
+class OrderDetailCreate(OrderDetailBase):
     pass
 
 
-class InvoiceDetail(InvoiceDetailBase):
-    id_invoice_detail: int = Field(
+class OrderDetail(OrderDetailBase):
+    id_order_detail: int = Field(
         ...,
         gt=0
     )
@@ -77,13 +73,13 @@ class InvoiceDetail(InvoiceDetailBase):
         from_attributes = True
 
 
-class InvoiceDetailWithBrand(InvoiceDetailBase):
+class OrderDetailWithBrand(OrderDetailBase):
     brand: BrandFull
 
 
-class InvoiceDetailFull(InvoiceDetailWithBrand):
-    invoice: InvoiceBase
+class OrderDetailFull(OrderDetailWithBrand):
+    order: OrderBase
 
 
-class InvoiceWithDetail(InvoiceFull):
-    invoice_details: List[InvoiceDetailWithBrand]
+class OrderWithDetail(OrderFull):
+    order_details: List[OrderDetailWithBrand]

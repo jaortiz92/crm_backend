@@ -1,6 +1,6 @@
 # Python
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 # App
 from app.models.order import Order as OrderModel
@@ -27,6 +27,14 @@ def validate_foreign_keys(db: Session, order: OrderSchema) -> list:  # | None:
 
 def get_order_by_id(db: Session, id_order: int) -> OrderSchema:
     return db.query(OrderModel).filter(OrderModel.id_order == id_order).first()
+
+
+def get_order_by_id_with_details(db: Session, id_order: int) -> OrderModel:
+    return db.query(OrderModel).options(
+        joinedload(OrderModel.order_details)
+    ).filter(
+        OrderModel.id_order == id_order
+    ).first()
 
 
 def get_orders(db: Session, skip: int = 0, limit: int = 10) -> list[OrderSchema]:

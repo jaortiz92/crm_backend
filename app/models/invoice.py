@@ -18,7 +18,7 @@ class Invoice(Base):
     key = Column(Integer, nullable=False, default=1)
     invoice_date = Column(Date, nullable=False)
     id_order = Column(Integer, ForeignKey("orders.id_order"))
-    total_quantity = Column(Float, default=0)
+    total_quantities = Column(Float, default=0)
     total_without_tax = Column(Float, default=0)
     total_discount = Column(Float, default=0)
     total_with_tax = Column(Float, default=0)
@@ -30,5 +30,6 @@ class Invoice(Base):
     shipments = relationship("Shipment", back_populates="invoice")
 
     __table_args__ = (
-        UniqueConstraint('invoice_number', 'key', name='uix_invoice_number_key'),
+        UniqueConstraint('invoice_number', 'key',
+                         name='uix_invoice_number_key'),
     )

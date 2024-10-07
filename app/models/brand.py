@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 # APP
 from app.db import Base
 
+
 class Brand(Base):
     __tablename__ = "brands"
 
@@ -18,3 +19,4 @@ class Brand(Base):
 
     customers = relationship("Customer", back_populates="brand")
     invoice_details = relationship("InvoiceDetail", back_populates="brand")
+    order_details = relationship("OrderDetail", back_populates="brand")

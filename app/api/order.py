@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import Order, OrderCreate
+from app.schemas import Order, OrderCreate, OrderWithDetail
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -13,6 +13,7 @@ order = APIRouter(
     prefix="/order",
     tags=["Order"],
 )
+
 
 @order.get("/{id_order}", response_model=Order)
 def get_order_by_id(id_order: int, db: Session = Depends(get_db)):
@@ -31,8 +32,8 @@ def get_order_by_id(id_order: int, db: Session = Depends(get_db)):
     - id_seller: int
     - date_order: date
     - id_payment_method: int
-    - quantities: int
-    - system_quantities: Optional[int]
+    - quantity: int
+    - system_quantity: Optional[int]
     - value_without_tax: int
     - value_with_tax: int
     - delivery_date: date
@@ -41,6 +42,26 @@ def get_order_by_id(id_order: int, db: Session = Depends(get_db)):
     if db_order is None:
         Exceptions.register_not_found("Order", id_order)
     return db_order
+
+
+@order.get("/{id_order}/details", response_model=OrderWithDetail)
+def get_order_by_id_with_details(id_order: int, db: Session = Depends(get_db)):
+    """
+    Show an Invoice
+
+    This path operation shows an order in the app.
+
+    Parameters:
+    - Register path parameter
+        - order_id: int
+
+    Returns a JSON with the order with datails
+    """
+    db_order = crud.get_order_by_id_with_details(db, id_order)
+    if db_order is None:
+        Exceptions.register_not_found("Customes", id_order)
+    return db_order
+
 
 @order.get("/", response_model=List[Order])
 def get_orders(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
@@ -58,6 +79,7 @@ def get_orders(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     return crud.get_orders(db, skip=skip, limit=limit)
 
+
 @order.get("/customer/{id_customer}", response_model=List[Order])
 def get_orders_by_id_customer(id_customer: int, db: Session = Depends(get_db)):
     """
@@ -73,6 +95,7 @@ def get_orders_by_id_customer(id_customer: int, db: Session = Depends(get_db)):
     """
     return crud.get_orders_by_id_customer(db, id_customer)
 
+
 @order.post("/", response_model=Order)
 def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     """
@@ -87,8 +110,8 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
             - id_seller: int
             - date_order: date
             - id_payment_method: int
-            - quantities: int
-            - system_quantities: Optional[int]
+            - quantity: int
+            - system_quantity: Optional[int]
             - value_without_tax: int
             - value_with_tax: int
             - delivery_date: date
@@ -99,8 +122,8 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     - id_seller: int
     - date_order: date
     - id_payment_method: int
-    - quantities: int
-    - system_quantities: Optional[int]
+    - quantity: int
+    - system_quantity: Optional[int]
     - value_without_tax: int
     - value_with_tax: int
     - delivery_date: date
@@ -109,6 +132,7 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     if isinstance(db_order, list):
         Exceptions.register_not_found(db_order[0], db_order[1])
     return db_order
+
 
 @order.put("/{id_order}", response_model=Order)
 def update_order(id_order: int, order: OrderCreate, db: Session = Depends(get_db)):
@@ -126,8 +150,8 @@ def update_order(id_order: int, order: OrderCreate, db: Session = Depends(get_db
             - id_seller: int
             - date_order: date
             - id_payment_method: int
-            - quantities: int
-            - system_quantities: Optional[int]
+            - quantity: int
+            - system_quantity: Optional[int]
             - value_without_tax: int
             - value_with_tax: int
             - delivery_date: date
@@ -138,8 +162,8 @@ def update_order(id_order: int, order: OrderCreate, db: Session = Depends(get_db
     - id_seller: int
     - date_order: date
     - id_payment_method: int
-    - quantities: int
-    - system_quantities: Optional[int]
+    - quantity: int
+    - system_quantity: Optional[int]
     - value_without_tax: int
     - value_with_tax: int
     - delivery_date: date
@@ -150,6 +174,7 @@ def update_order(id_order: int, order: OrderCreate, db: Session = Depends(get_db
     elif isinstance(db_order, list):
         Exceptions.register_not_found(db_order[0], db_order[1])
     return db_order
+
 
 @order.delete("/{id_order}")
 def delete_order(id_order: int, db: Session = Depends(get_db)):

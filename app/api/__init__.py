@@ -6,6 +6,7 @@ from .activityType import activity_type
 from .customerTrip import customer_trip
 from .contact import contact
 from .order import order
+from .orderDetail import order_detail
 from .line import line
 from .brand import brand
 from .collection import collection
