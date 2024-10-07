@@ -13,13 +13,15 @@ from .city import CityFull
 
 
 class CustomerBase(BaseModel):
-    company_name: str = Field(...,
-                              max_length=100,
-                              description='Business name (max 100 characters)'
-                              )
-    document: float = Field(...,
-                            description='document number'
-                            )
+    company_name: str = Field(
+        ...,
+        max_length=100,
+        description='Business name (max 100 characters)'
+    )
+    document: float = Field(
+        ...,
+        description='document number'
+    )
 
 
 class CustomerCreate(CustomerBase):
@@ -79,9 +81,10 @@ class CustomerCreate(CustomerBase):
 
 
 class Customer(CustomerCreate):
-    id_customer: int = Field(...,
-                             gt=0
-                             )
+    id_customer: int = Field(
+        ...,
+        gt=0
+    )
 
     class Config:
         from_attributes = True

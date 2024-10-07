@@ -1,7 +1,7 @@
 # Python
 from datetime import date
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 # App
@@ -33,11 +33,21 @@ def get_invoice_by_id(db: Session, id_invoice: int) -> InvoiceModel:
     return db.query(InvoiceModel).filter(
         InvoiceModel.id_invoice == id_invoice).first()
 
+
+def get_invoice_by_id_with_details(db: Session, id_invoice: int) -> InvoiceModel:
+    return db.query(InvoiceModel).options(
+        joinedload(InvoiceModel.invoice_details)
+    ).filter(
+        InvoiceModel.id_invoice == id_invoice
+    ).first()
+
+
 def get_invoice_by_number_and_key(db: Session, invoice_number: int, key: int) -> InvoiceModel:
     return db.query(InvoiceModel).filter(
-        InvoiceModel.invoice_number == invoice_number, 
+        InvoiceModel.invoice_number == invoice_number,
         InvoiceModel.key == key
     ).first()
+
 
 def get_invoices(db: Session, skip: int = 0, limit: int = 10) -> list[InvoiceModel]:
     return db.query(InvoiceModel).offset(skip).limit(limit).all()

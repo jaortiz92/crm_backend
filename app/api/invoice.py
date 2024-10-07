@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 # App
-from app.schemas import Invoice, InvoiceCreate, InvoiceFull
+from app.schemas import Invoice, InvoiceCreate, InvoiceFull, InvoiceWithDetail
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -34,6 +34,25 @@ def get_invoice_by_id(id_invoice: int, db: Session = Depends(get_db)):
     - id_order: int
     """
     db_invoice = crud.get_invoice_by_id(db, id_invoice)
+    if db_invoice is None:
+        Exceptions.register_not_found("Customes", id_invoice)
+    return db_invoice
+
+
+@invoice.get("/{id_invoice}/details", response_model=InvoiceWithDetail)
+def get_invoice_by_id_with_details(id_invoice: int, db: Session = Depends(get_db)):
+    """
+    Show an Invoice
+
+    This path operation shows an invoice in the app.
+
+    Parameters:
+    - Register path parameter
+        - invoice_id: int
+
+    Returns a JSON with the invoice with datails
+    """
+    db_invoice = crud.get_invoice_by_id_with_details(db, id_invoice)
     if db_invoice is None:
         Exceptions.register_not_found("Customes", id_invoice)
     return db_invoice
@@ -163,7 +182,7 @@ def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
     - invoice_date: date
     - id_order: int
     """
-    db_invoice =  crud.create_invoice(db, invoice)
+    db_invoice = crud.create_invoice(db, invoice)
     if isinstance(db_invoice, dict):
         if db_invoice["value_already_registered"]:
             Exceptions.register_already_registered(

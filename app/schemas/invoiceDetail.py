@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field
 
 # App
 from app.core import Gender
-from .invoice import InvoiceBase
+from .invoice import InvoiceBase, InvoiceFull
 from .brand import BrandFull
+
 
 class InvoiceDetailBase(BaseModel):
     id_invoice: int = Field(
@@ -75,6 +76,14 @@ class InvoiceDetail(InvoiceDetailBase):
     class Config:
         from_attributes = True
 
-class InvoiceDetailFull(InvoiceDetail):
-    invoice: InvoiceBase
+
+class InvoiceWithBrand(InvoiceDetailBase):
     brand: BrandFull
+
+
+class InvoiceDetailFull(InvoiceWithBrand):
+    invoice: InvoiceBase
+
+
+class InvoiceWithDetail(InvoiceFull):
+    invoice_details: List[InvoiceWithBrand]

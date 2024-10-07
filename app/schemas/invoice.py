@@ -28,7 +28,7 @@ class InvoiceBase(BaseModel):
         ...,
         gt=0,
         description='ID of the order'
-    )    
+    )
 
 
 class InvoiceCreate(InvoiceBase):
