@@ -118,14 +118,11 @@ def get_invoices_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_
 
 @invoice.get("/query/", response_model=List[InvoiceFull])
 def get_invoices_query(
-    id_customer: Optional[int] = None,
-    id_creator: Optional[int] = None,
-    id_responsible: Optional[int] = None,
-    creation_date_ge: Optional[date] = None,
-    creation_date_le: Optional[date] = None,
-    completed: Optional[bool] = None,
-    closing_date_ge: Optional[date] = None,
-    closing_date_le: Optional[date] = None,
+    invoice_number: Optional[str] = None,
+    key: Optional[int] = None,
+    date_ge: Optional[date] = None,
+    date_le: Optional[date] = None,
+    id_order: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -135,27 +132,21 @@ def get_invoices_query(
 
     Parameters:
     - Query parameters:
-        - id_customer: int = None
-        - id_creator: int = None
-        - id_responsible: int = None
-        - creation_date_ge: date = None
-        - creation_date_le: date = None
-        - completed: bool = None
-        - closing_date_ge: date = None
-        - closing_date_le: date = None
+        - invoice_number: str = None
+        - key: int = None
+        - date_ge: date = None
+        - date_le: date = None
+        - id_order: int = None
 
     Returns a JSON with a list of invoice in the app.
     """
     db_invoice = crud.get_invoices_query(
         db,
-        id_customer,
-        id_creator,
-        id_responsible,
-        creation_date_ge,
-        creation_date_le,
-        completed,
-        closing_date_ge,
-        closing_date_le,
+        invoice_number,
+        key,
+        date_ge,
+        date_le,
+        id_order
     )
     if db_invoice is None:
         Exceptions.register_not_found("Customer", id_customer)

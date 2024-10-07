@@ -55,34 +55,25 @@ def get_invoices(db: Session, skip: int = 0, limit: int = 10) -> list[InvoiceMod
 
 def get_invoices_query(
     db: Session,
-    id_customer: int = None,
-    id_creator: int = None,
-    id_responsible: int = None,
-    creation_date_ge: date = None,
-    creation_date_le: date = None,
-    completed: bool = None,
-    closing_date_ge: date = None,
-    closing_date_le: date = None,
+    invoice_number: str = None,
+    key: int = None,
+    date_ge: date = None,
+    date_le: date = None,
+    id_order: int = None,
 ) -> list[InvoiceModel]:
     query = db.query(InvoiceModel)
-    if id_customer is not None:
-        query = query.filter(InvoiceModel.id_customer == id_customer)
-    if id_creator is not None:
-        query = query.filter(InvoiceModel.id_creator == id_creator)
-    if id_responsible is not None:
-        query = query.filter(InvoiceModel.id_responsible == id_responsible)
-    if creation_date_ge is not None:
-        query = query.filter(InvoiceModel.creation_date >= creation_date_ge)
-    if creation_date_le is not None:
-        query = query.filter(InvoiceModel.creation_date <= creation_date_le)
-    if completed is not None:
-        query = query.filter(InvoiceModel.completed == completed)
-    if closing_date_ge is not None:
-        query = query.filter(InvoiceModel.closing_date >= closing_date_ge)
-    if closing_date_le is not None:
-        query = query.filter(InvoiceModel.closing_date <= closing_date_le)
+    if invoice_number is not None:
+        query = query.filter(InvoiceModel.invoice_number == invoice_number)
+    if key is not None:
+        query = query.filter(InvoiceModel.key == key)
+    if date_ge is not None:
+        query = query.filter(InvoiceModel.invoice_date >= date_ge)
+    if date_le is not None:
+        query = query.filter(InvoiceModel.invoice_date <= date_le)
+    if id_order is not None:
+        query = query.filter(InvoiceModel.id_order == id_order)
     return query.order_by(
-        InvoiceModel.creation_date.desc()
+        InvoiceModel.invoice_date.desc()
     ).all()
 
 
