@@ -148,8 +148,6 @@ def get_invoices_query(
         date_le,
         id_order
     )
-    if db_invoice is None:
-        Exceptions.register_not_found("Customer", id_customer)
     return db_invoice
 
 
