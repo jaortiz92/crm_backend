@@ -27,9 +27,9 @@ class Customer(Base):
     id_seller = Column(Integer, ForeignKey("users.id_user"))
     id_city = Column(Integer, ForeignKey("cities.id_city"))
     stores = Column(Integer)
-    credit_limit = Column(Float, default=0)
-    with_documents = Column(Boolean, default=False)
-    active = Column(Boolean, default=True)
+    credit_limit = Column(Float, server_default="0")
+    with_documents = Column(Boolean, server_default="False")
+    active = Column(Boolean, server_default="True")
 
     store_type = relationship("StoreType", back_populates="customers")
     brand = relationship("Brand", back_populates="customers")

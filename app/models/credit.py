@@ -2,12 +2,13 @@
 from sqlalchemy import (
     Column, ForeignKey,
     Integer, String,
-    Float, Boolean, Date    
+    Float, Boolean, Date
 )
 from sqlalchemy.orm import relationship
 
 # APP
 from app.db import Base
+
 
 class Credit(Base):
     __tablename__ = "credits"
@@ -18,7 +19,7 @@ class Credit(Base):
     credit_value = Column(Float, nullable=False)
     payment_value = Column(Float, nullable=False)
     balance = Column(Float)
-    paid = Column(Boolean, default=False)
+    paid = Column(Boolean, server_default="False")
     last_payment_date = Column(Date)
 
     invoice = relationship("Invoice", back_populates="credits")

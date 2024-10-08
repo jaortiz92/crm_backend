@@ -1,7 +1,7 @@
 # SQLalchemy
 from sqlalchemy import (
     Column, ForeignKey,
-    Integer, String,
+    Integer, func,
     Date, Text, Boolean
 )
 from sqlalchemy.orm import relationship
@@ -10,6 +10,7 @@ from datetime import date
 # APP
 from app.db import Base
 
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -17,12 +18,14 @@ class Task(Base):
     id_customer = Column(Integer, ForeignKey("customers.id_customer"))
     id_creator = Column(Integer, ForeignKey("users.id_user"))
     id_responsible = Column(Integer, ForeignKey("users.id_user"))
-    creation_date = Column(Date, default=date.today(), nullable=False)
+    creation_date = Column(Date, server_default=func.now(), nullable=False)
     task = Column(Text, nullable=False)
-    completed = Column(Boolean, default=False)
+    completed = Column(Boolean, server_default="False")
     closing_date = Column(Date)
     comment = Column(Text)
 
     customer = relationship("Customer", back_populates="tasks")
-    creator_tasks = relationship("User", foreign_keys=[id_creator], back_populates="creator_tasks")
-    responsible_task = relationship("User", foreign_keys=[id_responsible], back_populates="responsible_tasks")
+    creator_tasks = relationship(
+        "User", foreign_keys=[id_creator], back_populates="creator_tasks")
+    responsible_task = relationship(
+        "User", foreign_keys=[id_responsible], back_populates="responsible_tasks")

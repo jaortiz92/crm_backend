@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 # App
-from app.schemas import Activity, ActivityCreate, ActivityFull
+from app.schemas import Activity, ActivityCreate, ActivityFull, ActivityAuthorize
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -143,17 +143,17 @@ def get_activities_by_id_activity_type(id_activity_type: int, db: Session = Depe
 
 @activity.get("/query/", response_model=List[ActivityFull])
 def get_activities_query(
-        id_customer_trip: Optional[int] = None,
-        id_customer: Optional[int] = None,
-        id_activity_type: Optional[int] = None,
-        id_user: Optional[int] = None,
-        estimated_date_ge: Optional[date] = None,
-        estimated_date_le: Optional[date] = None,
-        completed: Optional[bool] = None,
-        execution_date_ge: Optional[date] = None,
-        execution_date_le: Optional[date] = None,
-        db: Session = Depends(get_db)
-    ):
+    id_customer_trip: Optional[int] = None,
+    id_customer: Optional[int] = None,
+    id_activity_type: Optional[int] = None,
+    id_user: Optional[int] = None,
+    estimated_date_ge: Optional[date] = None,
+    estimated_date_le: Optional[date] = None,
+    completed: Optional[bool] = None,
+    execution_date_ge: Optional[date] = None,
+    execution_date_le: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
     """
     Show activities
 
@@ -252,6 +252,39 @@ def update_activity(id_activity: int, activity: ActivityCreate, db: Session = De
     - comment: Optional[str]
     """
     db_activity = crud.update_activity(db, id_activity, activity)
+    if db_activity is None:
+        Exceptions.register_not_found("Activity", id_activity)
+    return db_activity
+
+
+@activity.put("/authorize/{id_activity}", response_model=Activity)
+def update_activity(id_activity: int, activity: ActivityAuthorize, db: Session = Depends(get_db)):
+    """
+    Update an Activity
+
+    This path operation updates an existing activity in the app.
+
+    Parameters:
+    - Register path parameter
+        - id_activity: int
+    - Request body parameter
+        - activity: ActivityCreate -> A JSON object containing the updated activity data:
+            - id_activity: int
+            - authorizeder: int
+            - authorized: bool
+            - budget_authorized: float
+
+    Returns a JSON with the updated activity:
+    - id_activity: int
+    - id_customer_trip: int
+    - id_activity_type: int
+    - id_user: int
+    - estimated_date: date
+    - execution_date: Optional[date]
+    - completed: Optional[bool]
+    - comment: Optional[str]
+    """
+    db_activity = crud.authorize_activity(db, id_activity, activity)
     if db_activity is None:
         Exceptions.register_not_found("Activity", id_activity)
     return db_activity
