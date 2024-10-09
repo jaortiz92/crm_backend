@@ -30,8 +30,6 @@ class UserBase(BaseModel):
         ...,
         description='gender'
     )
-
-class UserBaseOut(UserBase):
     username: str = Field(
         ...,
         max_length=100,
@@ -56,7 +54,8 @@ class UserBaseOut(UserBase):
         description='Users birth date'
     )
 
-class UserCreate(UserBaseOut):
+
+class UserCreate(UserBase):
     password: str = Field(
         ...,
         max_length=500,
@@ -64,16 +63,11 @@ class UserCreate(UserBaseOut):
     )
 
 
-class User(UserCreate):
+class User(UserBase):
     id_user: int = Field(
         ...,
         gt=0
     )
-
-    class Config:
-        from_attributes = True
-
-class UserOut(UserBaseOut):
     id_role: int = Field(
         ...,
         gt=0,
@@ -84,7 +78,11 @@ class UserOut(UserBaseOut):
         description='Indicates whether the user is active or not'
     )
 
-class UserFull(UserOut):
+    class Config:
+        from_attributes = True
+
+
+class UserFull(User):
     id_user: int
     city: Optional[CityFull]
     role: Optional[RoleBase]

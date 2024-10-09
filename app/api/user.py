@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import UserCreate, UserBaseOut, UserFull
+from app.schemas import UserCreate, User, UserFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -16,7 +16,7 @@ user = APIRouter(
 )
 
 
-@user.get("/{id_user}", response_model=UserBaseOut)
+@user.get("/{id_user}", response_model=User)
 def get_user_by_id(id_user: int, db: Session = Depends(get_db)):
     """
     Show a User
@@ -80,7 +80,7 @@ def get_user_by_id_full(id_user: int, db: Session = Depends(get_db)):
     return db_user
 
 
-@user.get("/", response_model=List[UserBaseOut])
+@user.get("/", response_model=List[User])
 def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     Show Users
@@ -95,6 +95,7 @@ def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     Returns a JSON with a list of users in the app.
     """
     return crud.get_users(db, skip=skip, limit=limit)
+
 
 @user.get("/full/", response_model=List[UserFull])
 def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
@@ -112,7 +113,8 @@ def get_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
     return crud.get_users(db, skip=skip, limit=limit)
 
-@user.post("/", response_model=UserBaseOut)
+
+@user.post("/", response_model=User)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     """
     Create a User
@@ -143,10 +145,10 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         )
         Exceptions.register_already_registered("User", value)
     else:
-        return success 
+        return success
 
 
-@user.put("/{id_user}", response_model=UserBaseOut)
+@user.put("/{id_user}", response_model=User)
 def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
     """
     Update a User
@@ -188,12 +190,12 @@ def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
         Exceptions.register_not_found("User", id_user)
     return db_user
 
+
 @user.delete("/{id_user}")
 def delete_user(
-        id_user: int, 
-        db: Session = Depends(get_db), 
-        current_user: UserBaseOut = Depends(get_current_user)
-    ):
+    id_user: int,
+    db: Session = Depends(get_db),
+):
     """
     Delete a User
 

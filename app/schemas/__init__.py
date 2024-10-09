@@ -16,7 +16,7 @@ from .ratingCategory import RatingCategory, RatingCategoryCreate
 from .role import Role
 from .storeType import StoreType, StoreTypeCreate
 from .task import Task, TaskCreate, TaskFull
-from .user import User, UserCreate, UserBaseOut, UserFull
+from .user import User, UserCreate, UserFull
 from .advance import Advance, AdvanceCreate
 from .invoice import Invoice, InvoiceCreate, InvoiceFull
 from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull, InvoiceWithDetail
