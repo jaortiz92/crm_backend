@@ -4,7 +4,7 @@ from .brand import Brand, BrandCreate, BrandFull
 from .city import City, CityFull
 from .collection import Collection, CollectionCreate, CollectionFull
 from .contact import Contact, ContactCreate, ContactFull
-from .customer import Customer, CustomerCreate, CustomerFull
+from .customer import Customer, CustomerCreate, CustomerFull, CustomerBaseWithCity
 from .customerTrip import CustomerTrip, CustomerTripCreate, CustomerTripFull
 from .department import Department
 from .line import Line, LineCreate

@@ -95,3 +95,7 @@ class CustomerFull(Customer):
     brand: Optional[BrandFull]
     seller: Optional[UserBase]
     city: Optional[CityFull]
+
+
+class CustomerBaseWithCity(CustomerBase):
+    city: Optional[CityFull]

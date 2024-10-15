@@ -6,7 +6,7 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 # App
-from .customer import CustomerBase
+from .customer import CustomerBaseWithCity
 from .user import UserBase
 from .collection import CollectionFull
 
@@ -56,6 +56,6 @@ class CustomerTrip(CustomerTripBase):
 
 
 class CustomerTripFull(CustomerTrip):
-    customer: CustomerBase
+    customer: CustomerBaseWithCity
     seller: UserBase
     collection: CollectionFull

@@ -6,43 +6,55 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 # App
-from .customer import CustomerBase
+from .customer import CustomerBaseWithCity
 from .user import UserBase
 
+
 class TaskBase(BaseModel):
-    id_customer: int = Field(...,
+    id_customer: int = Field(
+        ...,
         gt=0,
         description='ID of the customer'
     )
-    id_creator: int = Field(...,
+    id_creator: int = Field(
+        ...,
         gt=0,
         description='ID of the user who created the task'
     )
-    id_responsible: int = Field(...,
+    id_responsible: int = Field(
+        ...,
         gt=0,
         description='ID of the user responsible for the task'
     )
-    creation_date: Optional[date] = Field(...,
+    creation_date: Optional[date] = Field(
+        ...,
         description='Creation date of the task'
     )
-    task: str = Field(...,
+    task: str = Field(
+        ...,
         description='Description of the task'
     )
-    completed: Optional[bool] = Field(False,
+    completed: Optional[bool] = Field(
+        False,
         description='Whether the task was completed'
     )
-    closing_date: Optional[date] = Field(None,
+    closing_date: Optional[date] = Field(
+        None,
         description='Closing date of the task'
     )
-    comment: Optional[str] = Field(None,
+    comment: Optional[str] = Field(
+        None,
         description='Comments about the task'
     )
+
 
 class TaskCreate(TaskBase):
     pass
 
+
 class Task(TaskBase):
-    id_task: int = Field(...,
+    id_task: int = Field(
+        ...,
         gt=0,
         description='ID of the task'
     )
@@ -50,7 +62,8 @@ class Task(TaskBase):
     class Config:
         from_attributes = True
 
+
 class TaskFull(Task):
-    customer: Optional[CustomerBase]
+    customer: Optional[CustomerBaseWithCity]
     creator_tasks: Optional[UserBase]
     responsible_task: Optional[UserBase]
