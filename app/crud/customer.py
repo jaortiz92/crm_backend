@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 # App
 from app.models.customer import Customer as CustomerModel
 from app.schemas.customer import CustomerCreate, Customer as CustomerSchema
+from app.crud.utils import Constants
 
 
 def create_customer(db: Session, customer: CustomerCreate) -> CustomerSchema:
@@ -21,8 +22,20 @@ def get_customer_by_id(db: Session, id_customer: int) -> CustomerSchema:
     return result
 
 
-def get_customers(db: Session, skip: int = 0, limit: int = 10) -> list[CustomerSchema]:
-    return db.query(CustomerModel).offset(skip).limit(limit).all()
+def get_customers(db: Session, id_user: int, access_type: str, skip: int = 0, limit: int = 10) -> list[CustomerSchema]:
+    auth = Constants.get_auth_to_customers(access_type)
+    result = []
+    if auth == Constants.ALL:
+        result = db.query(CustomerModel).order_by(
+            CustomerModel.company_name.asc()
+        ).offset(skip).limit(limit).all()
+    elif auth == Constants.FILTER:
+        result = db.query(CustomerModel).filter(
+            CustomerModel.id_seller == id_user
+        ).order_by(
+            CustomerModel.company_name.asc()
+        ).offset(skip).limit(limit).all()
+    return result
 
 
 def update_customer(db: Session, id_customer: int, customer: CustomerCreate) -> CustomerSchema:

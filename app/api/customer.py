@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import Customer, CustomerCreate, CustomerFull
+from app.schemas import Customer, CustomerCreate, CustomerFull, User
 from app import get_db
+from app.core.auth import get_current_user
 import app.crud as crud
 from app.api.utils import Exceptions
 
@@ -78,13 +79,15 @@ def get_customer_by_id_full(id_customer: int, db: Session = Depends(get_db)):
     db_customer = crud.get_customer_by_id(db, id_customer)
     if db_customer is None:
         Exceptions.register_not_found("Customer", id_customer)
-    print(db_customer.__dict__)
-    
     return db_customer
-    
+
 
 @customer.get("/", response_model=List[Customer])
-def get_customers(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_customers(skip: int = 0, limit: int = 10,
+                  db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user),
+                  access_type: str = Depends(crud.get_me_access_type)
+                  ):
     """
     Show customers
 
@@ -97,11 +100,16 @@ def get_customers(skip: int = 0, limit: int = 10, db: Session = Depends(get_db))
 
     Returns a JSON with a list of customers in the app.
     """
-    return crud.get_customers(db, skip=skip, limit=limit)
+    return crud.get_customers(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
 @customer.get("/full/", response_model=List[CustomerFull])
-def get_customers_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_customers_full(
+    skip: int = 0, limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show customers full
 
@@ -114,7 +122,7 @@ def get_customers_full(skip: int = 0, limit: int = 10, db: Session = Depends(get
 
     Returns a JSON with a list of customers full in the app.
     """
-    return crud.get_customers(db, skip=skip, limit=limit)
+    return crud.get_customers(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
 @customer.post("/", response_model=Customer)

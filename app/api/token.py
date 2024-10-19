@@ -7,27 +7,13 @@ from jose import JWTError, jwt
 from app.schemas import Token, User
 from app import get_db
 import app.crud as crud
-from app.core.auth import oauth2_scheme, SECRET_KEY, ALGORITHM
+from app.core.auth import get_current_user
 from app.api.utils import Exceptions
 
 token = APIRouter(
     prefix="/login",
     tags=["login"],
 )
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            Exceptions.credentials_exception()
-    except JWTError:
-        Exceptions.credentials_exception()
-    user = crud.get_user_by_username(db, username)
-    if user is None:
-        Exceptions.credentials_exception()
-    return user
 
 
 @token.post("/", response_model=Token)
