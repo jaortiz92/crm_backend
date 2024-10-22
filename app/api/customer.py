@@ -83,11 +83,12 @@ def get_customer_by_id_full(id_customer: int, db: Session = Depends(get_db)):
 
 
 @customer.get("/", response_model=List[Customer])
-def get_customers(skip: int = 0, limit: int = 10,
-                  db: Session = Depends(get_db),
-                  current_user: User = Depends(get_current_user),
-                  access_type: str = Depends(crud.get_me_access_type)
-                  ):
+def get_customers(
+    skip: int = 0, limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show customers
 

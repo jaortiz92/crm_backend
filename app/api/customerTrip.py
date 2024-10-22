@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import CustomerTrip, CustomerTripCreate
+from app.schemas import CustomerTrip, CustomerTripCreate, CustomerTripFull, User
 from app import get_db
+from app.core.auth import get_current_user
 import app.crud as crud
 from app.api.utils import Exceptions
 
@@ -42,7 +43,12 @@ async def get_customer_trip_by_id(id_customer_trip: int, db: Session = Depends(g
 
 
 @customer_trip.get("/", response_model=List[CustomerTrip])
-def get_customer_trips(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_customer_trips(
+    skip: int = 0, limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show customer trips
 
@@ -55,7 +61,73 @@ def get_customer_trips(skip: int = 0, limit: int = 10, db: Session = Depends(get
 
     Returns a JSON with a list of customer trips in the app.
     """
-    return crud.get_customer_trips(db, skip=skip, limit=limit)
+    return crud.get_customer_trips(db, current_user.id_user, access_type, skip=skip, limit=limit)
+
+
+@customer_trip.get("/full/{id_customer_trip}", response_model=CustomerTripFull)
+async def get_customer_trip_full_by_id(id_customer_trip: int, db: Session = Depends(get_db)):
+    """
+    Show a Customer Trip
+
+    This path operation shows a customer trip in the app.
+
+    Parameters:
+    - Register path parameter
+        - id_customer_trip: int
+
+    Returns a JSON with the customer trip:
+    - id_customer_trip: int
+    - id_customer: int
+    - id_seller: int
+    - id_collection: int
+    - budget: float
+    - ordered: Optional[bool]
+    - comment: Optional[str]
+    """
+    db_customer_trip = crud.get_customer_trip_by_id(db, id_customer_trip)
+    if db_customer_trip is None:
+        Exceptions.register_not_found("Customer Trip", id_customer_trip)
+    return db_customer_trip
+
+
+@customer_trip.get("/full/", response_model=List[CustomerTripFull])
+def get_customer_trips_full(
+    skip: int = 0, limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
+    """
+    Show customer trips
+
+    This path operation shows a list of customer trips in the app with a limit on the number of customer trips.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of customer trips to retrieve (default: 10)
+
+    Returns a JSON with a list of customer trips in the app.
+    """
+    return crud.get_customer_trips(db, current_user.id_user, access_type, skip=skip, limit=limit)
+
+
+@customer_trip.get("/full/customer/{id_customer}", response_model=List[CustomerTripFull])
+async def get_customer_trips_by_id_customer(id_customer: int, db: Session = Depends(get_db)):
+    """
+    Show customer trips
+
+    This path operation shows a list of customer trips by id_customer
+
+    Parameters:
+    - Query parameters:
+        - id_customer: int - The id_customer
+
+
+    Returns a JSON with a list of customer trips in the app.
+    """
+    db_customer_trip = crud.get_customer_trips_by_id_customer(db, id_customer)
+    return db_customer_trip
 
 
 @customer_trip.post("/", response_model=CustomerTrip)

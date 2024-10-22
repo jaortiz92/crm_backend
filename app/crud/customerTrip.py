@@ -4,20 +4,35 @@ from sqlalchemy.orm import Session
 
 # App
 from app.models.customerTrip import CustomerTrip as CustomerTripModel
-from app.schemas.customerTrip import CustomerTripCreate, CustomerTrip as CustomerTripSchema
+from app.schemas.customerTrip import CustomerTripCreate
 import app.crud as crud
-from app.crud import utils
+from app.crud.utils import Constants
 
 
-def get_customer_trip_by_id(db: Session, id_customer_trip: int) -> CustomerTripSchema:
+def get_customer_trip_by_id(db: Session, id_customer_trip: int) -> CustomerTripModel:
     return db.query(CustomerTripModel).filter(CustomerTripModel.id_customer_trip == id_customer_trip).first()
 
 
-def get_customer_trips(db: Session, skip: int = 0, limit: int = 10) -> list[CustomerTripSchema]:
-    return db.query(CustomerTripModel).offset(skip).limit(limit).all()
+def get_customer_trips(db: Session, id_user: int, access_type: str, skip: int = 0, limit: int = 10) -> list[CustomerTripModel]:
+    auth = Constants.get_auth_to_customers(access_type)
+    result = []
+    if auth == Constants.ALL:
+        result = db.query(CustomerTripModel).order_by(
+            CustomerTripModel.id_customer_trip.desc()).offset(skip).limit(limit).all()
+    elif auth == Constants.FILTER:
+        result = db.query(CustomerTripModel).filter(
+            CustomerTripModel.id_seller == id_user).order_by(
+            CustomerTripModel.id_customer_trip.desc()).offset(skip).limit(limit).all()
+    return result
 
 
-def create_customer_trip(db: Session, customer_trip: CustomerTripCreate) -> CustomerTripSchema:
+def get_customer_trips_by_id_customer(db: Session, id_customer) -> list[CustomerTripModel]:
+    return db.query(CustomerTripModel).filter(CustomerTripModel.id_customer == id_customer).order_by(
+        CustomerTripModel.id_customer_trip.desc()
+    ).all()
+
+
+def create_customer_trip(db: Session, customer_trip: CustomerTripCreate) -> CustomerTripModel:
     db_customer_trip = CustomerTripModel(**customer_trip.model_dump())
     db.add(db_customer_trip)
     db.commit()
@@ -25,7 +40,7 @@ def create_customer_trip(db: Session, customer_trip: CustomerTripCreate) -> Cust
     return db_customer_trip
 
 
-def update_customer_trip(db: Session, id_customer_trip: int, customer_trip: CustomerTripCreate) -> CustomerTripSchema:
+def update_customer_trip(db: Session, id_customer_trip: int, customer_trip: CustomerTripCreate) -> CustomerTripModel:
     db_customer_trip = db.query(CustomerTripModel).filter(
         CustomerTripModel.id_customer_trip == id_customer_trip).first()
 
