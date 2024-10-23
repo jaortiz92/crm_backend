@@ -37,13 +37,32 @@ def get_order_by_id_with_details(db: Session, id_order: int) -> OrderModel:
     ).first()
 
 
-def get_orders(db: Session, skip: int = 0, limit: int = 10) -> list[OrderSchema]:
-    return db.query(OrderModel).offset(skip).limit(limit).all()
+def get_orders(db: Session, id_user: int, access_type: str, skip: int = 0, limit: int = 10) -> list[OrderSchema]:
+    auth = Constants.get_auth_to_customers(access_type)
+    result = []
+    if auth == Constants.ALL:
+        result = db.query(OrderModel).order_by(
+            OrderModel.id_order.desc()
+        ).offset(skip).limit(limit).all()
+
+    elif auth == Constants.FILTER:
+        result = db.query(OrderModel).filter(
+            OrderModel.id_seller == id_user
+        ).order_by(
+            OrderModel.id_order.desc()
+        ).offset(skip).limit(limit).all()
+    return result
 
 
 def get_orders_by_id_customer(db: Session, id_customer) -> list[OrderSchema]:
     return db.query(OrderModel).join(CustomerTripModel).filter(
         CustomerTripModel.id_customer == id_customer
+    ).all()
+
+
+def get_orders_by_id_customer_trip(db: Session, id_customer_trip) -> list[OrderSchema]:
+    return db.query(OrderModel).join(CustomerTripModel).filter(
+        CustomerTripModel.id_customer_trip == id_customer_trip
     ).all()
 
 

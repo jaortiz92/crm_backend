@@ -67,7 +67,10 @@ class Order(OrderBase):
         from_attributes = True
 
 
-class OrderFull(Order):
-    customer_trip: CustomerTripFull
+class OrderWithoutTrip(Order):
     seller: UserBase
     payment_method: PaymentMethodBase
+
+
+class OrderFull(OrderWithoutTrip):
+    customer_trip: CustomerTripFull

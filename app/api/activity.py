@@ -109,7 +109,7 @@ def get_activities_full(skip: int = 0, limit: int = 10, db: Session = Depends(ge
     return crud.get_activities(db, skip=skip, limit=limit)
 
 
-@activity.get("/customer_trip/{id_customer_trip}", response_model=List[Activity])
+@activity.get("/customer_trip/{id_customer_trip}", response_model=List[ActivityFull])
 def get_activities_by_id_customer_trip(id_customer_trip: int, db: Session = Depends(get_db)):
     """
     Show activities by customer trip
