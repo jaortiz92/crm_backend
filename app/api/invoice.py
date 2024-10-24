@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 # App
-from app.schemas import Invoice, InvoiceCreate, InvoiceFull, InvoiceWithDetail
+from app.schemas import Invoice, InvoiceCreate, InvoiceFull, InvoiceWithDetail, User
 from app import get_db
+from app.core.auth import get_current_user
 import app.crud as crud
 from app.api.utils import Exceptions
 
@@ -83,7 +84,12 @@ def get_invoice_by_id_full(id_invoice: int, db: Session = Depends(get_db)):
 
 
 @invoice.get("/", response_model=List[Invoice])
-def get_invoices(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_invoices(
+    skip: int = 0, limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show invoices
 
@@ -96,11 +102,16 @@ def get_invoices(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
 
     Returns a JSON with a list of invoices in the app.
     """
-    return crud.get_invoices(db, skip=skip, limit=limit)
+    return crud.get_invoices(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
 @invoice.get("/full/", response_model=List[InvoiceFull])
-def get_invoices_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_invoices_full(
+    skip: int = 0, limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show invoices
 
@@ -113,7 +124,47 @@ def get_invoices_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_
 
     Returns a JSON with a list of invoices in the app.
     """
-    return crud.get_invoices(db, skip=skip, limit=limit)
+    return crud.get_invoices(db, current_user.id_user, access_type, skip=skip, limit=limit)
+
+
+@invoice.get("/customer_trip/{id_customer_trip}", response_model=List[InvoiceFull])
+def get_invoices_by_customer_trip(
+    id_customer_trip,
+    db: Session = Depends(get_db)
+):
+    """
+    Show invoices
+
+    This path operation shows a list of invoices in the app with a limit on the number of invoices.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of invoices to retrieve (default: 10)
+
+    Returns a JSON with a list of invoices in the app.
+    """
+    return crud.get_invoices_by_customer_trip(db, id_customer_trip)
+
+
+@invoice.get("/order/{id_order}", response_model=List[InvoiceFull])
+def get_invoices_by_order(
+    id_order,
+    db: Session = Depends(get_db)
+):
+    """
+    Show invoices
+
+    This path operation shows a list of invoices in the app with a limit on the number of invoices.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of invoices to retrieve (default: 10)
+
+    Returns a JSON with a list of invoices in the app.
+    """
+    return crud.get_invoices_by_customer_trip(db, id_order)
 
 
 @invoice.get("/query/", response_model=List[InvoiceFull])

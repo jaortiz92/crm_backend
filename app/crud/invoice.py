@@ -6,10 +6,11 @@ from sqlalchemy import func
 
 # App
 from app.models.invoice import Invoice as InvoiceModel
+from app.models.order import Order as OrderModel
 from app.schemas.invoice import InvoiceCreate
-from app.models.invoiceDetail import InvoiceDetail as InvoiceDetailModel
 from app.crud.utils import statusRequest
 import app.crud as crud
+from app.crud.utils import Constants
 
 
 def create_invoice(db: Session, invoice: InvoiceCreate) -> InvoiceModel:
@@ -49,8 +50,36 @@ def get_invoice_by_number_and_key(db: Session, invoice_number: int, key: int) ->
     ).first()
 
 
-def get_invoices(db: Session, skip: int = 0, limit: int = 10) -> list[InvoiceModel]:
-    return db.query(InvoiceModel).offset(skip).limit(limit).all()
+def get_invoices(db: Session, id_user: int, access_type: str, skip: int = 0, limit: int = 10) -> list[InvoiceModel]:
+    auth = Constants.get_auth_to_customers(access_type)
+    result = []
+    if auth == Constants.ALL:
+        result = db.query(InvoiceModel).order_by(
+            InvoiceModel.id_invoice.desc()
+        ).offset(skip).limit(limit).all()
+    elif auth == Constants.FILTER:
+        result = db.query(InvoiceModel).join(
+            OrderModel, InvoiceModel.id_order == OrderModel.id_order
+        ).filter(
+            OrderModel.id_seller == id_user
+        ).order_by(
+            InvoiceModel.id_invoice.desc()
+        ).offset(skip).limit(limit).all()
+    return result
+
+
+def get_invoices_by_customer_trip(db: Session, id_customer_trip: int) -> list[InvoiceModel]:
+    return db.query(InvoiceModel).join(
+        OrderModel, InvoiceModel.id_order == OrderModel.id_order
+    ).filter(
+        OrderModel.id_customer_trip == id_customer_trip
+    )
+
+
+def get_invoices_by_order(db: Session, id_order: int) -> list[InvoiceModel]:
+    return db.query(InvoiceModel).filter(
+        OrderModel.id_order == id_order
+    )
 
 
 def get_invoices_query(
