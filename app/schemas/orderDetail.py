@@ -74,6 +74,7 @@ class OrderDetail(OrderDetailBase):
 
 
 class OrderDetailWithBrand(OrderDetailBase):
+    id_order_detail: int
     brand: BrandFull
 
 

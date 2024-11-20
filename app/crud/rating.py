@@ -46,7 +46,9 @@ def get_rating_last_by_id_customer(db: Session, id_customer: int) -> RatingSchem
         subquery,
         (RatingModel.id_customer == subquery.c.id_customer) &
         (RatingModel.date_updated == subquery.c.date_updated)
-    ).filter(RatingModel.id_customer == id_customer).first()
+    ).filter(RatingModel.id_customer == id_customer).order_by(
+        RatingModel.date_updated.desc(), RatingModel.id_rating.desc()
+    ).first()
 
 
 def get_ratings_last_full(db: Session, skip: int = 0, limit: int = 10) -> list[RatingSchema]:
