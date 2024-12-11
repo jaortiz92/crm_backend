@@ -38,7 +38,7 @@ class TaskBase(BaseModel):
         False,
         description='Whether the task was completed'
     )
-    closing_date: Optional[date] = Field(
+    execution_date: Optional[date] = Field(
         None,
         description='Closing date of the task'
     )

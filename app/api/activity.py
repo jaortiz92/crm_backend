@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 # App
-from app.schemas import Activity, ActivityCreate, ActivityFull, ActivityAuthorize
+from app.schemas import Activity, ActivityCreate, ActivityFull, ActivityAuthorize, User
 from app import get_db
+from app.core.auth import get_current_user
 import app.crud as crud
 from app.api.utils import Exceptions
 
@@ -70,13 +71,15 @@ def get_activity_by_id_full(id_activity: int, db: Session = Depends(get_db)):
     db_activity = crud.get_activity_by_id(db, id_activity)
     if db_activity is None:
         Exceptions.register_not_found("Activity", id_activity)
-    print(db_activity)
-    print(db_activity.__dict__)
     return db_activity
 
 
 @activity.get("/", response_model=List[Activity])
-def get_activities(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_activities(
+    skip: int = 0, limit: int = 10, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show activities
 
@@ -89,11 +92,15 @@ def get_activities(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)
 
     Returns a JSON with a list of activities in the app.
     """
-    return crud.get_activities(db, skip=skip, limit=limit)
+    return crud.get_activities(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
 @activity.get("/full/", response_model=List[ActivityFull])
-def get_activities_full(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_activities_full(
+        skip: int = 0, limit: int = 10, db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+        access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show activities full
 
@@ -106,7 +113,7 @@ def get_activities_full(skip: int = 0, limit: int = 10, db: Session = Depends(ge
 
     Returns a JSON with a list of activities in the app.
     """
-    return crud.get_activities(db, skip=skip, limit=limit)
+    return crud.get_activities(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
 @activity.get("/customer_trip/{id_customer_trip}", response_model=List[ActivityFull])
@@ -218,7 +225,10 @@ def create_activity(activity: ActivityCreate, db: Session = Depends(get_db)):
     - completed: Optional[bool]
     - comment: Optional[str]
     """
-    return crud.create_activity(db, activity)
+    db_activity = crud.create_activity(db, activity)
+    if isinstance(db_activity, list):
+        Exceptions.register_not_found(db_activity[0], db_activity[1])
+    return db_activity
 
 
 @activity.put("/{id_activity}", response_model=Activity)

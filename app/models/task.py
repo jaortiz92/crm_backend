@@ -21,7 +21,7 @@ class Task(Base):
     creation_date = Column(Date, server_default=func.now(), nullable=False)
     task = Column(Text, nullable=False)
     completed = Column(Boolean, server_default="False")
-    closing_date = Column(Date)
+    execution_date = Column(Date)
     comment = Column(Text)
 
     customer = relationship("Customer", back_populates="tasks")

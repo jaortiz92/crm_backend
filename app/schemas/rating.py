@@ -8,21 +8,31 @@ from pydantic import BaseModel, Field
 # App
 from .ratingCategory import RatingCategoryBase
 from .customer import CustomerBase
+from .user import UserBase
 
 
 class RatingBase(BaseModel):
-    id_customer: int = Field(...,
+    id_customer: int = Field(
+        ...,
         gt=0,
         description='ID of the customer'
     )
-    id_rating_category: int = Field(...,
+    id_rating_category: int = Field(
+        ...,
         gt=0,
         description='ID of the rating category'
     )
-    date_updated: Optional[date] = Field(...,
+    id_creator: int = Field(
+        ...,
+        gt=0,
+        description='ID of the user who created the task'
+    )
+    date_updated: Optional[date] = Field(
+        ...,
         description='Date of the rating'
     )
-    comments: Optional[str] = Field(None,
+    comments: Optional[str] = Field(
+        None,
         description='Comments about the rating'
     )
 
@@ -32,10 +42,10 @@ class RatingCreate(RatingBase):
 
 
 class Rating(RatingBase):
-    id_rating: int = Field(...,
+    id_rating: int = Field(
+        ...,
         gt=0
     )
-
 
     class Config:
         from_attributes = True
@@ -44,3 +54,4 @@ class Rating(RatingBase):
 class RatingFull(Rating):
     customer: CustomerBase
     rating_category: RatingCategoryBase
+    creator: UserBase

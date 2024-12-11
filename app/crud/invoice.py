@@ -78,7 +78,7 @@ def get_invoices_by_customer_trip(db: Session, id_customer_trip: int) -> list[In
 
 def get_invoices_by_order(db: Session, id_order: int) -> list[InvoiceModel]:
     return db.query(InvoiceModel).filter(
-        OrderModel.id_order == id_order
+        InvoiceModel.id_order == id_order
     )
 
 

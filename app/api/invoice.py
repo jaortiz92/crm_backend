@@ -164,7 +164,7 @@ def get_invoices_by_order(
 
     Returns a JSON with a list of invoices in the app.
     """
-    return crud.get_invoices_by_customer_trip(db, id_order)
+    return crud.get_invoices_by_order(db, id_order)
 
 
 @invoice.get("/query/", response_model=List[InvoiceFull])

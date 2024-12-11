@@ -162,7 +162,15 @@ def create_customer(customer: CustomerCreate, db: Session = Depends(get_db)):
     - id_city: int
     - active: bool
     """
-    return crud.create_customer(db, customer)
+    db_customer = crud.create_customer(db, customer)
+    if isinstance(db_customer, dict):
+        if db_customer["value_already_registered"]:
+            Exceptions.register_already_registered(
+                "Customer", '{}'.format(
+                    customer.document
+                )
+            )
+    return db_customer
 
 
 @customer.put("/{id_customer}", response_model=Customer)

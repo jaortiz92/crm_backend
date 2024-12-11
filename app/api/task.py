@@ -5,8 +5,9 @@ from typing import List, Optional
 from datetime import date
 
 # App
-from app.schemas import Task, TaskCreate, TaskFull
+from app.schemas import Task, TaskCreate, TaskFull, User
 from app import get_db
+from app.core.auth import get_current_user
 import app.crud as crud
 from app.api.utils import Exceptions
 
@@ -14,6 +15,7 @@ task = APIRouter(
     prefix="/task",
     tags=["Task"],
 )
+
 
 @task.get("/{id_task}", response_model=Task)
 def get_task_by_id(id_task: int, db: Session = Depends(get_db)):
@@ -34,7 +36,7 @@ def get_task_by_id(id_task: int, db: Session = Depends(get_db)):
     - creation_date: date
     - task_description: str
     - completed: Optional[bool]
-    - closing_date: Optional[date]
+    - execution_date: Optional[date]
     - comment: Optional[str]
     """
     db_task = crud.get_task_by_id(db, id_task)
@@ -62,7 +64,7 @@ def get_task_by_id_full(id_task: int, db: Session = Depends(get_db)):
     - creation_date: date
     - task_description: str
     - completed: Optional[bool]
-    - closing_date: Optional[date]
+    - execution_date: Optional[date]
     - comment: Optional[str]
     """
     db_task = crud.get_task_by_id(db, id_task)
@@ -71,19 +73,18 @@ def get_task_by_id_full(id_task: int, db: Session = Depends(get_db)):
     return db_task
 
 
-
 @task.get("/query/", response_model=List[TaskFull])
 def get_tasks_query(
-        id_customer: Optional[int] = None,
-        id_creator: Optional[int] = None,
-        id_responsible: Optional[int] = None,
-        creation_date_ge: Optional[date] = None,
-        creation_date_le: Optional[date] = None,
-        completed: Optional[bool] = None,
-        closing_date_ge: Optional[date] = None,
-        closing_date_le: Optional[date] = None,
-        db: Session = Depends(get_db)
-    ):
+    id_customer: Optional[int] = None,
+    id_creator: Optional[int] = None,
+    id_responsible: Optional[int] = None,
+    creation_date_ge: Optional[date] = None,
+    creation_date_le: Optional[date] = None,
+    completed: Optional[bool] = None,
+    execution_date_ge: Optional[date] = None,
+    execution_date_le: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
     """
     Show task
 
@@ -97,8 +98,8 @@ def get_tasks_query(
         - creation_date_ge: date = None
         - creation_date_le: date = None
         - completed: bool = None
-        - closing_date_ge: date = None
-        - closing_date_le: date = None
+        - execution_date_ge: date = None
+        - execution_date_le: date = None
 
     Returns a JSON with a list of task in the app.
     """
@@ -110,8 +111,8 @@ def get_tasks_query(
         creation_date_ge,
         creation_date_le,
         completed,
-        closing_date_ge,
-        closing_date_le,
+        execution_date_ge,
+        execution_date_le,
     )
     if db_task is None:
         Exceptions.register_not_found("Customer", id_customer)
@@ -136,7 +137,10 @@ def get_tasks(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
 
 
 @task.get("/full/", response_model=List[TaskFull])
-def get_tasks(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+def get_tasks(
+        skip: int = 0, limit: int = 10, db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+        access_type: str = Depends(crud.get_me_access_type)
+):
     """
     Show task
 
@@ -149,7 +153,7 @@ def get_tasks(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
 
     Returns a JSON with a list of task full in the app.
     """
-    return crud.get_tasks(db, skip=skip, limit=limit)
+    return crud.get_tasks(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
 @task.post("/", response_model=Task)
@@ -168,7 +172,7 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
             - creation_date: date
             - task_description: str
             - completed: Optional[bool]
-            - closing_date: Optional[date]
+            - execution_date: Optional[date]
             - comment: Optional[str]
 
     Returns a JSON with the newly created task:
@@ -179,7 +183,7 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     - creation_date: date
     - task_description: str
     - completed: Optional[bool]
-    - closing_date: Optional[date]
+    - execution_date: Optional[date]
     - comment: Optional[str]
     """
     return crud.create_task(db, task)
@@ -203,7 +207,7 @@ def update_task(id_task: int, task: TaskCreate, db: Session = Depends(get_db)):
             - creation_date: date
             - task_description: str
             - completed: Optional[bool]
-            - closing_date: Optional[date]
+            - execution_date: Optional[date]
             - comment: Optional[str]
 
     Returns a JSON with the updated task:
@@ -214,7 +218,7 @@ def update_task(id_task: int, task: TaskCreate, db: Session = Depends(get_db)):
     - creation_date: date
     - task_description: str
     - completed: Optional[bool]
-    - closing_date: Optional[date]
+    - execution_date: Optional[date]
     - comment: Optional[str]
     """
     db_task = crud.update_task(db, id_task, task)

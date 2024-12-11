@@ -24,13 +24,13 @@ def get_rating_by_id(db: Session, id_rating: int) -> RatingSchema:
 
 def get_ratings(db: Session, skip: int = 0, limit: int = 10) -> list[RatingSchema]:
     return db.query(RatingModel).order_by(
-        RatingModel.date_updated.desc()
+        RatingModel.date_updated.desc(), RatingModel.id_rating.desc()
     ).offset(skip).limit(limit).all()
 
 
 def get_ratings_by_id_customer(db: Session, id_customer: int) -> list[RatingSchema]:
     return db.query(RatingModel).filter(RatingModel.id_customer == id_customer).order_by(
-        RatingModel.date_updated.desc()
+        RatingModel.date_updated.desc(), RatingModel.id_rating.desc()
     ).all()
 
 

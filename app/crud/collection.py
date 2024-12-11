@@ -22,7 +22,7 @@ def get_collection_by_id(db: Session, id_collection: int) -> CollectionSchema:
 
 
 def get_collections(db: Session, skip: int = 0, limit: int = 10) -> list[CollectionSchema]:
-    return db.query(CollectionModel).offset(skip).limit(limit).all()
+    return db.query(CollectionModel).order_by(CollectionModel.short_collection_name.asc()).offset(skip).limit(limit).all()
 
 
 def update_collection(db: Session, id_collection: int, collection: CollectionCreate) -> CollectionSchema:

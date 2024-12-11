@@ -19,7 +19,9 @@ class Rating(Base):
     id_rating_category = Column(Integer, ForeignKey(
         "rating_categories.id_rating_category"))
     date_updated = Column(Date, server_default=func.now(), nullable=False)
+    id_creator = Column(Integer, ForeignKey("users.id_user"))
     comments = Column(Text)
 
     customer = relationship("Customer", back_populates="ratings")
     rating_category = relationship("RatingCategory", back_populates="ratings")
+    creator = relationship("User", back_populates="ratings")

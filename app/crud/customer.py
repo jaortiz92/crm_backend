@@ -6,20 +6,33 @@ from sqlalchemy.orm import Session
 from app.models.customer import Customer as CustomerModel
 from app.schemas.customer import CustomerCreate, Customer as CustomerSchema
 from app.crud.utils import Constants
-
-
-def create_customer(db: Session, customer: CustomerCreate) -> CustomerSchema:
-    db_customer = CustomerModel(**customer.model_dump())
-    db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
-    return db_customer
+from app.crud.utils import statusRequest
+import app.crud as crud
 
 
 def get_customer_by_id(db: Session, id_customer: int) -> CustomerSchema:
     result = db.query(CustomerModel).filter(
         CustomerModel.id_customer == id_customer).first()
     return result
+
+
+def get_customer_by_document(db: Session, document: int) -> CustomerSchema:
+    result = db.query(CustomerModel).filter(
+        CustomerModel.id_customer == document).first()
+    return result
+
+
+def create_customer(db: Session, customer: CustomerCreate) -> CustomerSchema:
+    status = statusRequest()
+    db_customer = CustomerModel(**customer.model_dump())
+    if get_customer_by_id(db, db_customer.document):
+        status['value_already_registered'] = True
+        return status
+    else:
+        db.add(db_customer)
+        db.commit()
+        db.refresh(db_customer)
+        return db_customer
 
 
 def get_customers(db: Session, id_user: int, access_type: str, skip: int = 0, limit: int = 10) -> list[CustomerSchema]:

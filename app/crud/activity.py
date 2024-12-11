@@ -7,33 +7,62 @@ from sqlalchemy.orm import Session
 from app.models.activity import Activity as ActivityModel
 from app.schemas.activity import ActivityCreate, ActivityAuthorize,  Activity as ActivitySchema
 from app.models.customerTrip import CustomerTrip as CustomerTripModel
+from app.crud.utils import Constants
+import app.crud as crud
+
+
+def validate_foreign_keys(db: Session, activity: ActivitySchema) -> list:
+    foreign_keys: list[list] = [
+        [crud.get_customer_trip_by_id, activity.id_customer_trip, "Custormer Trip"],
+        [crud.get_user_by_id, activity.id_user, "User"],
+        [crud.get_activity_type_by_id, activity.id_activity_type]
+    ]
+    for foreign_key in foreign_keys:
+        if not foreign_key[0](db, foreign_key[1]):
+            return [foreign_key[2], foreign_key[1]]
+    return Constants.STATUS_OK
 
 
 def create_activity(db: Session, activity: ActivityCreate) -> ActivitySchema:
-    db_activity = ActivityModel(
-        creation_date=date.today(), **activity.model_dump()
-    )
-    db.add(db_activity)
-    db.commit()
-    db.refresh(db_activity)
-    return db_activity
+    validation: list = validate_foreign_keys(db, activity)
+    if validation != Constants.STATUS_OK:
+        return validation
+    else:
+        db_activity = ActivityModel(
+            creation_date=date.today(), **activity.model_dump()
+        )
+        db.add(db_activity)
+        db.commit()
+        db.refresh(db_activity)
+        return db_activity
 
 
 def get_activity_by_id(db: Session, id_activity: int) -> ActivitySchema:
     return db.query(ActivityModel).filter(ActivityModel.id_activity == id_activity).first()
 
 
-def get_activities(db: Session, skip: int = 0, limit: int = 10) -> list[ActivitySchema]:
-    return db.query(ActivityModel).order_by(
-        ActivityModel.estimated_date.desc()
-    ).offset(skip).limit(limit).all()
+def get_activities(db: Session,  id_user: int, access_type: str, skip: int = 0, limit: int = 10) -> list[ActivitySchema]:
+    auth = Constants.get_auth_to_customers(access_type)
+    result = []
+    if auth == Constants.ALL:
+        result = db.query(ActivityModel).order_by(
+            ActivityModel.estimated_date.desc()
+        ).offset(skip).limit(limit).all()
+    elif auth == Constants.FILTER:
+        result = db.query(ActivityModel).filter(
+            ActivityModel.id_user == id_user
+        ).order_by(
+            ActivityModel.estimated_date.desc()
+        ).offset(skip).limit(limit).all()
+    return result
 
 
 def get_activities_by_id_customer_trip(db: Session, id_customer_trip: int) -> list[ActivitySchema]:
     return db.query(ActivityModel).filter(
         ActivityModel.id_customer_trip == id_customer_trip
     ).order_by(
-        ActivityModel.estimated_date.desc()
+        ActivityModel.completed.asc(), ActivityModel.estimated_date.asc(),
+        ActivityModel.id_activity.asc()
     ).all()
 
 
@@ -80,7 +109,8 @@ def get_activities_query(
         query = query.join(CustomerTripModel).filter(
             CustomerTripModel.id_customer == id_customer)
     return query.order_by(
-        ActivityModel.estimated_date.desc()
+        ActivityModel.estimated_date.desc(), ActivityModel.completed.asc(),
+        ActivityModel.id_activity.asc()
     ).all()
 
 

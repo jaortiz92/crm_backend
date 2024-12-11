@@ -49,3 +49,4 @@ class User(Base):
         "Task", foreign_keys='Task.id_responsible', back_populates="responsible_task"
     )
     customer_trips = relationship("CustomerTrip", back_populates="seller")
+    ratings = relationship("Rating", back_populates="creator")
