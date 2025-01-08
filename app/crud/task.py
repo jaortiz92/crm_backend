@@ -29,7 +29,6 @@ def get_tasks(db: Session, id_user: int, access_type: str, skip: int = 0, limit:
             TaskModel.creation_date.desc()
         ).offset(skip).limit(limit).all()
     elif auth == Constants.FILTER:
-        print(id_user)
         result = db.query(TaskModel).filter(
             (TaskModel.id_creator == id_user) |
             (TaskModel.id_responsible == id_user)

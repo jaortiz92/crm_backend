@@ -46,13 +46,13 @@ def get_activities(db: Session,  id_user: int, access_type: str, skip: int = 0, 
     result = []
     if auth == Constants.ALL:
         result = db.query(ActivityModel).order_by(
-            ActivityModel.estimated_date.desc()
+            ActivityModel.estimated_date.asc()
         ).offset(skip).limit(limit).all()
     elif auth == Constants.FILTER:
         result = db.query(ActivityModel).filter(
             ActivityModel.id_user == id_user
         ).order_by(
-            ActivityModel.estimated_date.desc()
+            ActivityModel.estimated_date.asc()
         ).offset(skip).limit(limit).all()
     return result
 
@@ -70,7 +70,7 @@ def get_activities_by_id_activity_type(db: Session, id_activity_type: int) -> li
     return db.query(ActivityModel).filter(
         ActivityModel.id_activity_type == id_activity_type
     ).order_by(
-        ActivityModel.estimated_date.desc()
+        ActivityModel.estimated_date.asc()
     ).all()
 
 
@@ -109,7 +109,7 @@ def get_activities_query(
         query = query.join(CustomerTripModel).filter(
             CustomerTripModel.id_customer == id_customer)
     return query.order_by(
-        ActivityModel.estimated_date.desc(), ActivityModel.completed.asc(),
+        ActivityModel.estimated_date.asc(), ActivityModel.completed.asc(),
         ActivityModel.id_activity.asc()
     ).all()
 

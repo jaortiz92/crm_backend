@@ -9,6 +9,7 @@ from sqlalchemy.orm import relationship
 # APP
 from app.db import Base
 
+
 class CustomerTrip(Base):
     __tablename__ = "customer_trips"
 
@@ -17,6 +18,7 @@ class CustomerTrip(Base):
     id_seller = Column(Integer, ForeignKey("users.id_user"))
     id_collection = Column(Integer, ForeignKey("collections.id_collection"))
     budget = Column(Float, nullable=False)
+    budget_quantities = Column(Float, nullable=False)
     ordered = Column(Boolean)
     comment = Column(Text)
 

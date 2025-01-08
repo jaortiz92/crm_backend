@@ -22,3 +22,4 @@ from .city import *
 from .department import *
 from .role import *
 from .paymentMethod import *
+from .query import *

@@ -29,7 +29,11 @@ class CustomerTripBase(BaseModel):
     )
     budget: float = Field(
         ...,
-        description='Budget for the trip'
+        description='Budget in value for the trip'
+    )
+    budget_quantities: int = Field(
+        ...,
+        description='Budget in quantities for the trip'
     )
     ordered: Optional[bool] = Field(
         None,
