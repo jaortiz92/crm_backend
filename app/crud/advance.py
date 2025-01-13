@@ -21,6 +21,14 @@ def get_advance_by_id(db: Session, id_advance: int) -> AdvanceSchema:
     return result
 
 
+def get_advances_by_id_order(db: Session, id_order: int) -> list[AdvanceSchema]:
+    result = db.query(AdvanceModel).filter(
+        AdvanceModel.id_order == id_order).order_by(
+            AdvanceModel.payment_date.desc()
+    ).all()
+    return result
+
+
 def get_advances(db: Session, skip: int = 0, limit: int = 10) -> list[AdvanceSchema]:
     return db.query(AdvanceModel).offset(skip).limit(limit).all()
 

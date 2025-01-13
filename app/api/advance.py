@@ -14,6 +14,7 @@ advance = APIRouter(
     tags=["Advance"],
 )
 
+
 @advance.get("/{id_advance}", response_model=Advance)
 def get_advance_by_id(id_advance: int, db: Session = Depends(get_db)):
     """
@@ -41,6 +42,7 @@ def get_advance_by_id(id_advance: int, db: Session = Depends(get_db)):
         Exceptions.register_not_found("Advance", id_advance)
     return db_advance
 
+
 @advance.get("/", response_model=List[Advance])
 def get_advances(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     """
@@ -65,6 +67,33 @@ def get_advances(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     - id_advance: int
     """
     return crud.get_advances(db, skip=skip, limit=limit)
+
+
+@advance.get("/order/{id_order}", response_model=List[Advance])
+def get_advances_by_id_order(id_order: int, db: Session = Depends(get_db)):
+    """
+    Show advances
+
+    This path operation shows a list of advances in the app with a limit on the number of advances.
+
+    Parameters:
+    - Query parameters:
+        - skip: int - The number of records to skip (default: 0)
+        - limit: int - The maximum number of advances to retrieve (default: 10)
+
+    Returns a JSON with a list of advances in the app.
+    - id_order: int
+    - payment_date: date
+    - advance_type: float
+    - amount: int
+    - payment: Optional[int]
+    - balance: Optional[int]
+    - paid: Optional[bool]
+    - last_payment_date: Optional[date]
+    - id_advance: int
+    """
+    return crud.get_advances_by_id_order(db, id_order)
+
 
 @advance.post("/", response_model=Advance)
 def create_advance(advance: AdvanceCreate, db: Session = Depends(get_db)):
@@ -135,6 +164,7 @@ def update_advance(id_advance: int, advance: AdvanceCreate, db: Session = Depend
     if db_advance is None:
         Exceptions.register_not_found("Advance", id_advance)
     return db_advance
+
 
 @advance.delete("/{id_advance}")
 def delete_advance(id_advance: int, db: Session = Depends(get_db)):
