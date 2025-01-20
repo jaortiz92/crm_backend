@@ -79,6 +79,12 @@ class CustomerCreate(CustomerBase):
         description='Credit quota for customers'
     )
 
+    relevant_details: Optional[str] = Field(
+        ...,
+        max_length=1000,
+        description='Relevant details (max 1000 characters)'
+    )
+
 
 class Customer(CustomerCreate):
     id_customer: int = Field(
