@@ -23,7 +23,7 @@ class Customer(Base):
     phone = Column(String(20))
     id_store_type = Column(Integer, ForeignKey("store_types.id_store_type"))
     address = Column(String(255), nullable=False)
-    id_brand = Column(Integer, ForeignKey("brands.id_brand"))
+    # id_brand = Column(Integer, ForeignKey("brands.id_brand"))
     id_seller = Column(Integer, ForeignKey("users.id_user"))
     id_city = Column(Integer, ForeignKey("cities.id_city"))
     stores = Column(Integer)
@@ -33,7 +33,7 @@ class Customer(Base):
     relevant_details = Column(String(1000))
 
     store_type = relationship("StoreType", back_populates="customers")
-    brand = relationship("Brand", back_populates="customers")
+    # brand = relationship("Brand", back_populates="customers")
     seller = relationship("User", back_populates="customers")
     city = relationship("City", back_populates="customers")
 
@@ -41,3 +41,14 @@ class Customer(Base):
     contacts = relationship("Contact", back_populates="customer")
     tasks = relationship("Task", back_populates="customer")
     ratings = relationship("Rating", back_populates="customer")
+    customer_brands = relationship(
+        "CustomerBrand",
+        back_populates="customer",
+        overlaps="brands"
+    )
+    brands = relationship(
+        "Brand",
+        secondary="customer_brands",
+        back_populates="customers",
+        overlaps="customer_brands"
+    )

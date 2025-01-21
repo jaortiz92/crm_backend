@@ -20,3 +20,14 @@ class Brand(Base):
     customers = relationship("Customer", back_populates="brand")
     invoice_details = relationship("InvoiceDetail", back_populates="brand")
     order_details = relationship("OrderDetail", back_populates="brand")
+    customer_brands = relationship(
+        "CustomerBrand",
+        back_populates="brand",
+        overlaps="customers"
+    )
+    customers = relationship(
+        "Customer",
+        secondary="customer_brands",
+        back_populates="brands",
+        overlaps="customer_brands"
+    )

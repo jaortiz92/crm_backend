@@ -24,7 +24,7 @@ class CustomerBase(BaseModel):
     )
 
 
-class CustomerCreate(CustomerBase):
+class CustomerBaseCreate(CustomerBase):
     email: EmailStr = Field(
         ...,
         description='email address'
@@ -43,11 +43,6 @@ class CustomerCreate(CustomerBase):
         ...,
         max_length=255,
         description='address (max 255 characters)'
-    )
-    id_brand: int = Field(
-        ...,
-        gt=0,
-        description='ID of the brand associated with the Customer'
     )
     id_seller: int = Field(
         ...,
@@ -86,7 +81,14 @@ class CustomerCreate(CustomerBase):
     )
 
 
-class Customer(CustomerCreate):
+class CustomerCreate(CustomerBaseCreate):
+    brand_ids: List[int] = Field(
+        ...,
+        description='ID of the brands associated with the Customer'
+    )
+
+
+class Customer(CustomerBaseCreate):
     id_customer: int = Field(
         ...,
         gt=0
@@ -98,7 +100,7 @@ class Customer(CustomerCreate):
 
 class CustomerFull(Customer):
     store_type: Optional[StoreTypeBase]
-    brand: Optional[BrandFull]
+    brands: Optional[List[BrandFull]]
     seller: Optional[UserBase]
     city: Optional[CityFull]
 

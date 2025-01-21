@@ -22,4 +22,5 @@ from .invoice import Invoice
 from .invoiceDetail import InvoiceDetail
 from .credit import Credit
 from .query import CustomerSummary
+from .customerBrand import CustomerBrand
 from .shipment import Shipment, Base
