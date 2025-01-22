@@ -37,17 +37,12 @@ class ActivityBase(BaseModel):
     )
     budget: int = Field(
         ...,
-        gt=0,
+        ge=0,
         description='Value authorized'
     )
     completed: Optional[bool] = Field(
         False,
         description='Whether the activity was completed'
-    )
-    budget: float = Field(
-        ...,
-        ge=0,
-        description='Value authorized'
     )
     execution_value: Optional[float] = Field(
         0,
@@ -65,7 +60,7 @@ class ActivityCreate(ActivityBase):
 
 
 class ActivityAuthorize(BaseModel):
-    authorizeder: int = Field(
+    authorizer: int = Field(
         None,
         ge=0,
         description='ID of the user authorizer responsible for the activity'
@@ -81,7 +76,7 @@ class ActivityAuthorize(BaseModel):
     )
 
 
-class Activity(ActivityBase, ActivityAuthorize):
+class Activity(ActivityBase):
     id_activity: int = Field(
         ...,
         gt=0
@@ -91,6 +86,10 @@ class Activity(ActivityBase, ActivityAuthorize):
         ...,
         description='Creation date for the activity'
     )
+
+    authorizer: Optional[int]
+    authorized: Optional[bool]
+    budget_authorized: Optional[float]
 
     date_authorized: Optional[date] = Field(
         None,

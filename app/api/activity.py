@@ -280,7 +280,7 @@ def update_activity(id_activity: int, activity: ActivityAuthorize, db: Session =
     - Request body parameter
         - activity: ActivityCreate -> A JSON object containing the updated activity data:
             - id_activity: int
-            - authorizeder: int
+            - authorizer: int
             - authorized: bool
             - budget_authorized: float
 
