@@ -23,5 +23,5 @@ from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull
 from .credit import Credit, CreditCreate, CreditFull
 from .shipment import Shipment, ShipmentCreate, ShipmentFull
 from .token import Token, TokenData
-from .query import CustomerSummary
+from .query import CustomerSummary, CustomerTripSummary
 from .customerBrand import CustomerBrand, CustomerBrandCreate, CustomerBrandBase

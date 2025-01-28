@@ -21,6 +21,6 @@ from .advance import Advance
 from .invoice import Invoice
 from .invoiceDetail import InvoiceDetail
 from .credit import Credit
-from .query import CustomerSummary
+from .query import CustomerSummary, CustomerTripSummary
 from .customerBrand import CustomerBrand
 from .shipment import Shipment, Base

@@ -22,3 +22,20 @@ class CustomerSummary(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CustomerTripSummary(BaseModel):
+    id_customer_trip: int
+    budget: float
+    budget_quantities: int
+    ordered: bool
+    orders: int
+    order_quantities: int
+    order_without_tax: float
+    invoices: int
+    invoice_quantities: int
+    invoice_without_tax: float
+    invoice_discount: float
+
+    class Config:
+        from_attributes = True
