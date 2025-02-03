@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 # App
 from app.models.user import User as UserModel
-from app.schemas.user import UserCreate, User as UserSchema
+from app.schemas.user import UserCreate, UserBase, User as UserSchema
 from app.schemas.token import Token as TokenSchema
 from app.crud.utils import statusRequest
 from app.core.hashing import get_password_hash, verify_password
@@ -19,7 +19,7 @@ def create_user(db: Session, user: UserCreate) -> UserModel:
     if db_user:
         status['user_already_registered'] = True
         return status
-    
+
     db_user = get_user_by_document(db, user.document)
     if db_user:
         status['user_already_registered'] = True
@@ -66,7 +66,7 @@ def get_all_users(db: Session) -> list[UserModel]:
     return db.query(UserModel).all()
 
 
-def update_user(db: Session, id_user: int, user: UserCreate) -> UserSchema:
+def update_user(db: Session, id_user: int, user: UserBase) -> UserSchema:
     db_user = db.query(UserModel).filter(UserModel.id_user == id_user).first()
     if db_user:
         for key, value in user.model_dump(exclude_unset=True).items():

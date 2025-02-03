@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import UserCreate, User, UserFull
+from app.schemas import UserCreate, User, UserFull, UserBase
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -149,7 +149,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @user.put("/{id_user}", response_model=User)
-def update_user(id_user: int, user: UserCreate, db: Session = Depends(get_db)):
+def update_user(id_user: int, user: UserBase, db: Session = Depends(get_db)):
     """
     Update a User
 
