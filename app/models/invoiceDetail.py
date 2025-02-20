@@ -1,7 +1,7 @@
 # SQLalchemy
 from sqlalchemy import (
     Column, ForeignKey,
-    Integer, String, 
+    Integer, String,
     Float, Enum
 )
 from sqlalchemy.orm import relationship
@@ -10,12 +10,14 @@ from sqlalchemy.orm import relationship
 from app.db import Base
 from app.core import Gender
 
+
 class InvoiceDetail(Base):
     __tablename__ = "invoice_details"
 
     id_invoice_detail = Column(Integer, primary_key=True, index=True)
     id_invoice = Column(Integer, ForeignKey("invoices.id_invoice"))
     product = Column(String(50), nullable=False)
+    description = Column(String(50), nullable=False)
     color = Column(String(50), nullable=False)
     size = Column(String(50), nullable=False)
     id_brand = Column(Integer, ForeignKey("brands.id_brand"))

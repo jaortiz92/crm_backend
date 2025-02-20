@@ -22,6 +22,11 @@ class OrderDetailBase(BaseModel):
         max_length=50,
         description='Product name (max 50 characters)'
     )
+    description: str = Field(
+        ...,
+        max_length=50,
+        description='Product description (max 50 characters)'
+    )
     color: str = Field(
         ...,
         max_length=50,

@@ -1,6 +1,8 @@
 # Python
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
+import io
+import pandas as pd
 
 # App
 from app.models.orderDetail import OrderDetail as OrderDetailModel
@@ -13,6 +15,23 @@ def create_order_detail(db: Session, order_detail: OrderDetailCreate) -> OrderDe
     db.commit()
     db.refresh(db_order_detail)
     return db_order_detail
+
+
+async def create_order_details(db: Session, id_order: int, details: UploadFile) -> list[OrderDetailSchema]:
+    stream = io.BytesIO()
+    print(1)
+    content = await details.read()
+    stream.write(content)
+
+    # Read Excel file from the BytesIO stream
+    df = pd.read_excel(
+        stream,
+        sheet_name='PEDIDO',
+        header=5
+    )
+    print(df)
+    print(2)
+    return 'ok'
 
 
 def get_order_detail_by_id(db: Session, id_order_detail: int) -> OrderDetailSchema:

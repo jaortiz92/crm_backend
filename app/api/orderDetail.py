@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -134,6 +134,14 @@ def create_order_detail(order_detail: OrderDetailCreate, db: Session = Depends(g
     - id_order: int
     """
     return crud.create_order_detail(db, order_detail)
+
+
+@order_detail.post("/file/{id_order}")
+async def create_order_details(id_order: int, details: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not details.filename.endswith(('xlsx', 'xlsm')):
+        Exceptions.conflict_with_register('File', details.filename)
+    await crud.create_order_details(db, id_order, details)
+    return {"message": "Ok"}
 
 
 @order_detail.put("/{id_order_detail}", response_model=OrderDetail)
