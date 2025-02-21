@@ -2,11 +2,14 @@
 from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
 import io
-import pandas as pd
+from pandas.core.frame import DataFrame
+
 
 # App
 from app.models.orderDetail import OrderDetail as OrderDetailModel
 from app.schemas.orderDetail import OrderDetailCreate, OrderDetail as OrderDetailSchema
+from app.utils.process_details import ProcessDetails
+from app.crud.utils import Constants
 
 
 def create_order_detail(db: Session, order_detail: OrderDetailCreate) -> OrderDetailSchema:
@@ -19,19 +22,21 @@ def create_order_detail(db: Session, order_detail: OrderDetailCreate) -> OrderDe
 
 async def create_order_details(db: Session, id_order: int, details: UploadFile) -> list[OrderDetailSchema]:
     stream = io.BytesIO()
-    print(1)
     content = await details.read()
     stream.write(content)
 
     # Read Excel file from the BytesIO stream
-    df = pd.read_excel(
-        stream,
-        sheet_name='PEDIDO',
-        header=5
-    )
-    print(df)
-    print(2)
-    return 'ok'
+    try:
+        df: DataFrame = ProcessDetails(stream, id_order, 'order').final_details
+    except:
+        return False
+
+    # Delete last orders_detail
+    delete_orders_detail_by_id_order(db, id_order)
+    rows = df.to_dict(orient='records')
+    db.bulk_insert_mappings(OrderDetailModel, rows)
+    db.commit()
+    return True
 
 
 def get_order_detail_by_id(db: Session, id_order_detail: int) -> OrderDetailSchema:
@@ -63,3 +68,15 @@ def delete_order_detail(db: Session, id_order_detail: int):
         db.commit()
         return True
     return False
+
+
+def delete_orders_detail_by_id_order(db: Session, id_order: int):
+    db.query(
+        OrderDetailModel
+    ).filter(
+        OrderDetailModel.id_order == id_order
+    ).delete(
+        synchronize_session=False
+    )
+
+    db.commit()

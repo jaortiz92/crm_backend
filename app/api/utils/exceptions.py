@@ -12,18 +12,17 @@ class Exceptions:
     def conflict_with_register(register: str, value: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"{register} with reference '{value}' does not allow deletion"
+            detail=f"{register} with reference '{value}' does not allow transaction"
         )
-    
+
     def register_already_registered(register: str, value: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"{register} with reference '{value}' already registered"
         )
 
-
     def credentials_exception() -> None:
-        raise  HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},

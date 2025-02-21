@@ -140,8 +140,11 @@ def create_order_detail(order_detail: OrderDetailCreate, db: Session = Depends(g
 async def create_order_details(id_order: int, details: UploadFile = File(...), db: Session = Depends(get_db)):
     if not details.filename.endswith(('xlsx', 'xlsm')):
         Exceptions.conflict_with_register('File', details.filename)
-    await crud.create_order_details(db, id_order, details)
-    return {"message": "Ok"}
+    result = await crud.create_order_details(db, id_order, details)
+    if result:
+        return {"message": "Orders detail to order was {id_order} created"}
+    else:
+        return Exceptions.conflict_with_register('File', details.filename)
 
 
 @order_detail.put("/{id_order_detail}", response_model=OrderDetail)
