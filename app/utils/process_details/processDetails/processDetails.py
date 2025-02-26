@@ -7,7 +7,8 @@ from .constants import Constants
 from .utils import Utils
 from .prices import Prices
 from .names import Names
-from .details import Details
+from .detailsChild import DetailsChild
+from .detailsDame import DetailsDame
 from io import BytesIO
 import pathlib
 
@@ -16,11 +17,13 @@ class ProcessDetails():
     def __init__(
         self, file_details: BytesIO,
         id: int,
+        type_format: str,
         type_table: str
     ) -> None:
         self.file_details: BytesIO = file_details
         self.id: int = id
         self.type_table: str = type_table
+        self.type_format: str = type_format
         self.open_files()
         self.fit()
 
@@ -36,10 +39,18 @@ class ProcessDetails():
             -------
             None
         '''
-        self.names: DataFrame = Names().names
-        self.details: DataFrame = Details(
-            self.file_details, self.names).details
-        self.prices: DataFrame = Prices().prices
+        self.names: DataFrame = Names(self.type_format).names
+
+        if self.type_format == Constants.CHILD:
+            self.details: DataFrame = DetailsChild(
+                self.file_details, self.names
+            ).details
+
+            self.prices: DataFrame = Prices().prices
+        elif self.type_format == Constants.DAME:
+            self.details: DataFrame = DetailsDame(
+                self.file_details, self.names
+            ).details
 
     def fit(self) -> None:
         '''
@@ -53,12 +64,15 @@ class ProcessDetails():
             -------
             None
         '''
-        self.initial_report: DataFrame = pd.merge(
-            left=self.details,
-            right=self.prices[['ref', 'PRECIO']],
-            on='ref',
-            how='left'
-        )
+        if self.type_format == Constants.CHILD:
+            self.initial_report: DataFrame = pd.merge(
+                left=self.details,
+                right=self.prices[['ref', 'PRECIO']],
+                on='ref',
+                how='left'
+            )
+        elif self.type_format == Constants.DAME:
+            self.initial_report: DataFrame = self.details.copy()
 
         self.initial_report['PRECIO'] = self.initial_report['PRECIO'].fillna(0)
 

@@ -1,6 +1,4 @@
-import logging
 from typing import Dict, List
-import os
 
 
 class Constants():
@@ -10,8 +8,11 @@ class Constants():
     # Gender
     FEMALE_CHILD: int = 2  # 'F'
     MALE_CHILD: int = 1  # 'M'
-    DAME: int = 2  # 'F'
+    FEMALE_DAME: int = 2  # 'F'
     UNISEX: int = 0  # 'U'
+
+    CHILD: str = 'child'
+    DAME: str = 'dame'
 
     NANAI: str = 'NANAI'
     KYLY: str = 'KYLY'
@@ -42,6 +43,11 @@ class Constants():
         BARILOCHE: 7,
         BAGORAZ: 8,
         KALISSON: 9,
+    }
+
+    COLUMNS_NAMES_DAME: List[str] = {
+        'DESCRIPCIÓN': 'REFERENCIA COMPLETA',
+        'PRECIO POR MAYOR': 'PRECIO'
     }
 
     COLUMNS_NAMES: List[str] = {

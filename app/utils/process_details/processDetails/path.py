@@ -10,10 +10,14 @@ class Paths:
     # IN
     PATH_INTERIM = PATH.joinpath('interim')
 
-    FILE_NAMES: str = PATH_INTERIM.joinpath(
-        'Consolidado_precios.xlsx'
+    FILE_NAMES_CHILD: str = PATH_INTERIM.joinpath(
+        'Consolidado_Nombres_Kyly.xlsx'
+    ).resolve()
+
+    FILE_NAMES_AND_PRICES_DAME: str = PATH_INTERIM.joinpath(
+        'Consolidado_Nombres_y_Precios_Dama.xlsx'
     ).resolve()
 
     FILE_PRICES: str = PATH_INTERIM.joinpath(
-        'Precios.xlsx'
+        'Precios_Kyly.xlsx'
     ).resolve()

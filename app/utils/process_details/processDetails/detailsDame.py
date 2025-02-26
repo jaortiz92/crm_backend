@@ -5,7 +5,7 @@ from .constants import Constants
 from io import BytesIO
 
 
-class Details():
+class DetailsDame():
     def __init__(self, file: BytesIO, names: DataFrame) -> None:
         self.file: str = file
         self.names: DataFrame = names
@@ -24,7 +24,7 @@ class Details():
             -------
             None
         '''
-        usecols: List[str] = ['A:Z', 'A:U', 'A:Y', 'B:Z']
+        usecols: List[str] = ['A:W']
         flag = False
         i = 0
         while not flag:
@@ -67,26 +67,30 @@ class Details():
         details = details[details['TOTAL'].str.isnumeric()]
         details['REFERENCIA'] = details['REFERENCIA'].str.upper()
         details = details.iloc[:, :list(details.columns).index('TOTAL')]
-        details['COLOR'] = details['COLOR'].str.strip()
+        details['COLOR'] = details['COLOR'].str.upper().str.strip()
 
-        details['REFERENCIA COMPLETA'] = details[
-            ['REFERENCIA']
-        ].apply(
-            self.add_name,
-            names=['REFERENCIA',],
-            axis=1
-        )
+        print(self.details)
 
-        details['GENERO'] = details[
-            ['MARCA', 'REFERENCIA COMPLETA']
-        ].apply(
-            self.add_gender,
-            names=['MARCA', 'REFERENCIA COMPLETA'],
-            axis=1
-        )
+        details = pd.merge(
+            left=details,
+            right=self.names[
+                ['MODELO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO POR MAYOR']
+            ],
+            left_on='REFERENCIA',
+            right_on='MODELO',
+            how='left'
+        ).rename(columns=Constants.COLUMNS_NAMES_DAME)
+
+        details.drop(columns=['MODELO'], inplace=True)
+
+        details['GENERO'] = Constants.FEMALE_DAME
 
         details = details.melt(
-            ['REFERENCIA', 'COLOR', 'MARCA', 'REFERENCIA COMPLETA', 'GENERO'],
+            [
+                'REFERENCIA', 'COLOR',
+                'MARCA', 'REFERENCIA COMPLETA',
+                'GENERO', 'PRECIO'
+            ],
             value_name='CANTIDAD',
             var_name='TALLA',
             ignore_index=True
@@ -96,7 +100,6 @@ class Details():
             details['CANTIDAD'], errors='coerce'
         )
 
-        details['ref'] = details['REFERENCIA'] + '-' + details['TALLA']
         details.sort_values(
             ['REFERENCIA', 'COLOR', 'TALLA'],
             inplace=True
@@ -110,60 +113,4 @@ class Details():
             Constants.CODE_BRANDS
         )
 
-    def add_name(self, x, names: List[str]) -> str:
-        '''
-            return name to reference
-
-            Parameters
-            ----------
-            x: List
-                0: Refernce
-                1: Size
-
-            Returns
-            -------
-            str:
-                return name to reference
-        '''
-        df_temp: DataFrame = self.names[(
-            self.names['Producto'] == x[names[0]])]
-        if df_temp.shape[0] == 0:
-            return x[0]
-        else:
-            return df_temp.iloc[0, :]['Descripción']
-
-    def add_gender(self, x, names: List[str]) -> str:
-        '''
-            return gerder to reference
-
-            Parameters
-            ----------
-            x: List
-                0: Brand
-                1: Description
-            names: List
-                0: Brand name
-                1: Description name
-
-            Returns
-            -------
-            str:
-                return gerder to reference
-        '''
-        brand = x[names[0]]
-        description = x[names[1]]
-
-        if brand in Constants.DAME_BRANDS:
-            return Constants.DAME
-        else:
-            if (
-                'MASCULINO' in description or 'MASCULINA' in description or
-                'NIÑO' in description or 'MUSCULOSA' in description or
-                'CAMISETA SIN MANGAS' in description or
-                'CASACO' in description
-            ):
-                return Constants.MALE_CHILD
-            elif 'UNISEX' in description:
-                return Constants.UNISEX
-            else:
-                return Constants.FEMALE_CHILD
+        print(self.details)

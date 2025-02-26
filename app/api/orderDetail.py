@@ -8,6 +8,7 @@ from app.schemas import OrderDetail, OrderDetailCreate, OrderDetailFull
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
+from app.utils.constants import Constants
 
 order_detail = APIRouter(
     prefix="/order_detail",
@@ -136,11 +137,13 @@ def create_order_detail(order_detail: OrderDetailCreate, db: Session = Depends(g
     return crud.create_order_detail(db, order_detail)
 
 
-@order_detail.post("/file/{id_order}")
-async def create_order_details(id_order: int, details: UploadFile = File(...), db: Session = Depends(get_db)):
+@order_detail.post("/file/{id_order}/{type_format}")
+async def create_order_details(id_order: int, type_format: str, details: UploadFile = File(...), db: Session = Depends(get_db)):
     if not details.filename.endswith(('xlsx', 'xlsm')):
-        Exceptions.conflict_with_register('File', details.filename)
-    result = await crud.create_order_details(db, id_order, details)
+        Exceptions.conflict_with_register('File Format', details.filename)
+    if not type_format in [Constants.CHILD, Constants.DAME]:
+        Exceptions.conflict_with_register('Type format', details.filename)
+    result = await crud.create_order_details(db, id_order, type_format, details)
     if result:
         return {"message": "Orders detail to order was {id_order} created"}
     else:

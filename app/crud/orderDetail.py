@@ -20,15 +20,18 @@ def create_order_detail(db: Session, order_detail: OrderDetailCreate) -> OrderDe
     return db_order_detail
 
 
-async def create_order_details(db: Session, id_order: int, details: UploadFile) -> list[OrderDetailSchema]:
+async def create_order_details(db: Session, id_order: int, type_format: str, details: UploadFile) -> list[OrderDetailSchema]:
     stream = io.BytesIO()
     content = await details.read()
     stream.write(content)
 
     # Read Excel file from the BytesIO stream
     try:
-        df: DataFrame = ProcessDetails(stream, id_order, 'order').final_details
-    except:
+        df: DataFrame = ProcessDetails(
+            stream, id_order, type_format, 'order'
+        ).final_details
+    except Exception as e:
+        print(e)
         return False
 
     # Delete last orders_detail
