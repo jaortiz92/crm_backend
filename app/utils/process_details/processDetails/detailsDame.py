@@ -69,8 +69,6 @@ class DetailsDame():
         details = details.iloc[:, :list(details.columns).index('TOTAL')]
         details['COLOR'] = details['COLOR'].str.upper().str.strip()
 
-        print(self.details)
-
         details = pd.merge(
             left=details,
             right=self.names[
@@ -112,5 +110,3 @@ class DetailsDame():
         self.details['MARCA'] = self.details['MARCA'].map(
             Constants.CODE_BRANDS
         )
-
-        print(self.details)

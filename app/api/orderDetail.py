@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import OrderDetail, OrderDetailCreate, OrderDetailFull
+from app.schemas import OrderDetail, OrderDetailCreate, OrderDetailFull, OrderDetailByBrand
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -196,3 +196,9 @@ def delete_order_detail(id_order_detail: int, db: Session = Depends(get_db)):
     if not success:
         Exceptions.register_not_found("Order Detail", id_order_detail)
     return {"message": "OrderDetail deleted successfully"}
+
+
+@order_detail.get("/by_brand/{id_order}", response_model=List[OrderDetailByBrand])
+def get_order_detail_by_brand_and_id_order(id_order: int, db: Session = Depends(get_db)):
+    result = crud.get_order_detail_by_brand_and_id_order(db, id_order)
+    return result

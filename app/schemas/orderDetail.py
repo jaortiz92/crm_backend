@@ -89,3 +89,30 @@ class OrderDetailFull(OrderDetailWithBrand):
 
 class OrderWithDetail(OrderFull):
     order_details: List[OrderDetailWithBrand]
+
+
+class OrderDetailByBrand(BaseModel):
+    brand_name: str = Field(
+        ...,
+        max_length=100,
+        description='Brand name (max 100 characters)'
+    )
+    gender: Gender = Field(
+        ...,
+        description='gender'
+    )
+    quantity: int = Field(
+        ...,
+        description='Quantity'
+    )
+    value_without_tax: float = Field(
+        ...,
+        description='Value without tax'
+    )
+    value_with_tax: float = Field(
+        ...,
+        description='Value with tax'
+    )
+
+    class Config:
+        from_attributes = True

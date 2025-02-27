@@ -1,12 +1,14 @@
 # Python
 from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import io
 from pandas.core.frame import DataFrame
 
 
 # App
 from app.models.orderDetail import OrderDetail as OrderDetailModel
+from app.models.brand import Brand as BrandModel
 from app.schemas.orderDetail import OrderDetailCreate, OrderDetail as OrderDetailSchema
 from app.utils.process_details import ProcessDetails
 from app.crud.utils import Constants
@@ -83,3 +85,25 @@ def delete_orders_detail_by_id_order(db: Session, id_order: int):
     )
 
     db.commit()
+
+
+def get_order_detail_by_brand_and_id_order(db: Session, id_order: int):
+    result = db.query(
+        BrandModel.brand_name,
+        OrderDetailModel.gender,
+        func.sum(OrderDetailModel.quantity).label("quantity"),
+        func.sum(OrderDetailModel.value_without_tax).label(
+            "value_without_tax"),
+        func.sum(OrderDetailModel.value_with_tax).label("value_with_tax")
+    ).join(
+        BrandModel, OrderDetailModel.id_brand == BrandModel.id_brand
+    ).filter(
+        OrderDetailModel.id_order == id_order
+    ).group_by(
+        BrandModel.brand_name, OrderDetailModel.gender
+    ).order_by(
+        BrandModel.brand_name.asc(),
+        OrderDetailModel.gender.desc()
+    ).all()
+
+    return result
