@@ -4,12 +4,20 @@ from typing import Dict, List
 class Constants():
     OTHERS_FILES: List[str] = ['Original.xlsx']
     SHEET_TO_JOB: str = 'PEDIDO'
+    WITHOUT_DEFINE: str = 'Sin definir'
 
     # Gender
     FEMALE_CHILD: int = 2  # 'F'
     MALE_CHILD: int = 1  # 'M'
     FEMALE_DAME: int = 2  # 'F'
     UNISEX: int = 0  # 'U'
+
+    GENDERS: Dict[str, int] = {
+        'Niña': FEMALE_CHILD,
+        'Niño': MALE_CHILD,
+        'Dama': FEMALE_DAME,
+        'Unisex': UNISEX,
+    }
 
     CHILD: str = 'child'
     DAME: str = 'dame'
@@ -79,6 +87,7 @@ class Constants():
     ]
 
     COLUMNS_INVOICE: List[str] = [
+        'id_invoice',
         'product',
         'description',
         'id_brand',

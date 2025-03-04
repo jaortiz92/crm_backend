@@ -1,2 +1,2 @@
-from .process_details import ProcessDetails
+from .process_details import ProcessDetailsOrders, ProcessDetailsInvoice
 from .constants import Constants

@@ -1,28 +1,21 @@
-import logging
-from typing import List
 import pandas as pd
 from pandas.core.frame import DataFrame
-from pandas.core.series import Series
 from .constants import Constants
-from .utils import Utils
 from .prices import Prices
 from .names import Names
 from .detailsChild import DetailsChild
 from .detailsDame import DetailsDame
 from io import BytesIO
-import pathlib
 
 
-class ProcessDetails():
+class ProcessDetailsOrders():
     def __init__(
         self, file_details: BytesIO,
         id: int,
         type_format: str,
-        type_table: str
     ) -> None:
         self.file_details: BytesIO = file_details
         self.id: int = id
-        self.type_table: str = type_table
         self.type_format: str = type_format
         self.open_files()
         self.fit()
@@ -90,9 +83,8 @@ class ProcessDetails():
 
         final_details['CANTIDAD'] = final_details['CANTIDAD'].astype(int)
 
-        final_details['id_' + self.type_table] = self.id
+        final_details['id_order'] = self.id
 
-        if self.type_table == 'order':
-            self.final_details = final_details.rename(
-                columns=Constants.COLUMNS_NAMES
-            )[Constants.COLUMNS_ORDER]
+        self.final_details = final_details.rename(
+            columns=Constants.COLUMNS_NAMES
+        )[Constants.COLUMNS_ORDER]

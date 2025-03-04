@@ -4,5 +4,6 @@ from .detailsChild import DetailsChild
 from .detailsDame import DetailsDame
 from .prices import Prices
 from .names import Names
-from .processDetails import ProcessDetails
+from .processDetailsOrders import ProcessDetailsOrders
+from .processDetailsInvoice import ProcessDetailsInvoice
 from .path import Paths

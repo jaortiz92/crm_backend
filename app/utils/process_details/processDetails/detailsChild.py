@@ -117,7 +117,7 @@ class DetailsChild():
             Parameters
             ----------
             x: List
-                0: Refernce
+                0: Reference
                 1: Size
 
             Returns

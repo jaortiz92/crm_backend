@@ -10,7 +10,7 @@ from pandas.core.frame import DataFrame
 from app.models.orderDetail import OrderDetail as OrderDetailModel
 from app.models.brand import Brand as BrandModel
 from app.schemas.orderDetail import OrderDetailCreate, OrderDetail as OrderDetailSchema
-from app.utils.process_details import ProcessDetails
+from app.utils.process_details import ProcessDetailsOrders
 from app.crud.utils import Constants
 
 
@@ -29,8 +29,8 @@ async def create_order_details(db: Session, id_order: int, type_format: str, det
 
     # Read Excel file from the BytesIO stream
     try:
-        df: DataFrame = ProcessDetails(
-            stream, id_order, type_format, 'order'
+        df: DataFrame = ProcessDetailsOrders(
+            stream, id_order, type_format
         ).final_details
     except Exception as e:
         print(e)

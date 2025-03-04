@@ -19,7 +19,7 @@ from .task import Task, TaskCreate, TaskFull
 from .user import User, UserCreate, UserFull, UserBase
 from .advance import Advance, AdvanceCreate
 from .invoice import Invoice, InvoiceCreate, InvoiceFull
-from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull, InvoiceWithDetail
+from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull, InvoiceWithDetail, InvoiceDetailByBrand
 from .credit import Credit, CreditCreate, CreditFull
 from .shipment import Shipment, ShipmentCreate, ShipmentFull
 from .token import Token, TokenData

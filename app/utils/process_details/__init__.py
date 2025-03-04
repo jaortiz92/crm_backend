@@ -1,1 +1,1 @@
-from .processDetails import ProcessDetails
+from .processDetails import ProcessDetailsOrders, ProcessDetailsInvoice
