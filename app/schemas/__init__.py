@@ -31,5 +31,5 @@ from .invoiceDetail import (
 from .credit import Credit, CreditCreate, CreditFull
 from .shipment import Shipment, ShipmentCreate, ShipmentFull
 from .token import Token, TokenData
-from .query import CustomerSummary, CustomerTripSummary
+from .query import CustomerSummary, CustomerTripSummary, CollectionSummary
 from .customerBrand import CustomerBrand, CustomerBrandCreate, CustomerBrandBase

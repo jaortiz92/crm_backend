@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import CustomerSummary, CustomerTripSummary
+from app.schemas import CustomerSummary, CustomerTripSummary, CollectionSummary
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -35,4 +35,13 @@ def get_customer_summary(id_customer_trip: int, db: Session = Depends(get_db)):
     if db_rating is None:
         Exceptions.register_not_found(
             "Custommer Trip Summary", id_customer_trip)
+    return db_rating
+
+
+@query.get("/collection_summary", response_model=List[CollectionSummary])
+def get_collection_summary(db: Session = Depends(get_db)):
+    """
+    Show a summary about collection
+    """
+    db_rating = crud.get_collection_summary(db)
     return db_rating

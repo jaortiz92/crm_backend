@@ -5,7 +5,8 @@ from sqlalchemy import func, extract
 # App
 from app.models.query import (
     CustomerSummary as CustomerSummaryModel,
-    CustomerTripSummary as CustomerTripSummaryModel
+    CustomerTripSummary as CustomerTripSummaryModel,
+    CollectionSummary as CollectionSummaryModel
 )
 
 
@@ -20,4 +21,9 @@ def get_customer_trip_summary(db: Session, id_customer_trip: int) -> list[Custom
     result = db.query(CustomerTripSummaryModel).filter(
         CustomerTripSummaryModel.id_customer_trip == id_customer_trip
     ).all()
+    return result
+
+
+def get_collection_summary(db: Session) -> list[CollectionSummaryModel]:
+    result = db.query(CollectionSummaryModel).all()
     return result
