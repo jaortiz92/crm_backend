@@ -123,3 +123,41 @@ class InvoiceDetailByBrand(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class InvoiceDetailByDescription(BaseModel):
+    description: str = Field(
+        ...,
+        max_length=50,
+        description='Product description (max 50 characters)'
+    )
+    quantity: int = Field(
+        ...,
+        description='Quantity'
+    )
+    value_without_tax: float = Field(
+        ...,
+        description='Value without tax'
+    )
+
+    class Config:
+        from_attributes = True
+
+
+class InvoiceDetailBySize(BaseModel):
+    size: str = Field(
+        ...,
+        max_length=50,
+        description='Size of the product (max 50 characters)'
+    )
+    quantity: int = Field(
+        ...,
+        description='Quantity'
+    )
+    value_without_tax: float = Field(
+        ...,
+        description='Value without tax'
+    )
+
+    class Config:
+        from_attributes = True

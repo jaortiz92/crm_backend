@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull, InvoiceDetailByBrand
+from app.schemas import (
+    InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull,
+    InvoiceDetailByBrand, InvoiceDetailByDescription,
+    InvoiceDetailBySize
+)
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -198,4 +202,17 @@ def delete_invoice_detail(id_invoice_detail: int, db: Session = Depends(get_db))
 @invoice_detail.get("/by_brand/{id_invoice}", response_model=List[InvoiceDetailByBrand])
 def get_invoice_detail_by_brand_and_id_invoice(id_invoice: int, db: Session = Depends(get_db)):
     result = crud.get_invoice_detail_by_brand_and_id_invoice(db, id_invoice)
+    return result
+
+
+@invoice_detail.get("/by_description/{id_invoice}", response_model=List[InvoiceDetailByDescription])
+def get_invoice_detail_by_description_and_id_invoice(id_invoice: int, db: Session = Depends(get_db)):
+    result = crud.get_invoice_detail_by_description_and_id_invoice(
+        db, id_invoice)
+    return result
+
+
+@invoice_detail.get("/by_size/{id_invoice}", response_model=List[InvoiceDetailBySize])
+def get_invoice_detail_by_size_and_id_invoice(id_invoice: int, db: Session = Depends(get_db)):
+    result = crud.get_invoice_detail_by_size_and_id_invoice(db, id_invoice)
     return result

@@ -1,7 +1,7 @@
 # Python
 from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, desc
 import io
 from pandas.core.frame import DataFrame
 
@@ -90,10 +90,11 @@ def get_invoice_detail_by_brand_and_id_invoice(db: Session, id_invoice: int):
         BrandModel.brand_name,
         InvoiceDetailModel.gender,
         func.sum(InvoiceDetailModel.quantity).label("quantity"),
-        func.sum(InvoiceDetailModel.value_without_tax).label(
+        func.sum(InvoiceDetailModel.discount).label(
             "discount"),
         func.sum(InvoiceDetailModel.value_without_tax).label(
-            "value_without_tax"),
+            "value_without_tax"
+        ),
         func.sum(InvoiceDetailModel.value_with_tax).label("value_with_tax")
     ).join(
         BrandModel, InvoiceDetailModel.id_brand == BrandModel.id_brand
@@ -106,4 +107,38 @@ def get_invoice_detail_by_brand_and_id_invoice(db: Session, id_invoice: int):
         InvoiceDetailModel.gender.desc()
     ).all()
 
+    return result
+
+
+def get_invoice_detail_by_description_and_id_invoice(db: Session, id_invoice: int):
+    result = db.query(
+        InvoiceDetailModel.description,
+        func.sum(InvoiceDetailModel.quantity).label("quantity"),
+        func.sum(InvoiceDetailModel.value_without_tax).label(
+            "value_without_tax"
+        )
+    ).filter(
+        InvoiceDetailModel.id_invoice == id_invoice
+    ).group_by(
+        InvoiceDetailModel.description
+    ).order_by(
+        desc(func.sum(InvoiceDetailModel.quantity))
+    ).all()
+    return result
+
+
+def get_invoice_detail_by_size_and_id_invoice(db: Session, id_invoice: int):
+    result = db.query(
+        InvoiceDetailModel.size,
+        func.sum(InvoiceDetailModel.quantity).label("quantity"),
+        func.sum(InvoiceDetailModel.value_without_tax).label(
+            "value_without_tax"
+        )
+    ).filter(
+        InvoiceDetailModel.id_invoice == id_invoice
+    ).group_by(
+        InvoiceDetailModel.size
+    ).order_by(
+        desc(func.sum(InvoiceDetailModel.quantity))
+    ).all()
     return result

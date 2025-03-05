@@ -9,7 +9,11 @@ from .customerTrip import CustomerTrip, CustomerTripCreate, CustomerTripFull
 from .department import Department
 from .line import Line, LineCreate
 from .order import Order, OrderCreate, OrderFull, OrderWithoutTrip
-from .orderDetail import OrderDetail, OrderDetailCreate, OrderDetailFull, OrderWithDetail, OrderDetailByBrand
+from .orderDetail import (
+    OrderDetail, OrderDetailCreate, OrderDetailFull,
+    OrderWithDetail, OrderDetailByBrand, OrderDetailBySize,
+    OrderDetailByDescription
+)
 from .paymentMethod import PaymentMethod
 from .rating import Rating, RatingCreate, RatingFull
 from .ratingCategory import RatingCategory, RatingCategoryCreate
@@ -19,7 +23,11 @@ from .task import Task, TaskCreate, TaskFull
 from .user import User, UserCreate, UserFull, UserBase
 from .advance import Advance, AdvanceCreate
 from .invoice import Invoice, InvoiceCreate, InvoiceFull
-from .invoiceDetail import InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull, InvoiceWithDetail, InvoiceDetailByBrand
+from .invoiceDetail import (
+    InvoiceDetail, InvoiceDetailCreate, InvoiceDetailFull,
+    InvoiceWithDetail, InvoiceDetailByBrand, InvoiceDetailByDescription,
+    InvoiceDetailBySize
+)
 from .credit import Credit, CreditCreate, CreditFull
 from .shipment import Shipment, ShipmentCreate, ShipmentFull
 from .token import Token, TokenData

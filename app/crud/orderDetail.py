@@ -1,7 +1,7 @@
 # Python
 from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, desc
 import io
 from pandas.core.frame import DataFrame
 
@@ -106,4 +106,38 @@ def get_order_detail_by_brand_and_id_order(db: Session, id_order: int):
         OrderDetailModel.gender.desc()
     ).all()
 
+    return result
+
+
+def get_order_detail_by_description_and_id_order(db: Session, id_order: int):
+    result = db.query(
+        OrderDetailModel.description,
+        func.sum(OrderDetailModel.quantity).label("quantity"),
+        func.sum(OrderDetailModel.value_without_tax).label(
+            "value_without_tax"
+        )
+    ).filter(
+        OrderDetailModel.id_order == id_order
+    ).group_by(
+        OrderDetailModel.description
+    ).order_by(
+        desc(func.sum(OrderDetailModel.quantity))
+    ).all()
+    return result
+
+
+def get_order_detail_by_size_and_id_order(db: Session, id_order: int):
+    result = db.query(
+        OrderDetailModel.size,
+        func.sum(OrderDetailModel.quantity).label("quantity"),
+        func.sum(OrderDetailModel.value_without_tax).label(
+            "value_without_tax"
+        )
+    ).filter(
+        OrderDetailModel.id_order == id_order
+    ).group_by(
+        OrderDetailModel.size
+    ).order_by(
+        desc(func.sum(OrderDetailModel.quantity))
+    ).all()
     return result
