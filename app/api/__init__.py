@@ -21,6 +21,7 @@ from .shipment import shipment
 from .city import city
 from .department import department
 from .role import role
+from .photo import photo
 from .paymentMethod import payment_method
 from .token import token
 from .query import query

@@ -23,3 +23,4 @@ from .department import *
 from .role import *
 from .paymentMethod import *
 from .query import *
+from .photo import *

@@ -52,3 +52,4 @@ class Customer(Base):
         back_populates="customers",
         overlaps="customer_brands"
     )
+    photos = relationship("Photo", back_populates="customer")

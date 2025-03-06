@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 # APP
 from app.db import Base
 
+
 class Role(Base):
     __tablename__ = "roles"
 
