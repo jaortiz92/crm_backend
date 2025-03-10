@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 # App
 from app.models.user import User as UserModel
-from app.schemas.user import UserCreate, UserBase, User as UserSchema
+from app.schemas.user import UserCreate, UserBase, User as UserSchema, UserPasswordUpdate
 from app.schemas.token import Token as TokenSchema
 from app.crud.utils import statusRequest
 from app.core.hashing import get_password_hash, verify_password
@@ -83,3 +83,43 @@ def delete_user(db: Session, id_user: int) -> bool:
         db.commit()
         return True
     return False
+
+
+def update_password(db: Session, id_user: int, password_data: UserPasswordUpdate) -> UserModel:
+    db_user = db.query(UserModel).filter(UserModel.id_user == id_user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_password(db_user.password, password_data.current_password):
+        raise HTTPException(
+            status_code=400, detail="Current password is incorrect")
+    db_user.password = get_password_hash(password_data.new_password)
+    db.commit()
+    db.refresh(db_user)
+    return True
+
+
+def request_password_reset(db: Session, email: str):
+    db_user = db.query(UserModel).filter(UserModel.email == email).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    reset_token = "0"  # str(uuid.uuid4())
+    # Aquí deberías guardar el token en la base de datos asociado al usuario
+    # y enviar un correo con el enlace de recuperación.
+
+    return {"message": "Password reset email sent", "reset_token": reset_token}
+
+
+def reset_password(db: Session, token: str, new_password: str):
+    # Aquí deberías validar el token almacenado en la base de datos
+    db_user = db.query(UserModel).filter(
+        UserModel.email == "email_asociado_al_token").first()
+
+    if not db_user:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    db_user.password = get_password_hash(new_password)
+    db.commit()
+    db.refresh(db_user)
+    return {"message": "Password updated successfully"}

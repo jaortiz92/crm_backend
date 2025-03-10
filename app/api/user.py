@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import UserCreate, User, UserFull, UserBase
+from app.schemas import (
+    UserCreate, User, UserFull, UserBase,
+    UserPasswordUpdate, UserPasswordResetRequest, UserPasswordReset
+)
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -211,3 +214,34 @@ def delete_user(
     if not success:
         Exceptions.register_not_found("User", id_user)
     return {"message": "User deleted successfully"}
+
+
+@user.put("/update_password/")
+def update_password(
+    password_data: UserPasswordUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update user password.
+    """
+    if crud.update_password(db, current_user.id_user, password_data):
+        return {"message": "Updated"}
+    else:
+        Exceptions.register_not_found("User", current_user.id_user)
+
+
+@user.post("/request-password-reset")
+def request_password_reset(request_data: UserPasswordResetRequest, db: Session = Depends(get_db)):
+    """
+    Request a password reset by email.
+    """
+    return crud.request_password_reset(db, request_data.email)
+
+
+@user.post("/reset-password")
+def reset_password(reset_data: UserPasswordReset, db: Session = Depends(get_db)):
+    """
+    Reset password using a valid token.
+    """
+    return crud.reset_password(db, reset_data.token, reset_data.new_password)

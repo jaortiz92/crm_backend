@@ -86,3 +86,29 @@ class UserFull(User):
     id_user: int
     city: Optional[CityFull]
     role: Optional[RoleBase]
+
+
+class UserPasswordUpdate(BaseModel):
+    current_password: str = Field(
+        ..., max_length=500,
+        description="Current password"
+    )
+    new_password: str = Field(
+        ..., max_length=500, description="New password"
+    )
+
+
+class UserPasswordResetRequest(BaseModel):
+    email: EmailStr = Field(
+        ...,
+        description="User's email for password recovery"
+    )
+
+
+class UserPasswordReset(BaseModel):
+    token: str = Field(
+        ..., description="Password reset token"
+    )
+    new_password: str = Field(
+        ..., max_length=500, description="New password"
+    )
