@@ -80,6 +80,12 @@ class CustomerBaseCreate(CustomerBase):
         description='Relevant details (max 1000 characters)'
     )
 
+    social_media: Optional[str] = Field(
+        ...,
+        max_length=1000,
+        description='Social media (max 1000 characters)'
+    )
+
 
 class CustomerCreate(CustomerBaseCreate):
     brand_ids: List[int] = Field(

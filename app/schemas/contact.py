@@ -59,6 +59,11 @@ class ContactBase(BaseModel):
         gt=0,
         description='ID of the city the Customer resides in'
     )
+    relevant_details: Optional[str] = Field(
+        ...,
+        max_length=1000,
+        description='Relevant details (max 1000 characters)'
+    )
     active: bool = Field(
         ...,
         description='Indicates whether the user is active or not'

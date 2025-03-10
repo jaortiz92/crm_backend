@@ -11,6 +11,7 @@ from sqlalchemy.orm import relationship
 from app.db import Base
 from app.core import Gender
 
+
 class Contact(Base):
     __tablename__ = "contacts"
 
@@ -25,6 +26,7 @@ class Contact(Base):
     id_role = Column(Integer, ForeignKey("roles.id_role"))
     birth_date = Column(Date)
     id_city = Column(Integer, ForeignKey("cities.id_city"))
+    relevant_details = Column(String(1000))
     active = Column(Boolean)
 
     customer = relationship("Customer", back_populates="contacts")

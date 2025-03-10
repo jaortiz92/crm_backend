@@ -16,7 +16,11 @@ def get_contacts(db: Session, skip: int = 0, limit: int = 10) -> list[ContactSch
 
 
 def get_contacts_by_id_customer(db: Session, id_customer) -> list[ContactSchema]:
-    return db.query(ContactModel).filter(ContactModel.id_customer == id_customer).all()
+    return db.query(ContactModel).filter(
+        ContactModel.id_customer == id_customer
+    ).order_by(
+        ContactModel.id_contact.asc()
+    ).all()
 
 
 def create_contact(db: Session, contact: ContactCreate) -> ContactSchema:
