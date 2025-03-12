@@ -225,23 +225,36 @@ def update_password(
     """
     Update user password.
     """
-    if crud.update_password(db, current_user.id_user, password_data):
+    result: bool = crud.update_password(
+        db, current_user.id_user, password_data
+    )
+    print(result)
+    if result is True:
         return {"message": "Updated"}
     else:
-        Exceptions.register_not_found("User", current_user.id_user)
+        Exceptions.credentials_exception()
 
 
-@user.post("/request-password-reset")
+@user.post("/request_password_reset/")
 def request_password_reset(request_data: UserPasswordResetRequest, db: Session = Depends(get_db)):
     """
     Request a password reset by email.
     """
-    return crud.request_password_reset(db, request_data.email)
+    result: str = crud.request_password_reset(db, request_data.email)
+    if isinstance(result, dict):
+        Exceptions.credentials_exception()
+    elif not result:
+        Exceptions.credentials_exception()
+    else:
+        return {"message": "Password reset email sent", "reset_token": result}
 
 
-@user.post("/reset-password")
+@user.post("/reset_password/")
 def reset_password(reset_data: UserPasswordReset, db: Session = Depends(get_db)):
     """
     Reset password using a valid token.
     """
-    return crud.reset_password(db, reset_data.token, reset_data.new_password)
+    if crud.reset_password(db, reset_data.token, reset_data.new_password) is True:
+        return {"message": "Password updated successfully"}
+    else:
+        Exceptions.credentials_exception()

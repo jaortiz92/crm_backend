@@ -1,8 +1,13 @@
 *venv_backend*
 *_pycache_*
 *configdb.json
+*config.json
+*test.py
 *alembic*
-*structure*
+*structure*.md
+*steps*.md
 *xlsx
 *xlsm
 *ipynb
+*.png
+*.jpg
