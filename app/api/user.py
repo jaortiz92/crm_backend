@@ -228,7 +228,6 @@ def update_password(
     result: bool = crud.update_password(
         db, current_user.id_user, password_data
     )
-    print(result)
     if result is True:
         return {"message": "Updated"}
     else:

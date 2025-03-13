@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
 # App
-from app.schemas import Token, User
+from app.schemas import Token, User, LoginData
 from app import get_db
 import app.crud as crud
 from app.core.auth import get_current_user
@@ -17,20 +17,20 @@ token = APIRouter(
 
 
 @token.post("/", response_model=Token)
-def login(username: str, password: str,  response: Response, db: Session = Depends(get_db)):
+def login(loginData: LoginData,  response: Response, db: Session = Depends(get_db)):
     """
     Login a User
 
     This path operation login a user in the app
 
     Parameters:
-    - Register path parameter:
+    - Request body:
         - username: str - The username of the user to be login
         - password: str - The password of the user to be login
 
     Returns a message
     """
-    token = crud.login_user(db, username, password)
+    token = crud.login_user(db, loginData.username, loginData.password)
     if isinstance(token, dict):
         Exceptions.credentials_exception()
     return token
