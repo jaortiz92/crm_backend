@@ -2,12 +2,14 @@
 from sqlalchemy import (
     Column, ForeignKey,
     Integer, String,
-    Date, Float, Text    
+    Date, Float, Text,
+    Boolean
 )
 from sqlalchemy.orm import relationship
 
 # APP
 from app.db import Base
+
 
 class Shipment(Base):
     __tablename__ = "shipments"
@@ -17,7 +19,9 @@ class Shipment(Base):
     shipment_date = Column(Date, nullable=False)
     carrier = Column(String(50), nullable=False)
     tracking_number = Column(String(100), nullable=False)
-    received_date = Column(Date, nullable=False)
+    received_date = Column(Date, nullable=True)
+    estimated_delivery_date = Column(Date, nullable=False)
+    received = Column(Boolean)
     shipment_cost = Column(Float, nullable=False)
     details = Column(Text)
 
