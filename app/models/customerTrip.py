@@ -19,7 +19,7 @@ class CustomerTrip(Base):
     id_collection = Column(Integer, ForeignKey("collections.id_collection"))
     budget = Column(Float, nullable=False)
     budget_quantities = Column(Float, nullable=False)
-    ordered = Column(Boolean)
+    closed = Column(Boolean)
     comment = Column(Text)
 
     customer = relationship("Customer", back_populates="customer_trips")

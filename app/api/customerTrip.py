@@ -33,7 +33,7 @@ async def get_customer_trip_by_id(id_customer_trip: int, db: Session = Depends(g
     - id_seller: int
     - id_collection: int
     - budget: float
-    - ordered: Optional[bool]
+    - closed: Optional[bool]
     - comment: Optional[str]
     """
     db_customer_trip = crud.get_customer_trip_by_id(db, id_customer_trip)
@@ -81,7 +81,7 @@ async def get_customer_trip_full_by_id(id_customer_trip: int, db: Session = Depe
     - id_seller: int
     - id_collection: int
     - budget: float
-    - ordered: Optional[bool]
+    - closed: Optional[bool]
     - comment: Optional[str]
     """
     db_customer_trip = crud.get_customer_trip_by_id(db, id_customer_trip)
@@ -144,7 +144,7 @@ async def create_customer_trip(customer_trip: CustomerTripCreate, db: Session = 
             - id_seller: int
             - id_collection: int
             - budget: float
-            - ordered: Optional[bool]
+            - closed: Optional[bool]
             - comment: Optional[str]
 
     Returns a JSON with the newly created customer trip:
@@ -153,7 +153,7 @@ async def create_customer_trip(customer_trip: CustomerTripCreate, db: Session = 
     - id_seller: int
     - id_collection: int
     - budget: float
-    - ordered: Optional[bool]
+    - closed: Optional[bool]
     - comment: Optional[str]
     """
     return crud.create_customer_trip(db, customer_trip)
@@ -175,7 +175,7 @@ async def update_customer_trip(id_customer_trip: int, customer_trip: CustomerTri
             - id_seller: int
             - id_collection: int
             - budget: float
-            - ordered: Optional[bool]
+            - closed: Optional[bool]
             - comment: Optional[str]
 
     Returns a JSON with the updated customer trip:
@@ -184,7 +184,7 @@ async def update_customer_trip(id_customer_trip: int, customer_trip: CustomerTri
     - id_seller: int
     - id_collection: int
     - budget: float
-    - ordered: Optional[bool]
+    - closed: Optional[bool]
     - comment: Optional[str]
     """
     db_customer_trip = crud.update_customer_trip(

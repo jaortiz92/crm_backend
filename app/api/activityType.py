@@ -55,6 +55,20 @@ def get_activity_types(skip: int = 0, limit: int = 10, db: Session = Depends(get
     return crud.get_activity_types(db, skip=skip, limit=limit)
 
 
+@activity_type.get("/mandatory/", response_model=List[ActivityType])
+def get_activity_types_mandatory(db: Session = Depends(get_db)):
+    """
+    Show activities type mandatory
+
+    This path operation shows a list of activities type in the app with a limit on the number of activities type.
+
+    Parameters:
+
+    Returns a JSON with a list of activities type in the app.
+    """
+    return crud.get_activity_types_mandatory(db)
+
+
 @activity_type.post("/", response_model=ActivityType)
 def create_activity_type(activity_type: ActivityTypeCreate, db: Session = Depends(get_db)):
     """

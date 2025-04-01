@@ -35,9 +35,9 @@ class CustomerTripBase(BaseModel):
         ...,
         description='Budget in quantities for the trip'
     )
-    ordered: Optional[bool] = Field(
+    closed: Optional[bool] = Field(
         None,
-        description='Whether the Customer placed an order'
+        description='Whether the Customer Trip is closed'
     )
     comment: Optional[str] = Field(
         None,

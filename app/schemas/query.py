@@ -36,4 +36,4 @@ class CustomerSummary(BasicCollection):
 
 class CustomerTripSummary(Summary):
     id_customer_trip: int
-    ordered: bool
+    closed: bool

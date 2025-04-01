@@ -27,6 +27,14 @@ def get_activity_types(db: Session, skip: int = 0, limit: int = 10) -> list[Acti
     ).offset(skip).limit(limit).all()
 
 
+def get_activity_types_mandatory(db: Session) -> list[ActivityTypeSchema]:
+    return db.query(ActivityTypeModel).filter(
+        ActivityTypeModel.mandatory == True
+    ).order_by(
+        ActivityTypeModel.activity_order.asc()
+    ).all()
+
+
 def update_activity_type(
     db: Session, id_activity_type: int,
     activity_type: ActivityTypeCreate
