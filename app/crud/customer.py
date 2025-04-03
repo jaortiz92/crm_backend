@@ -59,6 +59,13 @@ def get_customers(db: Session, id_user: int, access_type: str, skip: int = 0, li
     return result
 
 
+def get_id_customers_by_seller(db: Session, id_seller: int) -> list[int]:
+    customers = db.query(CustomerModel.id_customer).filter(
+        CustomerModel.id_seller == id_seller
+    ).all()
+    return [customer[0] for customer in customers]
+
+
 def update_customer(db: Session, id_customer: int, customer: CustomerCreate) -> CustomerSchema:
     db_customer = db.query(CustomerModel).filter(
         CustomerModel.id_customer == id_customer).first()

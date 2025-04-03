@@ -2,7 +2,7 @@
 from datetime import date
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 
 # App
 from app.models.activity import Activity as ActivityModel
@@ -69,7 +69,6 @@ def get_activities_by_id_customer_trip(db: Session, id_customer_trip: int) -> li
 
 def get_activities_pending(db: Session,  id_user: int, access_type: str) -> list[ActivitySchema]:
     auth = Constants.get_auth_to_customers(access_type)
-    result = []
     if auth == Constants.ALL:
         result = db.query(ActivityModel).join(
             CustomerTripModel, ActivityModel.id_customer_trip == CustomerTripModel.id_customer_trip
@@ -80,13 +79,19 @@ def get_activities_pending(db: Session,  id_user: int, access_type: str) -> list
             ActivityModel.estimated_date.asc()
         ).all()
     elif auth == Constants.FILTER:
+        id_customers: list[int] = crud.get_id_customers_by_seller(db, id_user)
+
         result = db.query(ActivityModel).join(
             CustomerTripModel, ActivityModel.id_customer_trip == CustomerTripModel.id_customer_trip
         ).filter(
             and_(
-                ActivityModel.id_user == id_user,
                 ActivityModel.completed == False,
-                CustomerTripModel.closed == False
+                CustomerTripModel.closed == False,
+                or_(
+                    CustomerTripModel.id_customer.in_(id_customers),
+                    CustomerTripModel.id_seller == id_user,
+                    ActivityModel.id_user == id_user
+                )
             )
         ).order_by(
             ActivityModel.estimated_date.asc()

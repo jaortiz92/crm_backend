@@ -101,6 +101,7 @@ def get_customers(
 
     Returns a JSON with a list of customers in the app.
     """
+    crud.get_id_customers_by_seller(db, current_user.id_user)
     return crud.get_customers(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
