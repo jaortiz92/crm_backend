@@ -37,7 +37,7 @@ class CustomerTripSummary(Base, FinancialSummaryMixin):
     __tablename__ = "customer_trip_summary_full"
 
     id_customer_trip = Column(Integer, primary_key=True)
-    ordered = Column(Boolean)
+    closed = Column(Boolean)
 
 
 class CollectionSummary(Base, FinancialSummaryMixin):

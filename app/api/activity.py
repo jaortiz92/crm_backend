@@ -116,6 +116,24 @@ def get_activities_full(
     return crud.get_activities(db, current_user.id_user, access_type, skip=skip, limit=limit)
 
 
+@activity.get("/pending/full/", response_model=List[ActivityFull])
+def get_activities_pending(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+        access_type: str = Depends(crud.get_me_access_type)
+):
+    """
+    Show activities full
+
+    This path operation shows a list of activities pending.
+
+    Parameters:
+
+    Returns a JSON with a list of activities in the app.
+    """
+    return crud.get_activities_pending(db, current_user.id_user, access_type)
+
+
 @activity.get("/customer_trip/{id_customer_trip}", response_model=List[ActivityFull])
 def get_activities_by_id_customer_trip(id_customer_trip: int, db: Session = Depends(get_db)):
     """
