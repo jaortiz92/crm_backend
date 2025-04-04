@@ -74,8 +74,10 @@ def get_activities_pending(db: Session,  id_user: int, access_type: str) -> list
             CustomerTripModel, ActivityModel.id_customer_trip == CustomerTripModel.id_customer_trip
         ).filter(
             and_(
-                ActivityModel.completed != True,
-                CustomerTripModel.closed != True
+                or_(ActivityModel.completed == False,
+                    ActivityModel.completed == None),
+                or_(CustomerTripModel.closed == False,
+                    CustomerTripModel.closed == None)
             )
         ).order_by(
             ActivityModel.estimated_date.asc()
@@ -87,8 +89,10 @@ def get_activities_pending(db: Session,  id_user: int, access_type: str) -> list
             CustomerTripModel, ActivityModel.id_customer_trip == CustomerTripModel.id_customer_trip
         ).filter(
             and_(
-                ActivityModel.completed != True,
-                CustomerTripModel.closed != True,
+                or_(ActivityModel.completed == False,
+                    ActivityModel.completed == None),
+                or_(CustomerTripModel.closed == False,
+                    CustomerTripModel.closed == None),
                 or_(
                     CustomerTripModel.id_customer.in_(id_customers),
                     CustomerTripModel.id_seller == id_user,
