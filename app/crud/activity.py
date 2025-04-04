@@ -73,8 +73,10 @@ def get_activities_pending(db: Session,  id_user: int, access_type: str) -> list
         result = db.query(ActivityModel).join(
             CustomerTripModel, ActivityModel.id_customer_trip == CustomerTripModel.id_customer_trip
         ).filter(
-            and_(ActivityModel.completed == False,
-                 CustomerTripModel.closed == False)
+            and_(
+                ActivityModel.completed != True,
+                CustomerTripModel.closed != True
+            )
         ).order_by(
             ActivityModel.estimated_date.asc()
         ).all()
