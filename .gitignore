@@ -2,6 +2,7 @@
 *_pycache_*
 *configdb.json
 *config.json
+*configLocal.json
 *test.py
 *alembic*
 *structure*.md

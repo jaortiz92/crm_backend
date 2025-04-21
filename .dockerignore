@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+*.log
+*.md
+.git
+.vscode
+venv_backend
+venv_backend_porta

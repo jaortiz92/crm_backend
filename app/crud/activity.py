@@ -102,6 +102,8 @@ def get_activities_pending(db: Session,  id_user: int, access_type: str) -> list
         ).order_by(
             ActivityModel.estimated_date.asc()
         ).all()
+    else:
+        result = []
     return result
 
 
