@@ -29,7 +29,7 @@ def get_customer_trip_summary(db: Session, id_customer_trip: int) -> list[Custom
 def get_collection_summary(db: Session,  id_user: int, access_type: str) -> list[CollectionSummaryModel]:
     auth = Constants.get_auth_to_customers(access_type)
     result = []
-    if auth == Constants.ALL:
+    if auth == Constants.FILTER:
         query = db.query(
             CustomerSummaryModel.collection_name,
             CustomerSummaryModel.short_collection_name,
@@ -76,7 +76,7 @@ def get_collection_summary(db: Session,  id_user: int, access_type: str) -> list
         )
 
         result = query.all()
-    elif auth == Constants.FILTER:
+    elif auth == Constants.ALL:
         result = db.query(CollectionSummaryModel).all()
 
     return result
