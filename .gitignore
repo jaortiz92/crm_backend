@@ -3,6 +3,7 @@
 *configdb.json
 *config.json
 *configLocal.json
+*configdbLocal.json
 *test.py
 *alembic*
 *structure*.md

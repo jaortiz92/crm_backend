@@ -25,7 +25,7 @@ class CustomerBase(BaseModel):
 
 
 class CustomerBaseCreate(CustomerBase):
-    email: EmailStr = Field(
+    email: Optional[EmailStr] = Field(
         ...,
         description='email address'
     )
