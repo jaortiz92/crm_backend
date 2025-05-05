@@ -62,8 +62,9 @@ def get_activities_by_id_customer_trip(db: Session, id_customer_trip: int) -> li
     return db.query(ActivityModel).filter(
         ActivityModel.id_customer_trip == id_customer_trip
     ).order_by(
-        ActivityModel.completed.asc(), ActivityModel.estimated_date.asc(),
-        ActivityModel.id_activity.asc()
+        ActivityModel.completed.asc(),
+        ActivityModel.id_activity.desc(),
+        ActivityModel.estimated_date.asc(),
     ).all()
 
 
