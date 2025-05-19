@@ -7,6 +7,7 @@ from sqlalchemy import func
 # App
 from app.models.invoice import Invoice as InvoiceModel
 from app.models.order import Order as OrderModel
+from app.models.customerTrip import CustomerTrip as CustomerTripModel
 from app.schemas.invoice import InvoiceCreate
 from app.crud.utils import statusRequest
 import app.crud as crud
@@ -73,6 +74,18 @@ def get_invoices_by_customer_trip(db: Session, id_customer_trip: int) -> list[In
         OrderModel, InvoiceModel.id_order == OrderModel.id_order
     ).filter(
         OrderModel.id_customer_trip == id_customer_trip
+    )
+
+
+def get_invoices_by_customer(db: Session, id_customer: int) -> list[InvoiceModel]:
+    return db.query(InvoiceModel).join(
+        OrderModel, InvoiceModel.id_order == OrderModel.id_order
+    ).join(
+        CustomerTripModel, OrderModel.id_customer_trip == CustomerTripModel.id_customer_trip
+    ).filter(
+        CustomerTripModel.id_customer == id_customer
+    ).order_by(
+        InvoiceModel.invoice_number.desc()
     )
 
 

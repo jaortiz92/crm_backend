@@ -167,6 +167,25 @@ def get_invoices_by_order(
     return crud.get_invoices_by_order(db, id_order)
 
 
+@invoice.get("/customer/{id_customer}", response_model=List[InvoiceFull])
+def get_invoices_by_customer(
+    id_customer,
+    db: Session = Depends(get_db)
+):
+    """
+    Show invoices
+
+    This path operation shows a list of invoices with the id_customer.
+
+    Parameters:
+    - Query parameters:
+        - id_customer: int - Id customer
+
+    Returns a JSON with a list of invoices in the app.
+    """
+    return crud.get_invoices_by_customer(db, id_customer)
+
+
 @invoice.get("/query/", response_model=List[InvoiceFull])
 def get_invoices_query(
     invoice_number: Optional[str] = None,
