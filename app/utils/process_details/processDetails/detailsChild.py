@@ -2,13 +2,15 @@ from typing import List
 import pandas as pd
 from pandas.core.frame import DataFrame
 from .constants import Constants
+from .pricesTemplate import PricesTemplate
 from io import BytesIO
 
 
 class DetailsChild():
-    def __init__(self, file: BytesIO, names: DataFrame) -> None:
+    def __init__(self, file: BytesIO, names: DataFrame, prices_list: DataFrame) -> None:
         self.file: str = file
         self.names: DataFrame = names
+        self.prices_list: DataFrame = prices_list
         self.open_files()
         self.clean_file()
 
@@ -43,6 +45,10 @@ class DetailsChild():
                 flag = True
             else:
                 i += 1
+
+        self.prices: DataFrame = PricesTemplate(
+            self.file, Constants.CHILD
+        ).prices
 
     def clean_file(self) -> None:
         '''
@@ -102,13 +108,33 @@ class DetailsChild():
             inplace=True
         )
 
-        self.details: DataFrame = details[~details['CANTIDAD'].isna()].reset_index(
+        details = details[~details['CANTIDAD'].isna()].reset_index(
             drop=True
         )
 
-        self.details['MARCA'] = self.details['MARCA'].map(
+        details['MARCA'] = details['MARCA'].map(
             Constants.CODE_BRANDS
         )
+
+        details = pd.merge(
+            left=details,
+            right=self.prices,
+            on='ref',
+            how='left'
+        )
+
+        details: DataFrame = pd.merge(
+            left=details,
+            right=self.prices_list[['ref', 'PRECIO LISTA']],
+            on='ref',
+            how='left'
+        )
+
+        details['PRECIO'] = details['PRECIO'].fillna(
+            details['PRECIO LISTA']
+        )
+
+        self.details = details.drop(columns=['PRECIO LISTA'])
 
     def add_name(self, x, names: List[str]) -> str:
         '''

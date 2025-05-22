@@ -36,10 +36,10 @@ class ProcessDetailsOrders():
 
         if self.type_format == Constants.CHILD:
             self.details: DataFrame = DetailsChild(
-                self.file_details, self.names
+                self.file_details, self.names,
+                Prices().prices
             ).details
 
-            self.prices: DataFrame = Prices().prices
         elif self.type_format == Constants.DAME:
             self.details: DataFrame = DetailsDame(
                 self.file_details, self.names
@@ -57,15 +57,7 @@ class ProcessDetailsOrders():
             -------
             None
         '''
-        if self.type_format == Constants.CHILD:
-            self.initial_report: DataFrame = pd.merge(
-                left=self.details,
-                right=self.prices[['ref', 'PRECIO']],
-                on='ref',
-                how='left'
-            )
-        elif self.type_format == Constants.DAME:
-            self.initial_report: DataFrame = self.details.copy()
+        self.initial_report: DataFrame = self.details.copy()
 
         self.initial_report['PRECIO'] = self.initial_report['PRECIO'].fillna(0)
 

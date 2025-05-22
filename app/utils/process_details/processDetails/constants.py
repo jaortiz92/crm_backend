@@ -55,7 +55,7 @@ class Constants():
 
     COLUMNS_NAMES_DAME: List[str] = {
         'DESCRIPCIÓN': 'REFERENCIA COMPLETA',
-        'PRECIO POR MAYOR': 'PRECIO'
+        'PRECIO POR MAYOR': 'PRECIO LISTA'
     }
 
     COLUMNS_NAMES: List[str] = {

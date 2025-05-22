@@ -32,7 +32,7 @@ class Prices():
             }
         ).rename(
             columns={
-                'Precio_Venta': 'PRECIO'
+                'Precio_Venta': 'PRECIO LISTA'
             }
         )
 

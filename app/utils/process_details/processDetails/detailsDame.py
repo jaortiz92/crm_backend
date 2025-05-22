@@ -2,6 +2,7 @@ from typing import List
 import pandas as pd
 from pandas.core.frame import DataFrame
 from .constants import Constants
+from .pricesTemplate import PricesTemplate
 from io import BytesIO
 
 
@@ -44,6 +45,10 @@ class DetailsDame():
             else:
                 i += 1
 
+        self.prices: DataFrame = PricesTemplate(
+            self.file, Constants.DAME
+        ).prices
+
     def clean_file(self) -> None:
         '''
         This function clean details file
@@ -71,6 +76,13 @@ class DetailsDame():
 
         details = pd.merge(
             left=details,
+            right=self.prices,
+            on='REFERENCIA',
+            how='left'
+        )
+
+        details = pd.merge(
+            left=details,
             right=self.names[
                 ['MODELO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO POR MAYOR']
             ],
@@ -79,7 +91,11 @@ class DetailsDame():
             how='left'
         ).rename(columns=Constants.COLUMNS_NAMES_DAME)
 
-        details.drop(columns=['MODELO'], inplace=True)
+        details['PRECIO'] = details['PRECIO'].fillna(
+            details['PRECIO LISTA']
+        )
+
+        details.drop(columns=['MODELO', 'PRECIO LISTA'], inplace=True)
 
         details['GENERO'] = Constants.FEMALE_DAME
 

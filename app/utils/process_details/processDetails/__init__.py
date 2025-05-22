@@ -7,3 +7,4 @@ from .names import Names
 from .processDetailsOrders import ProcessDetailsOrders
 from .processDetailsInvoice import ProcessDetailsInvoice
 from .path import Paths
+from .pricesTemplate import PricesTemplate
