@@ -35,6 +35,10 @@ class CustomerTripBase(BaseModel):
         ...,
         description='Budget in quantities for the trip'
     )
+    with_budget: Optional[bool] = Field(
+        None,
+        description='The customer trip has budget'
+    )
     closed: Optional[bool] = Field(
         None,
         description='Whether the Customer Trip is closed'

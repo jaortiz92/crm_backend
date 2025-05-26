@@ -19,6 +19,7 @@ class CustomerTrip(Base):
     id_collection = Column(Integer, ForeignKey("collections.id_collection"))
     budget = Column(Float, nullable=False)
     budget_quantities = Column(Float, nullable=False)
+    with_budget = Column(Boolean, nullable=False)
     closed = Column(Boolean)
     comment = Column(Text)
 
