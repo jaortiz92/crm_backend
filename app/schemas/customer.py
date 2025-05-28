@@ -34,27 +34,27 @@ class CustomerBaseCreate(CustomerBase):
         max_length=20,
         description='phone number (max 20 characters)'
     )
-    id_store_type: int = Field(
+    id_store_type: Optional[int] = Field(
         ...,
         gt=0,
         description='ID of the store type associated with the Customer'
     )
-    address: str = Field(
+    address: Optional[str] = Field(
         ...,
         max_length=255,
         description='address (max 255 characters)'
     )
-    id_seller: int = Field(
+    id_seller: Optional[int] = Field(
         ...,
         gt=0,
         description='ID of the seller associated with the Customer'
     )
-    stores: int = Field(
+    stores: Optional[int] = Field(
         ...,
         gt=0,
         description='Stores associated with the Customer'
     )
-    id_city: int = Field(
+    id_city: Optional[int] = Field(
         ...,
         gt=0,
         description='ID of the city the Customer resides in'

@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -172,6 +172,28 @@ def create_customer(customer: CustomerCreate, db: Session = Depends(get_db)):
                 )
             )
     return db_customer
+
+
+@customer.post("/file/customersTemplate/create")
+async def create_customers(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith(('xlsx', 'xlsm')):
+        Exceptions.conflict_with_register('File Format', file.filename)
+    result = await crud.create_or_update_customers(db, file, create=True)
+    if result:
+        return {"message": result}
+    else:
+        return Exceptions.conflict_with_register('File', file.filename)
+
+
+@customer.post("/file/customersTemplate/update")
+async def update_customers(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith(('xlsx', 'xlsm')):
+        Exceptions.conflict_with_register('File Format', file.filename)
+    result = await crud.create_or_update_customers(db, file, create=False)
+    if result:
+        return {"message": result}
+    else:
+        return Exceptions.conflict_with_register('File', file.filename)
 
 
 @customer.put("/{id_customer}", response_model=Customer)

@@ -1,14 +1,22 @@
 # Python
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
+import io
+import pandas as pd
+from pandas.core.frame import DataFrame
+
 
 # App
 from app.models.customer import Customer as CustomerModel
 from app.models.brand import Brand as BrandModel
 from app.models.customerBrand import CustomerBrand as CustomerBrandModel
+from app.models.city import City as CityModel
+from app.models.user import User as UserModel
+from app.models.storeType import StoreType as StoreTypeModel
 from app.schemas.customer import CustomerCreate, Customer as CustomerSchema
 from app.crud.utils import Constants
-from app.crud.utils import statusRequest
+from app.crud.utils import statusRequest, convert_numpy_types
+from app.utils.templates import CustomersTemplate
 
 
 def get_customer_by_id(db: Session, id_customer: int) -> CustomerSchema:
@@ -41,6 +49,92 @@ def create_customer(db: Session, customer: CustomerCreate) -> CustomerSchema:
         db.commit()
         db.refresh(db_customer)
         return db_customer
+
+
+async def create_or_update_customers(db: Session, file: UploadFile, create: bool) -> list[CustomerSchema]:
+    stream = io.BytesIO()
+    content = await file.read()
+    stream.write(content)
+
+    # Read Excel file from the BytesIO stream
+    try:
+        df: DataFrame = CustomersTemplate(
+            content
+        ).customers
+    except Exception as e:
+        print(e)
+        return False
+
+    customers_to_update = []
+    customers_to_create = []
+
+    for index, row in df.iterrows():
+        try:
+            # Validar llaves foráneas
+            flag = []
+            if not pd.isna(row["id_city"]):
+                city = db.query(CityModel).filter_by(
+                    city_name=row["id_city"]
+                ).first()
+                if city:
+                    df.loc[index, "id_city"] = city.id_city
+                else:
+                    flag.append("City")
+
+            if not pd.isna(row["id_seller"]):
+                seller = db.query(UserModel).filter_by(
+                    username=row["id_seller"]
+                ).first()
+                if seller:
+                    df.loc[index, "id_seller"] = seller.id_user
+                else:
+                    flag.append("Seller")
+
+            if not pd.isna(row["id_store_type"]):
+                store_type = db.query(StoreTypeModel).filter_by(
+                    store_type=row["id_store_type"]
+                ).first()
+                if store_type:
+                    df.loc[index, "id_store_type"] = store_type.id_store_type
+                else:
+                    flag.append("Store_type")
+
+            if len(flag) > 0:
+                raise ValueError(f"Error en llaves foráneas {flag} en {row}")
+
+            # Validate if Document exist
+            existing_customer = db.query(CustomerModel).filter_by(
+                document=row["document"]).first()
+
+            if existing_customer and create:
+                raise ValueError(
+                    f"Cliente con documento {row['document']} ya existe"
+                )
+            elif existing_customer:
+                customer_data = {
+                    k: convert_numpy_types(v)
+                    for k, v in df.loc[index, :].items() if not pd.isna(v)
+                }
+                for key, value in customer_data.items():
+                    setattr(existing_customer, key, value)
+                customers_to_update.append(existing_customer)
+            else:
+                customer_data = {
+                    k: convert_numpy_types(v)
+                    for k, v in df.loc[index, :].items() if not pd.isna(v)
+                }
+                customers_to_create.append(customer_data)
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    if create:
+        db.bulk_insert_mappings(CustomerModel, customers_to_create)
+    else:
+        for customer in customers_to_update:
+            db.merge(customer)
+    db.commit()
+    return True
 
 
 def get_customers(db: Session, id_user: int, access_type: str, skip: int = 0, limit: int = 10) -> list[CustomerSchema]:

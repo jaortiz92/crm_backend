@@ -22,7 +22,7 @@ class Customer(Base):
     email = Column(String(100), nullable=True)
     phone = Column(String(20))
     id_store_type = Column(Integer, ForeignKey("store_types.id_store_type"))
-    address = Column(String(255), nullable=False)
+    address = Column(String(255), nullable=True)
     # id_brand = Column(Integer, ForeignKey("brands.id_brand"))
     id_seller = Column(Integer, ForeignKey("users.id_user"))
     id_city = Column(Integer, ForeignKey("cities.id_city"))
