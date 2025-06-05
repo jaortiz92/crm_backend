@@ -27,6 +27,7 @@ class CustomersTemplate:
         self.customers: DataFrame = pd.read_excel(
             BytesIO(self.file),
             usecols="A:N",
+            sheet_name="Plantilla",
             dtype={
                 "Telefono": str,
                 "Direccion": str,
@@ -71,5 +72,3 @@ class CustomersTemplate:
         self.customers["id_store_type"] = self.customers["id_store_type"].str.title()
         self.customers["id_city"] = self.customers["id_city"].str.upper()
         self.customers["address"] = self.customers["address"].str.upper()
-
-        self.customers.to_excel('b.xlsx')

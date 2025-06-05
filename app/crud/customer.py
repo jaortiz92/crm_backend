@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 import io
 import pandas as pd
 from pandas.core.frame import DataFrame
+from email_validator import validate_email
 
 
 # App
@@ -77,7 +78,7 @@ async def create_or_update_customers(db: Session, file: UploadFile, create: bool
                     city_name=row["id_city"]
                 ).first()
                 if city:
-                    df.loc[index, "id_city"] = city.id_city
+                    df.loc[index, "id_city"] = str(city.id_city)
                 else:
                     flag.append("City")
 
@@ -86,7 +87,7 @@ async def create_or_update_customers(db: Session, file: UploadFile, create: bool
                     username=row["id_seller"]
                 ).first()
                 if seller:
-                    df.loc[index, "id_seller"] = seller.id_user
+                    df.loc[index, "id_seller"] = str(seller.id_user)
                 else:
                     flag.append("Seller")
 
@@ -95,12 +96,19 @@ async def create_or_update_customers(db: Session, file: UploadFile, create: bool
                     store_type=row["id_store_type"]
                 ).first()
                 if store_type:
-                    df.loc[index, "id_store_type"] = store_type.id_store_type
+                    df.loc[index, "id_store_type"] = str(
+                        store_type.id_store_type
+                    )
                 else:
                     flag.append("Store_type")
 
             if len(flag) > 0:
-                raise ValueError(f"Error en llaves foráneas {flag} en {row}")
+                raise ValueError(
+                    f"Error en llaves foráneas {flag} en {row['company_name']}")
+            try:
+                validate_email(df.loc[index, "email"])
+            except:
+                raise ValueError(f"El correo '{df.loc[index, "email"]}' no es valido")
 
             # Validate if Document exist
             existing_customer = db.query(CustomerModel).filter_by(
