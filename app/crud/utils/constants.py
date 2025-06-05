@@ -5,15 +5,19 @@ class Constants:
     STATUS_OK = 'OK'
 
     FULL_ACCESS: int = 0
-    MEDIUM_ACCESS: int = 1
-    LOW_ACCESS: int = 2
-    NO_ACCESS: int = 3
+    MEDIUM_HIGH: int = 1
+    MEDIUM_ACCESS: int = 2
+    MEDIUM_LOW: int = 3
+    LOW_ACCESS: int = 4
+    NO_ACCESS: int = 5
 
     ROLES: Dict[str, List[str]] = {
         FULL_ACCESS: ['all'],
+        MEDIUM_HIGH: ['mediumHigh'],
         MEDIUM_ACCESS: ['medium'],
-        LOW_ACCESS: ['comercial'],
-        NO_ACCESS: ['ninguno'],
+        MEDIUM_LOW: ['mediumLow'],
+        LOW_ACCESS: ['low'],
+        NO_ACCESS: ['none'],
     }
 
     ALL: int = 0
@@ -32,7 +36,10 @@ class Constants:
     def get_auth_to_customers(cls, role: str) -> int:
         role_access = cls.get_role_access(role)
         auth = cls.NULL
-        if role_access in [cls.FULL_ACCESS, cls.MEDIUM_ACCESS]:
+        if role_access in [
+            cls.FULL_ACCESS, cls.MEDIUM_ACCESS,
+            cls.MEDIUM_HIGH, cls.MEDIUM_LOW
+        ]:
             auth = cls.ALL
         elif role_access in [cls.LOW_ACCESS]:
             auth = cls.FILTER

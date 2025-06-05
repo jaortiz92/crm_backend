@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
 # App
-from app.schemas import Token, User, LoginData
+from app.schemas import Token, User, LoginData, UserFull
 from app import get_db
 import app.crud as crud
 from app.core.auth import get_current_user
@@ -36,6 +36,6 @@ def login(loginData: LoginData,  response: Response, db: Session = Depends(get_d
     return token
 
 
-@token.get("/me/", response_model=User)
-def read_user_me(current_user: User = Depends(get_current_user)):
+@token.get("/me/", response_model=UserFull)
+def read_user_me(current_user: UserFull = Depends(get_current_user)):
     return current_user

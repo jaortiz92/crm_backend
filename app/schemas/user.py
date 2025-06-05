@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 # App
 from app.core import Gender
 from .city import CityFull
-from .role import RoleBase
+from .role import RoleCreate
 
 
 class UserBase(BaseModel):
@@ -85,7 +85,7 @@ class User(UserBase):
 class UserFull(User):
     id_user: int
     city: Optional[CityFull]
-    role: Optional[RoleBase]
+    role: Optional[RoleCreate]
 
 
 class UserPasswordUpdate(BaseModel):
