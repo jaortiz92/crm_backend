@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -192,6 +192,28 @@ async def update_customer_trip(id_customer_trip: int, customer_trip: CustomerTri
     if db_customer_trip is None:
         Exceptions.register_not_found("Customer Trip", id_customer_trip)
     return db_customer_trip
+
+
+@customer_trip.post("/file/customerTripsTemplate/create")
+async def create_customers(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith(('xlsx', 'xlsm')):
+        Exceptions.conflict_with_register('File Format', file.filename)
+    result = await crud.create_or_update_customer_trips(db, file, create=True)
+    if result:
+        return {"message": result}
+    else:
+        return Exceptions.conflict_with_register('File', file.filename)
+
+
+@customer_trip.post("/file/customerTripsTemplate/update")
+async def update_customers(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith(('xlsx', 'xlsm')):
+        Exceptions.conflict_with_register('File Format', file.filename)
+    result = await crud.create_or_update_customer_trips(db, file, create=False)
+    if result:
+        return {"message": result}
+    else:
+        return Exceptions.conflict_with_register('File', file.filename)
 
 
 @customer_trip.delete("/{id_customer_trip}")

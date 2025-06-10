@@ -19,3 +19,15 @@ class Constants():
         "Detalles": "relevant_details",
         "RedesSociales": "social_media",
     }
+
+    COLUMNS_CUSTOMER_TRIPS: Dict[str, str] = {
+        "id": "id_customer_trip",
+        "Documento": "id_customer",
+        "Vendedor": "id_seller",
+        "Coleccion": "id_collection",
+        "ConPresupuesto": "with_budget",
+        "PresupuestoValor": "budget",
+        "PresupuestoCantidad": "budget_quantities",
+        "ViajeCerrado": "closed",
+        "Comentario": "comment",
+    }

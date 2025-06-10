@@ -1,1 +1,2 @@
 from .customersTemplate import CustomersTemplate
+from .customerTripsTemplate import CustomerTripsTemplate
