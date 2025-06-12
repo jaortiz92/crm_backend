@@ -23,7 +23,9 @@ def get_activity_type_by_id(db: Session, id_activity_type: int) -> ActivityTypeS
 
 def get_activity_types(db: Session, skip: int = 0, limit: int = 10) -> list[ActivityTypeSchema]:
     return db.query(ActivityTypeModel).order_by(
-        ActivityTypeModel.activity_order.desc()
+        ActivityTypeModel.mandatory.desc(),
+        ActivityTypeModel.activity_order.asc(),
+        ActivityTypeModel.id_activity_type.asc()
     ).offset(skip).limit(limit).all()
 
 
