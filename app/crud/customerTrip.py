@@ -82,6 +82,11 @@ async def create_or_update_customer_trips(db: Session, file: UploadFile, create:
             # Validar llaves foráneas
             flag = []
 
+            if pd.isna(row["budget"]) or pd.isna(row["budget_quantities"]):
+                raise ValueError(
+                    f"El viaje de cliente del cliente {row["id_customer"]} debe tener valor en presupuesto y en cantidades. Si el cliente no tiene presupueto agrega 0"
+                )
+
             if not pd.isna(row["id_seller"]):
                 seller = db.query(UserModel).filter_by(
                     username=row["id_seller"]
@@ -90,6 +95,8 @@ async def create_or_update_customer_trips(db: Session, file: UploadFile, create:
                     df.loc[index, "id_seller"] = str(seller.id_user)
                 else:
                     flag.append("Seller")
+            else:
+                flag.append("Seller")
 
             if not pd.isna(row["id_collection"]):
                 collection = db.query(CollectionModel).filter_by(
@@ -100,6 +107,8 @@ async def create_or_update_customer_trips(db: Session, file: UploadFile, create:
                         collection.id_collection)
                 else:
                     flag.append("Collection")
+            else:
+                flag.append("Collection")
 
             if not pd.isna(row["id_customer"]):
                 customer = db.query(CustomerModel).filter_by(
@@ -110,6 +119,8 @@ async def create_or_update_customer_trips(db: Session, file: UploadFile, create:
                         customer.id_customer)
                 else:
                     flag.append("Customer")
+            else:
+                flag.append("Customer")
 
             if len(flag) > 0:
                 raise ValueError(
