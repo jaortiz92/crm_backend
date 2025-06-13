@@ -1,5 +1,6 @@
 import pandas as pd
 from pandas.core.frame import DataFrame
+import numpy as np
 from .constants import Constants
 from io import BytesIO
 
@@ -28,7 +29,7 @@ class CustomerTripsTemplate:
         '''
         self.customers: DataFrame = pd.read_excel(
             BytesIO(self.file),
-            usecols="A:H",
+            usecols="A:I",
             sheet_name="Plantilla",
             dtype={
                 "Documento": int,
@@ -58,6 +59,8 @@ class CustomerTripsTemplate:
                 subset="id_customer",
                 inplace=True, ignore_index=True
             )
+
+            self.customers["id_customer_trip"] = np.nan
         else:
             self.customers.dropna(
                 subset="id_customer_trip",
