@@ -7,6 +7,7 @@ from sqlalchemy.orm import configure_mappers
 from app.db import engine
 from app.models import Base
 from app.api import *
+from app.settings import settings
 
 
 Base.metadata.create_all(bind=engine)
