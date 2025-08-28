@@ -210,8 +210,6 @@ def get_activities_query(
         execution_date_ge,
         execution_date_le,
     )
-    if db_activity is None:
-        Exceptions.register_not_found("Customer", id_customer)
     return db_activity
 
 

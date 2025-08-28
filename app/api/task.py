@@ -114,8 +114,6 @@ def get_tasks_query(
         execution_date_ge,
         execution_date_le,
     )
-    if db_task is None:
-        Exceptions.register_not_found("Customer", id_customer)
     return db_task
 
 

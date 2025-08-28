@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import configure_mappers
+import os
 
 # App
 from app.db import engine
@@ -18,11 +19,7 @@ app = FastAPI(
 )
 
 # CORS
-
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+origins = settings.BACKEND_CORS_ORIGINS.split(",")
 
 app.add_middleware(
     CORSMiddleware,
