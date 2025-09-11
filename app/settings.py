@@ -14,13 +14,19 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str
     POSTGRES_PORT: int
 
-    # JWT o seguridad (ejemplo)
+    # JWT
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
     # CORS
     BACKEND_CORS_ORIGINS: str
+
+    USERNAME: str
+    CLIENT_ID: str
+    CLIENT_SECRET: str
+    TENANT_ID: str
+    FRONTEND_URL: str
 
     class Config:
         env_file = ".env"  # Lee este archivo por defecto

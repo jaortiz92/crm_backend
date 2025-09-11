@@ -4,20 +4,21 @@ from typing import Any, Dict, List
 import msal
 import requests
 import base64
+from app.settings import settings
 
 PATH = "./app/utils/emails/"
 IMG_PATH = f"{PATH}img/"
 info = open(f"{PATH}config.json")
 info = json.load(info)
 
-USERNAME = info["USERNAME"]
-CLIENT_ID = info["ClientID"]
-CLIENT_SECRET = info["Value"]
-TENANT_ID = info["TenantID"]
-AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+USERNAME = settings.USERNAME
+CLIENT_ID = settings.CLIENT_ID
+CLIENT_SECRET = settings.CLIENT_SECRET
+TENANT_ID = settings.TENANT_ID
+AUTHORITY = f"https://login.microsoftonline.com/{settings.TENANT_ID}"
 SCOPES = ["https://graph.microsoft.com/.default"]
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
-FRONTEND_URL = info["FrontendURL"]
+FRONTEND_URL = settings.FRONTEND_URL
 
 TEMPLATES = {
     "restore_password": f"{PATH}template/body_restore_password.html"
