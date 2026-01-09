@@ -8,8 +8,6 @@ from app.settings import settings
 
 PATH = "./app/utils/emails/"
 IMG_PATH = f"{PATH}img/"
-info = open(f"{PATH}config.json")
-info = json.load(info)
 
 USERNAME = settings.USERNAME
 CLIENT_ID = settings.CLIENT_ID
