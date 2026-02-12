@@ -33,7 +33,6 @@ class ProcessDetailsOrders():
             None
         '''
         self.names: DataFrame = Names(self.type_format).names
-
         if self.type_format == Constants.CHILD:
             self.details: DataFrame = DetailsChild(
                 self.file_details, self.names,
@@ -58,8 +57,8 @@ class ProcessDetailsOrders():
             None
         '''
         self.initial_report: DataFrame = self.details.copy()
-
-        self.initial_report['PRECIO'] = self.initial_report['PRECIO'].fillna(0)
+        self.initial_report['PRECIO'] = self.initial_report['PRECIO'].fillna(
+            0)
 
         final_details: DataFrame = self.initial_report.groupby(
             [

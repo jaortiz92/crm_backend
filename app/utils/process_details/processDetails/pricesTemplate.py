@@ -26,7 +26,7 @@ class PricesTemplate():
             None
         '''
         if self.type_format == Constants.CHILD:
-            usecols: str = 'I:L'
+            usecols: str = 'I:M'
         elif self.type_format == Constants.DAME:
             usecols: str = 'A:C'
 
