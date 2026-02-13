@@ -2,6 +2,7 @@
 from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
+import logging
 import io
 from pandas.core.frame import DataFrame
 
@@ -32,6 +33,10 @@ async def create_order_details(db: Session, id_order: int, type_format: str, det
         df: DataFrame = ProcessDetailsOrders(
             stream, id_order, type_format
         ).final_details
+
+        if df.empty:
+            print('Without data')
+            return False
     except Exception as e:
         print(e)
         return False
