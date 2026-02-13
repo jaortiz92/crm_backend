@@ -14,7 +14,9 @@ def get_payment_method_by_id(db: Session, id_payment_method: int) -> PaymentMeth
 
 
 def get_payment_methods(db: Session, skip: int = 0, limit: int = 10) -> list[PaymentMethodSchema]:
-    return db.query(PaymentMethodModel).offset(skip).limit(limit).all()
+    return db.query(PaymentMethodModel).order_by(
+        PaymentMethodModel.payment_method_name.asc()
+    ).offset(skip).limit(limit).all()
 
 
 def get_payments_method_by_name(db: Session, payment_method_name: str) -> list[PaymentMethodSchema]:

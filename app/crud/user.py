@@ -64,7 +64,9 @@ def get_user_by_email(db: Session, email: str) -> UserSchema:
 
 
 def get_users(db: Session, skip: int = 0, limit: int = 10) -> list[UserSchema]:
-    return db.query(UserModel).offset(skip).limit(limit).all()
+    return db.query(UserModel).order_by(
+        UserModel.first_name.asc()
+    ).offset(skip).limit(limit).all()
 
 
 def get_all_users(db: Session) -> list[UserModel]:
