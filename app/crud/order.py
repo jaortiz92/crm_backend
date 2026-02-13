@@ -10,6 +10,7 @@ from app.models.customer import Customer
 from app.models.user import User
 from app.models.paymentMethod import PaymentMethod
 import app.crud as crud
+from app.crud.utils import statusRequest
 from app.crud.utils import Constants
 
 
@@ -67,6 +68,11 @@ def get_orders_by_id_customer_trip(db: Session, id_customer_trip) -> list[OrderS
 
 
 def create_order(db: Session, order: OrderCreate) -> OrderSchema:  # | list:
+    status = statusRequest()
+    db_order = get_order_by_id(db, order.id_order)
+    if db_order:
+        status['user_already_registered'] = True
+        return status
     validation: list = validate_foreign_keys(db, order)
     if validation != Constants.STATUS_OK:
         return validation

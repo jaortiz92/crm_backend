@@ -179,6 +179,7 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     Parameters:
     - Request body parameter
         - order: OrderCreate -> A JSON object containing the following keys:
+            - id_order: int
             - id_customer_trip: int
             - id_seller: int
             - date_order: date
@@ -202,6 +203,11 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
     - delivery_date: date
     """
     db_order = crud.create_order(db, order)
+    if isinstance(db_order, dict):
+        value = 'id order {:.0f}'.format(
+            order.id_order
+        )
+        Exceptions.register_already_registered("Order", value)
     if isinstance(db_order, list):
         Exceptions.register_not_found(db_order[0], db_order[1])
     return db_order

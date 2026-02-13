@@ -54,15 +54,13 @@ class OrderBase(BaseModel):
 
 
 class OrderCreate(OrderBase):
-    pass
-
-
-class Order(OrderBase):
     id_order: int = Field(
         ...,
         gt=0
     )
 
+
+class Order(OrderCreate):
     class Config:
         from_attributes = True
 
