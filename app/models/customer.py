@@ -4,7 +4,7 @@ from datetime import date, datetime
 from sqlalchemy import (
     Column, ForeignKey,
     Integer, String,
-    Float, Boolean
+    Float, Boolean, Date
 
 )
 from sqlalchemy.orm import relationship
@@ -22,6 +22,8 @@ class Customer(Base):
     email = Column(String(100), nullable=True)
     phone = Column(String(20))
     id_store_type = Column(Integer, ForeignKey("store_types.id_store_type"))
+    date_started_buying = Column(Date)
+    id_origin_type = Column(Integer, ForeignKey("origin_types.id_origin_type"))
     address = Column(String(255), nullable=True)
     # id_brand = Column(Integer, ForeignKey("brands.id_brand"))
     id_seller = Column(Integer, ForeignKey("users.id_user"))
@@ -34,6 +36,7 @@ class Customer(Base):
     social_media = Column(String(1000))
 
     store_type = relationship("StoreType", back_populates="customers")
+    origin_type = relationship("OriginType", back_populates="customers")
     # brand = relationship("Brand", back_populates="customers")
     seller = relationship("User", back_populates="customers")
     city = relationship("City", back_populates="customers")

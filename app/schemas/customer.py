@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 # App
 from .storeType import StoreTypeBase
+from .originType import OriginTypeBase
 from .brand import BrandFull
 from .user import UserBase
 from .city import CityFull
@@ -33,6 +34,15 @@ class CustomerBaseCreate(CustomerBase):
         None,
         max_length=20,
         description='phone number (max 20 characters)'
+    )
+    id_origin_type: Optional[int] = Field(
+        ...,
+        gt=0,
+        description='ID of the origin type associated with the Customer'
+    )
+    date_started_buying: Optional[date] = Field(
+        ...,
+        description='Date on which the customer started buying'
     )
     id_store_type: Optional[int] = Field(
         ...,
@@ -106,6 +116,7 @@ class Customer(CustomerBaseCreate):
 
 class CustomerFull(Customer):
     store_type: Optional[StoreTypeBase]
+    origin_type: Optional[OriginTypeBase]
     brands: Optional[List[BrandFull]]
     seller: Optional[UserBase]
     city: Optional[CityFull]

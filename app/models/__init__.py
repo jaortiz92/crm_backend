@@ -3,6 +3,7 @@ from .city import City
 from .role import Role
 from .user import User
 from .storeType import StoreType
+from .originType import OriginType
 from .line import Line
 from .brand import Brand
 from .collection import Collection

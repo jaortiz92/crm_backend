@@ -19,6 +19,7 @@ from .rating import Rating, RatingCreate, RatingFull
 from .ratingCategory import RatingCategory, RatingCategoryCreate
 from .role import Role
 from .storeType import StoreType, StoreTypeCreate
+from .originType import OriginType, OriginTypeCreate
 from .task import Task, TaskCreate, TaskFull
 from .user import (
     User, UserCreate, UserFull, UserBase, UserPasswordReset,

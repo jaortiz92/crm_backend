@@ -11,6 +11,7 @@ from .line import line
 from .brand import brand
 from .collection import collection
 from .storeType import store_type
+from .originType import origin_type
 from .ratingCategory import rating_category
 from .rating import rating
 from .invoice import invoice
