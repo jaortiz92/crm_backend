@@ -3,8 +3,9 @@ from pandas.core.frame import DataFrame
 from .constants import Constants
 from .prices import Prices
 from .names import Names
-from .detailsChild import DetailsChild
+from .detailsKyly import DetailsKyly
 from .detailsDame import DetailsDame
+from .detailsPampili import DetailsPampili
 from io import BytesIO
 
 
@@ -16,7 +17,7 @@ class ProcessDetailsOrders():
     ) -> None:
         self.file_details: BytesIO = file_details
         self.id: int = id
-        self.type_format: str = type_format
+        self.type_format: str = type_format.upper()
         self.open_files()
         self.fit()
 
@@ -33,14 +34,18 @@ class ProcessDetailsOrders():
             None
         '''
         self.names: DataFrame = Names(self.type_format).names
-        if self.type_format == Constants.CHILD:
-            self.details: DataFrame = DetailsChild(
+        if self.type_format == Constants.KYLY:
+            self.details: DataFrame = DetailsKyly(
                 self.file_details, self.names,
                 Prices().prices
             ).details
 
         elif self.type_format == Constants.DAME:
             self.details: DataFrame = DetailsDame(
+                self.file_details, self.names
+            ).details
+        elif self.type_format == Constants.PAMPILI:
+            self.details: DataFrame = DetailsPampili(
                 self.file_details, self.names
             ).details
 

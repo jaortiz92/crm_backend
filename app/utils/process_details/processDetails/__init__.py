@@ -1,6 +1,6 @@
 from .constants import Constants
 from .utils import Utils
-from .detailsChild import DetailsChild
+from .detailsKyly import DetailsKyly
 from .detailsDame import DetailsDame
 from .prices import Prices
 from .names import Names

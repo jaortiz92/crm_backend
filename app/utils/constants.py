@@ -2,5 +2,6 @@ from typing import Dict, List
 
 
 class Constants():
-    CHILD: str = 'child'
+    KYLY: str = 'kyly'
+    PAMPILI: str = 'pampili'
     DAME: str = 'dame'

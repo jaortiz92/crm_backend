@@ -21,9 +21,9 @@ class Names():
             -------
             None
         '''
-        if Constants.CHILD == self.type_format:
+        if Constants.KYLY == self.type_format:
             self.names: DataFrame = pd.read_excel(
-                Paths.FILE_NAMES_CHILD,
+                Paths.FILE_NAMES_KYLY,
                 dtype={
                     'Producto': str,
                     'Talla': str
@@ -40,6 +40,19 @@ class Names():
 
             self.names.drop_duplicates(
                 subset=['MODELO'],
+                keep='first',
+                inplace=True
+            )
+        elif Constants.PAMPILI == self.type_format:
+            self.names: DataFrame = pd.read_excel(
+                Paths.FILE_NAMES_AND_PRICES_PAMPILI,
+                dtype={
+                    'REFERENCIA': str,
+                }
+            )
+
+            self.names.drop_duplicates(
+                subset=['REFERENCIA'],
                 keep='first',
                 inplace=True
             )

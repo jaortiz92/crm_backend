@@ -19,8 +19,8 @@ class Constants():
         'Unisex': UNISEX,
     }
 
-    CHILD: str = 'child'
-    DAME: str = 'dame'
+    CHILD: str = 'CHILD'
+    DAME: str = 'DAME'
 
     NANAI: str = 'NANAI'
     KYLY: str = 'KYLY'
@@ -32,6 +32,7 @@ class Constants():
     LE_CABESTAN: str = 'LE CABESTAN'
     TINTA_BRAND: str = 'TINTA'
     BARILOCHE: str = 'BARILOCHE'
+    PAMPILI: str = 'PAMPILI'
 
     DAME_BRANDS: List[str] = [
         BAGORAZ, KALISSON, LE_CABESTAN, TINTA_BRAND, BARILOCHE
@@ -51,6 +52,7 @@ class Constants():
         BARILOCHE: 7,
         BAGORAZ: 8,
         KALISSON: 9,
+        PAMPILI: 10,
     }
 
     COLUMNS_NAMES_DAME: List[str] = {

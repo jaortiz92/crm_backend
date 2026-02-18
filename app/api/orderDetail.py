@@ -145,7 +145,7 @@ def create_order_detail(order_detail: OrderDetailCreate, db: Session = Depends(g
 async def create_order_details(id_order: int, type_format: str, details: UploadFile = File(...), db: Session = Depends(get_db)):
     if not details.filename.endswith(('xlsx', 'xlsm')):
         Exceptions.conflict_with_register('File Format', details.filename)
-    if not type_format in [Constants.CHILD, Constants.DAME]:
+    if not type_format in [Constants.KYLY, Constants.DAME, Constants.PAMPILI]:
         Exceptions.conflict_with_register('Type format', details.filename)
     result = await crud.create_order_details(db, id_order, type_format, details)
     if result:

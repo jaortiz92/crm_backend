@@ -25,9 +25,9 @@ class PricesTemplate():
             -------
             None
         '''
-        if self.type_format == Constants.CHILD:
+        if self.type_format == Constants.KYLY:
             usecols: str = 'I:M'
-        elif self.type_format == Constants.DAME:
+        elif self.type_format in [Constants.DAME, Constants.PAMPILI]:
             usecols: str = 'A:C'
 
         self.prices: DataFrame = pd.read_excel(
@@ -55,7 +55,7 @@ class PricesTemplate():
         -------
         None
         '''
-        if self.type_format == Constants.CHILD:
+        if self.type_format == Constants.KYLY:
             self.prices = self.prices.drop_duplicates(
                 ['LLAVE'],
             ).rename(
@@ -63,7 +63,7 @@ class PricesTemplate():
             ).drop(
                 columns=['REFERENCIA', 'TALLA']
             )
-        elif self.type_format == Constants.DAME:
+        elif self.type_format in [Constants.DAME, Constants.PAMPILI]:
             self.prices = self.prices.drop_duplicates(
                 ['REFERENCIA'],
             ).drop(

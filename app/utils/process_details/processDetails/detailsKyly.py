@@ -6,7 +6,7 @@ from .pricesTemplate import PricesTemplate
 from io import BytesIO
 
 
-class DetailsChild():
+class DetailsKyly():
     def __init__(self, file: BytesIO, names: DataFrame, prices_list: DataFrame) -> None:
         self.file: str = file
         self.names: DataFrame = names
@@ -47,7 +47,7 @@ class DetailsChild():
                 i += 1
 
         self.prices: DataFrame = PricesTemplate(
-            self.file, Constants.CHILD
+            self.file, Constants.KYLY
         ).prices
 
     def clean_file(self) -> None:
