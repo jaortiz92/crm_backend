@@ -24,6 +24,7 @@ class Customer(Base):
     id_store_type = Column(Integer, ForeignKey("store_types.id_store_type"))
     date_started_buying = Column(Date)
     id_origin_type = Column(Integer, ForeignKey("origin_types.id_origin_type"))
+    id_seller_origin = Column(Integer, ForeignKey("users.id_user"))
     address = Column(String(255), nullable=True)
     # id_brand = Column(Integer, ForeignKey("brands.id_brand"))
     id_seller = Column(Integer, ForeignKey("users.id_user"))
@@ -38,7 +39,12 @@ class Customer(Base):
     store_type = relationship("StoreType", back_populates="customers")
     origin_type = relationship("OriginType", back_populates="customers")
     # brand = relationship("Brand", back_populates="customers")
-    seller = relationship("User", back_populates="customers")
+    seller = relationship(
+        "User", foreign_keys=[id_seller], back_populates="seller_customers"
+    )
+    seller_origin = relationship(
+        "User", foreign_keys=[id_seller_origin], back_populates="seller_origin_customers"
+    )
     city = relationship("City", back_populates="customers")
 
     customer_trips = relationship("CustomerTrip", back_populates="customer")

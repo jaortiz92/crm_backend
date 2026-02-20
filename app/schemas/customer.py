@@ -59,6 +59,11 @@ class CustomerBaseCreate(CustomerBase):
         gt=0,
         description='ID of the seller associated with the Customer'
     )
+    id_seller_origin: Optional[int] = Field(
+        ...,
+        gt=0,
+        description='ID of the seller origin associated with the Customer'
+    )
     stores: Optional[int] = Field(
         ...,
         gt=0,
@@ -119,6 +124,7 @@ class CustomerFull(Customer):
     origin_type: Optional[OriginTypeBase]
     brands: Optional[List[BrandFull]]
     seller: Optional[UserBase]
+    seller_origin: Optional[UserBase]
     city: Optional[CityFull]
 
 

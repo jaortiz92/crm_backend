@@ -32,7 +32,16 @@ class User(Base):
     role = relationship("Role", back_populates="users")
     city = relationship("City", back_populates="users")
 
-    customers = relationship("Customer", back_populates="seller")
+    seller_customers = relationship(
+        "Customer",
+        foreign_keys="[Customer.id_seller]",
+        back_populates="seller"
+    )
+    seller_origin_customers = relationship(
+        "Customer",
+        foreign_keys="[Customer.id_seller_origin]",
+        back_populates="seller_origin"
+    )
     user_activities = relationship(
         "Activity", foreign_keys='Activity.id_user',
         back_populates="user_activities"
