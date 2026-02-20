@@ -12,6 +12,11 @@ class OriginTypeBase(BaseModel):
         max_length=100,
         description='Origin type name (max 100 characters)'
     )
+    description: str = Field(
+        ...,
+        max_length=100,
+        description='Product description (max 100 characters)'
+    )
 
 
 class OriginTypeCreate(OriginTypeBase):

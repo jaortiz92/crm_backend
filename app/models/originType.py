@@ -13,5 +13,6 @@ class OriginType(Base):
 
     id_origin_type = Column(Integer, primary_key=True, index=True)
     origin_type = Column(String(100), unique=True, index=True)
+    description = Column(String(100), nullable=False)
 
     customers = relationship("Customer", back_populates="origin_type")
