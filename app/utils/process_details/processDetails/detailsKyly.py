@@ -83,6 +83,17 @@ class DetailsKyly():
             axis=1
         )
 
+        if not 'MARCA' in details.columns:
+            details['MARCA'] = details[
+                ['REFERENCIA']
+            ].apply(
+                self.add_brand,
+                names=['REFERENCIA',],
+                axis=1
+            )
+
+        details.to_excel('a.xlsx')
+
         details['GENERO'] = details[
             ['MARCA', 'REFERENCIA COMPLETA']
         ].apply(
@@ -157,6 +168,29 @@ class DetailsKyly():
             return x[0]
         else:
             return df_temp.iloc[0, :]['Descripción']
+
+    def add_brand(self, x, names: List[str]) -> str:
+        '''
+            return brand to reference
+
+            Parameters
+            ----------
+            x: List
+                0: Reference
+                1: Size
+
+            Returns
+            -------
+            str:
+                return name to reference
+        '''
+        df_temp: DataFrame = self.names[(
+            self.names['Producto'] == x[names[0]])]
+        if df_temp.shape[0] == 0:
+            return x[0]
+        else:
+            collection: str = df_temp.iloc[0, :]['Colección']
+            return Constants.KYLY_BRANDS[collection[0]]
 
     def add_gender(self, x, names: List[str]) -> str:
         '''

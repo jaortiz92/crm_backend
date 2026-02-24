@@ -26,7 +26,7 @@ class PricesTemplate():
             None
         '''
         if self.type_format == Constants.KYLY:
-            usecols: str = 'I:M'
+            usecols: str = 'I:N'
         elif self.type_format in [Constants.DAME, Constants.PAMPILI]:
             usecols: str = 'A:C'
 
@@ -37,7 +37,8 @@ class PricesTemplate():
         ).rename(
             columns={
                 'REFERENCIA.1': 'REFERENCIA',
-                'PRECIO.1': 'PRECIO'
+                'PRECIO.1': 'PRECIO',
+                'LLAVE.1': 'LLAVE'
             }
         ).dropna(
             subset=['REFERENCIA', 'PRECIO']

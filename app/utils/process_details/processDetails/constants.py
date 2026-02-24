@@ -42,6 +42,14 @@ class Constants():
         NANAI, KYLY, LEMON, AMORA, MILON,
     ]
 
+    KYLY_BRANDS: Dict[str, str] = {
+        'K': KYLY,
+        'M': MILON,
+        'N': NANAI,
+        'A': AMORA,
+        'L': LEMON
+    }
+
     CODE_BRANDS: Dict[str, int] = {
         KYLY: 1,
         MILON: 2,
