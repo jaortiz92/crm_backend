@@ -33,12 +33,13 @@ class PricesTemplate():
         self.prices: DataFrame = pd.read_excel(
             self.file,
             sheet_name='BASE PRECIOS',
-            usecols=usecols
+            usecols=usecols,
         ).rename(
             columns={
                 'REFERENCIA.1': 'REFERENCIA',
                 'PRECIO.1': 'PRECIO',
-                'LLAVE.1': 'LLAVE'
+                'LLAVE.1': 'LLAVE',
+                'TALLA.1': 'TALLA',
             }
         ).dropna(
             subset=['REFERENCIA', 'PRECIO']
@@ -56,6 +57,13 @@ class PricesTemplate():
         -------
         None
         '''
+        self.prices_original: DataFrame = self.prices.copy()
+        self.prices_original['REFERENCIA'] = self.prices_original['REFERENCIA'].astype(
+            str
+        )
+        self.prices_original['TALLA'] = self.prices_original['TALLA'].astype(
+            str
+        )
         if self.type_format == Constants.KYLY:
             self.prices = self.prices.drop_duplicates(
                 ['LLAVE'],

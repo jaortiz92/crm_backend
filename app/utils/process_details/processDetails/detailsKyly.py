@@ -46,9 +46,12 @@ class DetailsKyly():
             else:
                 i += 1
 
-        self.prices: DataFrame = PricesTemplate(
+        self.prices: PricesTemplate = PricesTemplate(
             self.file, Constants.KYLY
-        ).prices
+        )
+
+        self.prices_base: DataFrame = self.prices.prices
+        self.prices_original: DataFrame = self.prices.prices_original
 
     def clean_file(self) -> None:
         '''
@@ -92,8 +95,6 @@ class DetailsKyly():
                 axis=1
             )
 
-        details.to_excel('a.xlsx')
-
         details['GENERO'] = details[
             ['MARCA', 'REFERENCIA COMPLETA']
         ].apply(
@@ -119,7 +120,10 @@ class DetailsKyly():
             inplace=True
         )
 
-        details = details[~details['CANTIDAD'].isna()].reset_index(
+        details = details[
+            (~details['CANTIDAD'].isna()) &
+            (details['CANTIDAD'] != 0)
+        ].reset_index(
             drop=True
         )
 
@@ -129,23 +133,58 @@ class DetailsKyly():
 
         details = pd.merge(
             left=details,
-            right=self.prices,
+            right=self.prices_base,
             on='ref',
             how='left'
         )
 
-        details: DataFrame = pd.merge(
-            left=details,
-            right=self.prices_list[['ref', 'PRECIO LISTA']],
-            on='ref',
-            how='left'
-        )
+        if details['PRECIO'].isna().count() > 0:
+            details['TIPO TALLA'] = details['TALLA'].map(
+                Constants.KYLY_SIZES_TYPE
+            )
 
-        details['PRECIO'] = details['PRECIO'].fillna(
-            details['PRECIO LISTA']
-        )
+            self.prices_original['TIPO TALLA'] = self.prices_original['TALLA'].map(
+                Constants.KYLY_SIZES_TYPE
+            )
 
-        self.details = details.drop(columns=['PRECIO LISTA'])
+            self.prices_original.rename(
+                columns={'PRECIO': 'PRECIO ESTIMADO'},
+                inplace=True
+            )
+
+            self.prices_original = self.prices_original.groupby(
+                ['REFERENCIA', 'TIPO TALLA'], as_index=False,
+            ).agg({'PRECIO ESTIMADO': 'mean'})
+
+            details = pd.merge(
+                left=details,
+                right=self.prices_original,
+                on=['REFERENCIA', 'TIPO TALLA'],
+                how='left'
+            )
+
+            details['PRECIO'] = details['PRECIO'].fillna(
+                details['PRECIO ESTIMADO']
+            )
+
+        if details['PRECIO'].isna().count() > 0:
+            details: DataFrame = pd.merge(
+                left=details,
+                right=self.prices_list[['ref', 'PRECIO LISTA']],
+                on='ref',
+                how='left'
+            )
+
+            details['PRECIO'] = details['PRECIO'].fillna(
+                details['PRECIO LISTA']
+            )
+
+        self.details = details.drop(
+            columns=[
+                'PRECIO LISTA', 'TIPO TALLA', 'PRECIO ESTIMADO'
+            ],
+            errors='ignore'
+        )
 
     def add_name(self, x, names: List[str]) -> str:
         '''
