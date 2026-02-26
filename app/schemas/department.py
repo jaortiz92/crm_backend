@@ -5,21 +5,32 @@ from typing import Optional, List, Dict
 # Pydantic
 from pydantic import BaseModel, Field
 
+
 class DepartmentBase(BaseModel):
-    department_code: str = Field(..., 
+    department_code: str = Field(
+        ...,
         max_length=2,
         description='Department code (max 2 characters)'
     )
-    department_name: str = Field(...,
+    department_name: str = Field(
+        ...,
         max_length=80,
         description='Department name (max 80 characters)'
     )
+    zone: str = Field(
+        ...,
+        max_length=20,
+        description='Zone (max 20 characters)'
+    )
+
 
 class DepartmentCreate(DepartmentBase):
     pass
 
+
 class Department(DepartmentBase):
-    id_department: int = Field(...,
+    id_department: int = Field(
+        ...,
         gt=0
     )
 

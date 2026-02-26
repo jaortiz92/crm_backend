@@ -14,5 +14,6 @@ class Department(Base):
     id_department = Column(Integer, primary_key=True, index=True)
     department_code = Column(String(2), unique=True, index=True)
     department_name = Column(String(80))
+    zone = Column(String(20))
 
     cities = relationship("City", back_populates="department")
