@@ -34,6 +34,10 @@ class PricesTemplate():
             self.file,
             sheet_name='BASE PRECIOS',
             usecols=usecols,
+            dtype={
+                'REFERENCIA.1': str,
+                'REFERENCIA': str,
+            }
         ).rename(
             columns={
                 'REFERENCIA.1': 'REFERENCIA',
@@ -61,10 +65,10 @@ class PricesTemplate():
         self.prices_original['REFERENCIA'] = self.prices_original['REFERENCIA'].astype(
             str
         )
-        self.prices_original['TALLA'] = self.prices_original['TALLA'].astype(
-            str
-        )
         if self.type_format == Constants.KYLY:
+            self.prices_original['TALLA'] = self.prices_original['TALLA'].astype(
+                str
+            )
             self.prices = self.prices.drop_duplicates(
                 ['LLAVE'],
             ).rename(

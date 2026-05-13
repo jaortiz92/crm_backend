@@ -25,7 +25,7 @@ class DetailsDame():
             -------
             None
         '''
-        usecols: List[str] = ['A:W']
+        usecols: List[str] = ['A:I', 'A:W']
         flag = False
         i = 0
         while not flag:
@@ -108,6 +108,9 @@ class DetailsDame():
             value_name='CANTIDAD',
             var_name='TALLA',
             ignore_index=True
+        ).dropna(
+            subset=['CANTIDAD'],
+            ignore_index=True
         )
 
         details['CANTIDAD'] = pd.to_numeric(
@@ -119,10 +122,8 @@ class DetailsDame():
             inplace=True
         )
 
-        self.details: DataFrame = details[~details['CANTIDAD'].isna()].reset_index(
-            drop=True
-        )
-
-        self.details['MARCA'] = self.details['MARCA'].map(
+        details['MARCA'] = details['MARCA'].map(
             Constants.CODE_BRANDS
         )
+
+        self.details: DataFrame = details.copy()

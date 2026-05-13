@@ -33,9 +33,10 @@ class Constants():
     TINTA_BRAND: str = 'TINTA'
     BARILOCHE: str = 'BARILOCHE'
     PAMPILI: str = 'PAMPILI'
+    PERSSAM: str = 'PERSSAM'
 
     DAME_BRANDS: List[str] = [
-        BAGORAZ, KALISSON, LE_CABESTAN, TINTA_BRAND, BARILOCHE
+        BAGORAZ, KALISSON, LE_CABESTAN, TINTA_BRAND, BARILOCHE, PERSSAM
     ]
 
     CHILD_BRANDS: List[str] = [
@@ -61,6 +62,7 @@ class Constants():
         BAGORAZ: 8,
         KALISSON: 9,
         PAMPILI: 10,
+        PERSSAM: 11,
     }
 
     COLUMNS_NAMES_DAME: List[str] = {
