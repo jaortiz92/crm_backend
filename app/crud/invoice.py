@@ -6,6 +6,7 @@ from sqlalchemy import func
 
 # App
 from app.models.invoice import Invoice as InvoiceModel
+from app.models.invoiceDetail import InvoiceDetail as InvoiceDetailModel
 from app.models.order import Order as OrderModel
 from app.models.customerTrip import CustomerTrip as CustomerTripModel
 from app.schemas.invoice import InvoiceCreate
@@ -92,7 +93,7 @@ def get_invoices_by_customer(db: Session, id_customer: int) -> list[InvoiceModel
 def get_invoices_by_order(db: Session, id_order: int) -> list[InvoiceModel]:
     return db.query(InvoiceModel).filter(
         InvoiceModel.id_order == id_order
-    )
+    ).all()
 
 
 def get_invoices_query(
@@ -130,11 +131,28 @@ def update_invoice(db: Session, id_invoice: int, invoice: InvoiceCreate) -> Invo
     return db_invoice
 
 
-def delete_invoice(db: Session, id_invoice: int):
+def delete_invoice(db: Session, id_invoice: int,  with_details: bool):
     db_invoice = db.query(InvoiceModel).filter(
         InvoiceModel.id_invoice == id_invoice).first()
+    db_shipments = crud.get_shipment_by_id_invoice(
+        db, id_invoice
+    )
+
+    db_credits = crud.get_credit_by_id_invoice(
+        db, id_invoice
+    )
+
+    db_invoice_details = crud.get_invoice_detail_by_id_invoice(
+        db, id_invoice
+    )
     if db_invoice:
-        db.delete(db_invoice)
-        db.commit()
-        return True
+        if len(db_shipments) == 0 and len(db_credits) == 0:
+            if len(db_invoice_details) == 0 or with_details:
+                if len(db_invoice_details) > 0:
+                    db.query(InvoiceDetailModel).filter(
+                        InvoiceDetailModel.id_invoice == id_invoice
+                    ).delete(synchronize_session=False)
+                db.delete(db_invoice)
+                db.commit()
+                return True
     return False

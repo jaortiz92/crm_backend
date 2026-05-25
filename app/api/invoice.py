@@ -1,6 +1,6 @@
 # Python
 from datetime import date
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -283,7 +283,12 @@ def update_invoice(id_invoice: int, invoice: InvoiceCreate, db: Session = Depend
 
 
 @invoice.delete("/{id_invoice}")
-def delete_invoice(id_invoice: int, db: Session = Depends(get_db)):
+def delete_invoice(
+        id_invoice: int,
+        with_details: bool = Query(
+            False, description='Delete with the values in order details'),
+    db: Session = Depends(get_db)
+):
     """
     Delete an Invoice
 
@@ -295,7 +300,7 @@ def delete_invoice(id_invoice: int, db: Session = Depends(get_db)):
 
     Returns a message confirming the deletion.
     """
-    success = crud.delete_invoice(db, id_invoice)
+    success = crud.delete_invoice(db, id_invoice, with_details)
     if not success:
-        Exceptions.register_not_found("Customes", id_invoice)
+        Exceptions.register_can_not_be_deleted("Customes", id_invoice)
     return {"message": "Invoice deleted successfully"}

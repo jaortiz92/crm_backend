@@ -1,5 +1,5 @@
 # Python
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -256,7 +256,12 @@ def update_order(id_order: int, order: OrderCreate, db: Session = Depends(get_db
 
 
 @order.delete("/{id_order}")
-def delete_order(id_order: int, db: Session = Depends(get_db)):
+def delete_order(
+    id_order: int,
+    with_details: bool = Query(
+        False, description='Delete with the values in order details'),
+    db: Session = Depends(get_db)
+):
     """
     Delete an Order
 
@@ -268,7 +273,7 @@ def delete_order(id_order: int, db: Session = Depends(get_db)):
 
     Returns a message confirming the deletion.
     """
-    success = crud.delete_order(db, id_order)
+    success = crud.delete_order(db, id_order, with_details)
     if not success:
-        Exceptions.register_not_found("Order", id_order)
+        Exceptions.register_can_not_be_deleted("Order", id_order)
     return {"message": "Order deleted successfully"}

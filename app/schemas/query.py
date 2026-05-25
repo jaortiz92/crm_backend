@@ -1,5 +1,6 @@
 # Pydantic
 from pydantic import BaseModel
+from typing import Optional
 
 
 class Summary(BaseModel):
@@ -37,3 +38,17 @@ class CustomerSummary(BasicCollection):
 class CustomerTripSummary(Summary):
     id_customer_trip: int
     closed: bool
+
+
+class CustomerValidationResult(BaseModel):
+    document: float
+    exists: bool
+    company_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    active: Optional[bool] = None
+    seller: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+

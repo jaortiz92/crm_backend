@@ -1,14 +1,16 @@
 # Python
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import CustomerSummary, CustomerTripSummary, CollectionSummary, User
+from app.schemas import CustomerSummary, CustomerTripSummary, CollectionSummary, User, CustomerValidationResult
+
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
 from app.core.auth import get_current_user
+
 
 query = APIRouter(
     prefix="/query",
@@ -52,3 +54,25 @@ def get_collection_summary(
         db, current_user.id_user, access_type
     )
     return db_rating
+
+
+@query.post("/validate_customers", response_model=List[CustomerValidationResult])
+async def validate_customers(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Validate if a list of customer documents in an Excel file exists in the database.
+    """
+    if not file.filename.endswith(('xlsx', 'xlsm')):
+        Exceptions.conflict_with_register('File Format', file.filename)
+
+    try:
+        results = await crud.validate_customers_from_file(db, file)
+        return results
+    except Exception as e:
+        print(f"Error validating customers file: {e}")
+        Exceptions.conflict_with_register('File Parsing', str(e))
+
+

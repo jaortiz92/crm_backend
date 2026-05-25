@@ -168,10 +168,14 @@ def delete_customer_trip(db: Session, id_customer_trip: int) -> bool:
     db_activities = crud.get_activities_by_id_customer_trip(
         db, id_customer_trip
     )
-    for db_activity in db_activities:
-        crud.delete_activity(db, db_activity.id_activity)
-    if db_customer_trip:
-        db.delete(db_customer_trip)
-        db.commit()
-        return True
+    db_orders = crud.get_orders_by_id_customer_trip(
+        db, id_customer_trip
+    )
+    if len(db_orders) == 0:
+        for db_activity in db_activities:
+            crud.delete_activity(db, db_activity.id_activity)
+        if db_customer_trip:
+            db.delete(db_customer_trip)
+            db.commit()
+            return True
     return False

@@ -55,6 +55,12 @@ def get_order_detail_by_id(db: Session, id_order_detail: int) -> OrderDetailSche
     return result
 
 
+def get_order_detail_by_id_order(db: Session, id_order: int) -> list[OrderDetailSchema]:
+    result = db.query(OrderDetailModel).filter(
+        OrderDetailModel.id_order == id_order).all()
+    return result
+
+
 def get_order_details(db: Session, skip: int = 0, limit: int = 10) -> list[OrderDetailSchema]:
     return db.query(OrderDetailModel).offset(skip).limit(limit).all()
 

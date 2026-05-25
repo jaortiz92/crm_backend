@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 # App
 from app.models.order import Order as OrderModel
+from app.models.orderDetail import OrderDetail as OrderDetailModel
 from app.schemas.order import OrderCreate, Order as OrderSchema
 from app.models.customerTrip import CustomerTrip as CustomerTripModel
 from app.models.customer import Customer
@@ -100,11 +101,25 @@ def update_order(db: Session, id_order: int, order: OrderCreate) -> OrderSchema:
     return db_order
 
 
-def delete_order(db: Session, id_order: int) -> bool:
+def delete_order(db: Session, id_order: int,  with_details: bool) -> bool:
     db_order = db.query(OrderModel).filter(
         OrderModel.id_order == id_order).first()
+    print(1)
+    db_invoices = crud.get_invoices_by_order(
+        db, id_order
+    )
+    print(db_invoices)
+    db_order_details = crud.get_order_detail_by_id_order(
+        db, id_order
+    )
     if db_order:
-        db.delete(db_order)
-        db.commit()
-        return True
+        if len(db_invoices) == 0:
+            if len(db_order_details) == 0 or with_details:
+                if len(db_order_details) > 0:
+                    db.query(OrderDetailModel).filter(
+                        OrderDetailModel.id_order == id_order
+                    ).delete(synchronize_session=False)
+                db.delete(db_order)
+                db.commit()
+                return True
     return False

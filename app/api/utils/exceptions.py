@@ -27,3 +27,9 @@ class Exceptions:
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    def register_can_not_be_deleted(register: str, value: str) -> None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{register} with reference '{value}' can not be deleted"
+        )

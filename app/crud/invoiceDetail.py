@@ -48,6 +48,12 @@ def get_invoice_detail_by_id(db: Session, id_invoice_detail: int) -> InvoiceDeta
     return result
 
 
+def get_invoice_detail_by_id_invoice(db: Session, id_invoice: int) -> list[InvoiceDetailSchema]:
+    result = db.query(InvoiceDetailModel).filter(
+        InvoiceDetailModel.id_invoice == id_invoice).all()
+    return result
+
+
 def get_invoice_details(db: Session, skip: int = 0, limit: int = 10) -> list[InvoiceDetailSchema]:
     return db.query(InvoiceDetailModel).offset(skip).limit(limit).all()
 

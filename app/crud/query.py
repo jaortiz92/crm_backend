@@ -1,6 +1,10 @@
 # Python
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
+from fastapi import UploadFile
+import io
+import pandas as pd
+
 
 # App
 from app.models.query import (
@@ -8,8 +12,10 @@ from app.models.query import (
     CustomerTripSummary as CustomerTripSummaryModel,
     CollectionSummary as CollectionSummaryModel
 )
+from app.models import Customer as CustomerModel
 import app.crud as crud
 from app.crud.utils import Constants
+
 
 
 def get_customer_summary(db: Session, id_customer: int) -> list[CustomerSummaryModel]:
@@ -80,3 +86,80 @@ def get_collection_summary(db: Session,  id_user: int, access_type: str) -> list
         result = db.query(CollectionSummaryModel).all()
 
     return result
+
+
+def validate_customer_documents(db: Session, documents: list[float]) -> list[CustomerModel]:
+    return db.query(CustomerModel).filter(
+        CustomerModel.document.in_(documents)
+    ).all()
+
+
+async def validate_customers_from_file(db: Session, file: UploadFile) -> list[dict]:
+    content = await file.read()
+    df = pd.read_excel(io.BytesIO(content))
+
+    if df.empty:
+        return []
+
+    # Flexible column search for "Documento", "document", "nit", "id", or default to the first column
+    doc_col = None
+    for col in df.columns:
+        if str(col).strip().lower() in ["documento", "document", "doc", "nit", "id", "identificacion"]:
+            doc_col = col
+            break
+
+    if doc_col is None:
+        doc_col = df.columns[0]
+
+    # Get unique document values and clean them
+    raw_documents = df[doc_col].dropna().unique()
+
+    cleaned_docs = []
+    doc_map = {}  # Keep mapping of cleaned float to original representation
+
+    for doc in raw_documents:
+        try:
+            float_val = float(doc)
+            cleaned_docs.append(float_val)
+            doc_map[float_val] = doc
+        except (ValueError, TypeError):
+            # Skip rows that cannot be converted to floats
+            pass
+
+    if not cleaned_docs:
+        return []
+
+    # Query database in bulk
+    existing_customers = validate_customer_documents(db, cleaned_docs)
+
+    # Map by document
+    customer_map = {cust.document: cust for cust in existing_customers}
+
+    results = []
+    for float_doc in cleaned_docs:
+        cust = customer_map.get(float_doc)
+        if cust:
+            seller_name = f"{cust.seller.first_name} {cust.seller.last_name}" if cust.seller else None
+            results.append({
+                "document": float_doc,
+                "exists": True,
+                "company_name": cust.company_name,
+                "email": cust.email,
+                "phone": cust.phone,
+                "active": cust.active,
+                "seller": seller_name
+            })
+        else:
+            results.append({
+                "document": float_doc,
+                "exists": False,
+                "company_name": None,
+                "email": None,
+                "phone": None,
+                "active": None,
+                "seller": None
+            })
+
+    return results
+
+

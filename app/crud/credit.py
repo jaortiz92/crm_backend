@@ -21,6 +21,12 @@ def get_credit_by_id(db: Session, id_credit: int) -> CreditSchema:
     return result
 
 
+def get_credit_by_id_invoice(db: Session, id_invoice: int) -> list[CreditSchema]:
+    result = db.query(CreditModel).filter(
+        CreditModel.id_invoice == id_invoice).all()
+    return result
+
+
 def get_credits(db: Session, skip: int = 0, limit: int = 10) -> list[CreditSchema]:
     return db.query(CreditModel).offset(skip).limit(limit).all()
 

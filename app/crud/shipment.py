@@ -21,6 +21,12 @@ def get_shipment_by_id(db: Session, id_shipment: int) -> ShipmentSchema:
     return result
 
 
+def get_shipment_by_id_invoice(db: Session, id_invoice: int) -> list[ShipmentSchema]:
+    result = db.query(ShipmentModel).filter(
+        ShipmentModel.id_invoice == id_invoice).all()
+    return result
+
+
 def get_shipments(db: Session, skip: int = 0, limit: int = 10) -> list[ShipmentSchema]:
     return db.query(ShipmentModel).offset(skip).limit(limit).all()
 

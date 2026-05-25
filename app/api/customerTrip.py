@@ -231,5 +231,6 @@ async def delete_customer_trip(id_customer_trip: int, db: Session = Depends(get_
     """
     success = crud.delete_customer_trip(db, id_customer_trip)
     if not success:
-        Exceptions.register_not_found("Customer Trip", id_customer_trip)
+        Exceptions.register_can_not_be_deleted(
+            "Customer Trip", id_customer_trip)
     return {"message": "Customer Trip deleted successfully"}
