@@ -30,6 +30,7 @@ class CustomerSummary(Base, FinancialSummaryMixin):
     quarter = Column(Integer)
     id_collection = Column(Integer)
     id_customer = Column(Integer)
+    line_name = Column(Text)
     customer_trips = Column(Integer)
 
 
@@ -48,5 +49,6 @@ class CollectionSummary(Base, FinancialSummaryMixin):
     short_collection_name = Column(Text)
     year = Column(Integer)
     quarter = Column(Integer)
+    line_name = Column(Text)
     customers = Column(Integer)
     customer_trips = Column(Integer)

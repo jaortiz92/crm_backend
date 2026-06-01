@@ -24,6 +24,7 @@ class BasicCollection(Summary):
     year: int
     quarter: int
     customer_trips: int
+    line_name: str
 
 
 class CollectionSummary(BasicCollection):
@@ -51,4 +52,3 @@ class CustomerValidationResult(BaseModel):
 
     class Config:
         from_attributes = True
-
