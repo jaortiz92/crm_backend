@@ -1,6 +1,6 @@
 # Python
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, and_, or_
 from fastapi import UploadFile
 import io
 import pandas as pd
@@ -13,9 +13,14 @@ from app.models.query import (
     CollectionSummary as CollectionSummaryModel
 )
 from app.models import Customer as CustomerModel
+from app.models.order import Order as OrderModel
+from app.models.customerTrip import CustomerTrip as CustomerTripModel
+from app.models.user import User as UserModel
+from app.models.collection import Collection as CollectionModel
+from app.models.invoice import Invoice as InvoiceModel
+from app.models.line import Line as LineModel
 import app.crud as crud
 from app.crud.utils import Constants
-
 
 
 def get_customer_summary(db: Session, id_customer: int) -> list[CustomerSummaryModel]:
@@ -163,3 +168,57 @@ async def validate_customers_from_file(db: Session, file: UploadFile) -> list[di
     return results
 
 
+def get_orders_without_invoices(closed: bool, db: Session, id_user: int, access_type: str) -> list:
+    auth = Constants.get_auth_to_customers(access_type)
+
+    query = db.query(
+        OrderModel.id_order,
+        OrderModel.date_order,
+        OrderModel.delivery_date,
+        OrderModel.total_quantities,
+        OrderModel.total_with_tax,
+        CustomerModel.company_name,
+        (UserModel.first_name + " " + UserModel.last_name).label("seller_name"),
+        CollectionModel.collection_name,
+        LineModel.line_name,
+        OrderModel.id_customer_trip
+    ).select_from(OrderModel)\
+     .join(CustomerTripModel, OrderModel.id_customer_trip == CustomerTripModel.id_customer_trip)\
+     .join(CustomerModel, CustomerTripModel.id_customer == CustomerModel.id_customer)\
+     .join(UserModel, OrderModel.id_seller == UserModel.id_user)\
+     .join(CollectionModel, CustomerTripModel.id_collection == CollectionModel.id_collection)\
+     .join(LineModel, CollectionModel.id_line == LineModel.id_line)\
+     .outerjoin(InvoiceModel, OrderModel.id_order == InvoiceModel.id_order)\
+     .filter(
+         InvoiceModel.id_invoice == None,
+         CustomerTripModel.closed == closed
+    )
+
+    if auth == Constants.FILTER:
+        id_customers = crud.get_id_customers_by_seller(db, id_user)
+        query = query.filter(
+            or_(
+                CustomerTripModel.id_customer.in_(id_customers),
+                CustomerTripModel.id_seller == id_user,
+                OrderModel.id_seller == id_user
+            )
+        )
+
+    query = query.order_by(OrderModel.date_order.desc())
+    results = query.all()
+
+    return [
+        {
+            "id_order": r.id_order,
+            "date_order": r.date_order,
+            "delivery_date": r.delivery_date,
+            "total_quantities": r.total_quantities,
+            "total_with_tax": r.total_with_tax,
+            "company_name": r.company_name,
+            "seller_name": r.seller_name,
+            "collection_name": r.collection_name,
+            "line_name": r.line_name,
+            "id_customer_trip": r.id_customer_trip
+        }
+        for r in results
+    ]

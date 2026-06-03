@@ -1,6 +1,7 @@
 # Pydantic
 from pydantic import BaseModel
 from typing import Optional
+from datetime import date
 
 
 class Summary(BaseModel):
@@ -49,6 +50,22 @@ class CustomerValidationResult(BaseModel):
     phone: Optional[str] = None
     active: Optional[bool] = None
     seller: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class OrderWithoutInvoice(BaseModel):
+    id_order: int
+    date_order: date
+    delivery_date: date
+    total_quantities: int
+    total_with_tax: float
+    company_name: str
+    seller_name: str
+    collection_name: str
+    line_name: str
+    id_customer_trip: int
 
     class Config:
         from_attributes = True

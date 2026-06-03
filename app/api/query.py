@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import CustomerSummary, CustomerTripSummary, CollectionSummary, User, CustomerValidationResult
+from app.schemas import CustomerSummary, CustomerTripSummary, CollectionSummary, User, CustomerValidationResult, OrderWithoutInvoice
 
 from app import get_db
 import app.crud as crud
@@ -76,3 +76,14 @@ async def validate_customers(
         Exceptions.conflict_with_register('File Parsing', str(e))
 
 
+@query.get("/orders_without_invoices/{closed}", response_model=List[OrderWithoutInvoice])
+def get_orders_without_invoices(
+    closed: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
+    """
+    Get orders that do not have any linked invoices and belong to active/open customer trips.
+    """
+    return crud.get_orders_without_invoices(closed, db, current_user.id_user, access_type)
