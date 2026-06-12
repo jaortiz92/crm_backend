@@ -25,25 +25,25 @@ class DetailsDame():
             -------
             None
         '''
-        usecols: List[str] = ['A:I', 'A:W']
-        flag = False
-        i = 0
-        while not flag:
-            self.details: DataFrame = pd.read_excel(
-                self.file,
-                sheet_name=Constants.SHEET_TO_JOB,
-                header=5,
-                usecols=usecols[i],
-                dtype={
-                    'REFERENCIA': str,
-                    'COLOR': str,
-                    'TOTAL': str
-                }
+        target_col: str = 'TOTAL'
+        df: DataFrame = pd.read_excel(
+            self.file,
+            sheet_name=Constants.SHEET_TO_JOB,
+            header=5,
+            dtype={
+                'REFERENCIA': str,
+                'COLOR': str,
+                'TOTAL': str
+            }
+        )
+
+        if target_col not in df.columns:
+            raise ValueError(
+                f"La columna '{target_col}' no existe en el archivo."
             )
-            if 'TOTAL' in self.details.columns:
-                flag = True
-            else:
-                i += 1
+
+        target_idx = df.columns.get_loc(target_col)
+        self.details: DataFrame = df.iloc[:, :target_idx + 1]
 
         self.prices: DataFrame = PricesTemplate(
             self.file, Constants.DAME

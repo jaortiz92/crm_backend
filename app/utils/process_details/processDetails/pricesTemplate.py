@@ -80,5 +80,6 @@ class PricesTemplate():
             self.prices = self.prices.drop_duplicates(
                 ['REFERENCIA'],
             ).drop(
-                columns=['COLOR']
+                columns=['COLOR', 'TALLAS'],
+                errors='ignore'
             )
