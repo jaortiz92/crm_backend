@@ -14,10 +14,12 @@ from app.models.query import (
 )
 from app.models import Customer as CustomerModel
 from app.models.order import Order as OrderModel
+from app.models.orderDetail import OrderDetail as OrderDetailModel
 from app.models.customerTrip import CustomerTrip as CustomerTripModel
 from app.models.user import User as UserModel
 from app.models.collection import Collection as CollectionModel
 from app.models.invoice import Invoice as InvoiceModel
+from app.models.invoiceDetail import InvoiceDetail as InvoiceDetailModel
 from app.models.line import Line as LineModel
 import app.crud as crud
 from app.crud.utils import Constants
@@ -192,7 +194,7 @@ def get_orders_without_invoices(closed: bool, db: Session, id_user: int, access_
      .filter(
          InvoiceModel.id_invoice == None,
          CustomerTripModel.closed == closed
-    )
+     )
 
     if auth == Constants.FILTER:
         id_customers = crud.get_id_customers_by_seller(db, id_user)
@@ -222,3 +224,115 @@ def get_orders_without_invoices(closed: bool, db: Session, id_user: int, access_
         }
         for r in results
     ]
+
+
+def get_orders_without_details(db: Session, id_user: int, access_type: str) -> list:
+    auth = Constants.get_auth_to_customers(access_type)
+
+    query = db.query(
+        OrderModel.id_order,
+        OrderModel.date_order,
+        OrderModel.delivery_date,
+        OrderModel.total_quantities,
+        OrderModel.total_with_tax,
+        CustomerModel.company_name,
+        (UserModel.first_name + " " + UserModel.last_name).label("seller_name"),
+        CollectionModel.collection_name,
+        LineModel.line_name,
+        OrderModel.id_customer_trip
+    ).select_from(OrderModel)\
+     .join(CustomerTripModel, OrderModel.id_customer_trip == CustomerTripModel.id_customer_trip)\
+     .join(CustomerModel, CustomerTripModel.id_customer == CustomerModel.id_customer)\
+     .join(UserModel, OrderModel.id_seller == UserModel.id_user)\
+     .join(CollectionModel, CustomerTripModel.id_collection == CollectionModel.id_collection)\
+     .join(LineModel, CollectionModel.id_line == LineModel.id_line)\
+     .outerjoin(OrderDetailModel, OrderModel.id_order == OrderDetailModel.id_order)\
+     .filter(
+         OrderDetailModel.id_order_detail == None
+     )
+
+    if auth == Constants.FILTER:
+        id_customers = crud.get_id_customers_by_seller(db, id_user)
+        query = query.filter(
+            or_(
+                CustomerTripModel.id_customer.in_(id_customers),
+                CustomerTripModel.id_seller == id_user,
+                OrderModel.id_seller == id_user
+            )
+        )
+
+    query = query.order_by(OrderModel.date_order.desc())
+    results = query.all()
+
+    return [
+        {
+            "id_order": r.id_order,
+            "date_order": r.date_order,
+            "delivery_date": r.delivery_date,
+            "total_quantities": r.total_quantities,
+            "total_with_tax": r.total_with_tax,
+            "company_name": r.company_name,
+            "seller_name": r.seller_name,
+            "collection_name": r.collection_name,
+            "line_name": r.line_name,
+            "id_customer_trip": r.id_customer_trip
+        }
+        for r in results
+    ]
+
+
+def get_invoices_without_details(db: Session, id_user: int, access_type: str) -> list:
+    auth = Constants.get_auth_to_customers(access_type)
+
+    query = db.query(
+        InvoiceModel.id_invoice,
+        InvoiceModel.invoice_number,
+        InvoiceModel.invoice_date,
+        InvoiceModel.total_quantities,
+        InvoiceModel.total_with_tax,
+        CustomerModel.company_name,
+        (UserModel.first_name + " " + UserModel.last_name).label("seller_name"),
+        CollectionModel.collection_name,
+        LineModel.line_name,
+        InvoiceModel.id_order
+    ).select_from(InvoiceModel)\
+     .join(OrderModel, InvoiceModel.id_order == OrderModel.id_order)\
+     .join(CustomerTripModel, OrderModel.id_customer_trip == CustomerTripModel.id_customer_trip)\
+     .join(CustomerModel, CustomerTripModel.id_customer == CustomerModel.id_customer)\
+     .join(UserModel, OrderModel.id_seller == UserModel.id_user)\
+     .join(CollectionModel, CustomerTripModel.id_collection == CollectionModel.id_collection)\
+     .join(LineModel, CollectionModel.id_line == LineModel.id_line)\
+     .outerjoin(InvoiceDetailModel, InvoiceModel.id_invoice == InvoiceDetailModel.id_invoice)\
+     .filter(
+         InvoiceDetailModel.id_invoice_detail == None
+     )
+
+    if auth == Constants.FILTER:
+        id_customers = crud.get_id_customers_by_seller(db, id_user)
+        query = query.filter(
+            or_(
+                CustomerTripModel.id_customer.in_(id_customers),
+                CustomerTripModel.id_seller == id_user,
+                OrderModel.id_seller == id_user
+            )
+        )
+
+    query = query.order_by(InvoiceModel.invoice_date.desc())
+    results = query.all()
+
+    return [
+        {
+            "id_invoice": r.id_invoice,
+            "invoice_number": r.invoice_number,
+            "invoice_date": r.invoice_date,
+            "total_quantities": r.total_quantities,
+            "total_with_tax": r.total_with_tax,
+            "company_name": r.company_name,
+            "seller_name": r.seller_name,
+            "collection_name": r.collection_name,
+            "line_name": r.line_name,
+            "id_order": r.id_order
+        }
+        for r in results
+    ]
+

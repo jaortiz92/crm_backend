@@ -69,3 +69,19 @@ class OrderWithoutInvoice(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class InvoiceWithoutDetail(BaseModel):
+    id_invoice: int
+    invoice_number: str
+    invoice_date: date
+    total_quantities: float
+    total_with_tax: float
+    company_name: str
+    seller_name: str
+    collection_name: str
+    line_name: str
+    id_order: int
+
+    class Config:
+        from_attributes = True
