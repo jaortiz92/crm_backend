@@ -151,7 +151,23 @@ async def create_invoice_details(id_invoice: int, details: UploadFile = File(...
         return Exceptions.conflict_with_register('File', details.filename)
 
 
+@invoice_detail.post("/bulk_file")
+async def create_bulk_invoice_details(details: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not details.filename.endswith(('xlsx', 'xlsm')):
+        Exceptions.conflict_with_register('File Format', details.filename)
+    
+    result = await crud.create_bulk_invoice_details(db, details)
+    if "error" in result and result["error"]:
+        return Exceptions.conflict_with_register('File Content', result["error"])
+    
+    return {
+        "message": "Bulk processing completed",
+        "summary": result
+    }
+
+
 @invoice_detail.put("/{id_invoice_detail}", response_model=InvoiceDetail)
+
 def update_invoice_detail(id_invoice_detail: int, invoice_detail: InvoiceDetailCreate, db: Session = Depends(get_db)):
     """
     Update an InvoiceDetail

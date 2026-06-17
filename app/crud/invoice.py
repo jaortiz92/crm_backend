@@ -32,6 +32,16 @@ def create_invoice(db: Session, invoice: InvoiceCreate) -> InvoiceModel:
         return status
 
 
+def get_invoices_by_number(db: Session, invoice_number: str) -> list[InvoiceModel]:
+    return db.query(InvoiceModel).filter(
+        InvoiceModel.invoice_number == invoice_number).all()
+
+
+def get_invoice_by_number(db: Session, invoice_number: str) -> InvoiceModel:
+    return db.query(InvoiceModel).filter(
+        InvoiceModel.invoice_number == invoice_number).first()
+
+
 def get_invoice_by_id(db: Session, id_invoice: int) -> InvoiceModel:
     return db.query(InvoiceModel).filter(
         InvoiceModel.id_invoice == id_invoice).first()

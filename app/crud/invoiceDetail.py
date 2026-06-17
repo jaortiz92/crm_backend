@@ -10,6 +10,10 @@ from app.models.invoiceDetail import InvoiceDetail as InvoiceDetailModel
 from app.models.brand import Brand as BrandModel
 from app.schemas.invoiceDetail import InvoiceDetailCreate, InvoiceDetail as InvoiceDetailSchema
 from app.utils.process_details import ProcessDetailsInvoice
+from app.utils.process_details.processDetails.detailsInvoice import DetailsInvoice
+from app.utils.process_details.processDetails.constants import Constants
+from app.crud import invoice as invoice_crud
+
 
 
 def create_invoice_detail(db: Session, invoice_detail: InvoiceDetailCreate) -> InvoiceDetailSchema:
@@ -42,7 +46,75 @@ async def create_invoice_details(db: Session, id_invoice: int, details: UploadFi
     return True
 
 
+async def create_bulk_invoice_details(db: Session, details: UploadFile) -> dict:
+    stream = io.BytesIO()
+    content = await details.read()
+    stream.write(content)
+
+    try:
+        # Use DetailsInvoice to get the cleaned base dataframe
+        base_df = DetailsInvoice(stream).details
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return {"success": [], "failed": [], "manual_load": [], "error": str(e)}
+
+    if 'Documento' not in base_df.columns:
+        return {"success": [], "failed": [], "manual_load": [], "error": "Column 'Documento' not found in file"}
+
+    unique_docs = base_df['Documento'].unique()
+    success = []
+    failed = []
+    manual_load = []
+
+    for doc in unique_docs:
+        doc_str = str(doc).strip()
+        if not doc_str or doc_str == 'nan':
+            continue
+
+        # 1. Find ALL invoices with this number
+        invoices = invoice_crud.get_invoices_by_number(db, doc_str)
+        
+        if not invoices:
+            failed.append(doc_str)
+            continue
+        
+        if len(invoices) > 1:
+            manual_load.append(doc_str)
+            continue
+
+        invoice = invoices[0]
+        try:
+            # 2. Filter data for this invoice
+            invoice_df = base_df[base_df['Documento'] == doc].copy()
+            
+            # 3. Transform data ( replicate ProcessDetailsInvoice.fit logic )
+            invoice_df['id_invoice'] = invoice.id_invoice
+            final_df = invoice_df.rename(columns=Constants.COLUMNS_NAMES)[Constants.COLUMNS_INVOICE]
+            
+            # 4. Clear existing details
+            delete_invoices_detail_by_id_invoice(db, invoice.id_invoice)
+            
+            # 5. Insert new details
+            rows = final_df.to_dict(orient='records')
+            db.bulk_insert_mappings(InvoiceDetailModel, rows)
+            db.commit()
+            
+            success.append(doc_str)
+        except Exception as e:
+            print(f"Error processing invoice {doc_str}: {e}")
+            db.rollback()
+            failed.append(doc_str)
+
+    return {
+        "total_processed": len(unique_docs),
+        "success": success,
+        "failed": failed,
+        "manual_load": manual_load
+    }
+
+
 def get_invoice_detail_by_id(db: Session, id_invoice_detail: int) -> InvoiceDetailSchema:
+
     result = db.query(InvoiceDetailModel).filter(
         InvoiceDetailModel.id_invoice_detail == id_invoice_detail).first()
     return result
