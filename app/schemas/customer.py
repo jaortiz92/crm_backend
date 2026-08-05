@@ -101,6 +101,11 @@ class CustomerBaseCreate(CustomerBase):
         description='Social media (max 1000 characters)'
     )
 
+    is_consignation: Optional[bool] = Field(
+        False,
+        description='Indicates whether the customer is a consignment customer'
+    )
+
 
 class CustomerCreate(CustomerBaseCreate):
     brand_ids: List[int] = Field(

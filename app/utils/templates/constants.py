@@ -18,6 +18,7 @@ class Constants():
         "Activo": "active",
         "Detalles": "relevant_details",
         "RedesSociales": "social_media",
+        "ClienteDeConsignacion": "is_consignation",
     }
 
     COLUMNS_CUSTOMER_TRIPS: Dict[str, str] = {

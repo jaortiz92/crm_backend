@@ -35,6 +35,7 @@ class Customer(Base):
     active = Column(Boolean, server_default="True")
     relevant_details = Column(String(1000))
     social_media = Column(String(1000))
+    is_consignation = Column(Boolean, server_default="False")
 
     store_type = relationship("StoreType", back_populates="customers")
     origin_type = relationship("OriginType", back_populates="customers")
