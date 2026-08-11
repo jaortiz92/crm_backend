@@ -89,7 +89,7 @@ class DetailsDame():
             left_on='REFERENCIA',
             right_on='MODELO',
             how='left'
-        ).rename(columns=Constants.COLUMNS_NAMES_DAME)
+        ).rename(columns=Constants.COLUMNS_NAMES_DAME_OR_PAMPILI)
 
         details['PRECIO'] = details['PRECIO'].fillna(
             details['PRECIO LISTA']

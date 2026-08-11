@@ -19,6 +19,8 @@ class Constants():
         'Unisex': UNISEX,
     }
 
+    COLOR_GENERIC: str = 'GENERICO'
+
     CHILD: str = 'CHILD'
     DAME: str = 'DAME'
 
@@ -67,9 +69,10 @@ class Constants():
         LEZALEZ: 12
     }
 
-    COLUMNS_NAMES_DAME: List[str] = {
+    COLUMNS_NAMES_DAME_OR_PAMPILI: List[str] = {
         'DESCRIPCIÓN': 'REFERENCIA COMPLETA',
-        'PRECIO POR MAYOR': 'PRECIO LISTA'
+        'PRECIO POR MAYOR': 'PRECIO LISTA',
+        'Precio X Mayor': 'PRECIO LISTA'
     }
 
     COLUMNS_NAMES: List[str] = {

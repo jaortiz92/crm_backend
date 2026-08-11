@@ -25,25 +25,25 @@ class DetailsPampili():
             -------
             None
         '''
-        usecols: List[str] = ['A:AB']
-        flag = False
-        i = 0
-        while not flag:
-            self.details: DataFrame = pd.read_excel(
-                self.file,
-                sheet_name=Constants.SHEET_TO_JOB,
-                header=5,
-                usecols=usecols[i],
-                dtype={
-                    'REFERENCIA': str,
-                    'COLOR': str,
-                    'TOTAL': str
-                }
+        target_col: str = 'TOTAL'
+        df: DataFrame = pd.read_excel(
+            self.file,
+            sheet_name=Constants.SHEET_TO_JOB,
+            header=5,
+            dtype={
+                'REFERENCIA': str,
+                'COLOR': str,
+                'TOTAL': str
+            }
+        )
+
+        if target_col not in df.columns:
+            raise ValueError(
+                f"La columna '{target_col}' no existe en el archivo."
             )
-            if 'TOTAL' in self.details.columns:
-                flag = True
-            else:
-                i += 1
+
+        target_idx = df.columns.get_loc(target_col)
+        self.details: DataFrame = df.iloc[:, :target_idx + 1]
 
         self.prices: DataFrame = PricesTemplate(
             self.file, Constants.PAMPILI
@@ -81,13 +81,21 @@ class DetailsPampili():
             how='left'
         )
 
-        details['REFERENCIA COMPLETA'] = details[
-            'REFERENCIA'
-        ].str.extract(r'^(\d+)')
-        details.to_excel('a.xlsx')
+        details = pd.merge(
+            left=details,
+            right=self.names[['REFERENCIA', 'DESCRIPCIÓN', 'Precio X Mayor']],
+            how='left',
+            on='REFERENCIA'
+        ).rename(columns=Constants.COLUMNS_NAMES_DAME_OR_PAMPILI)
+
+        details['PRECIO'] = details['PRECIO'].fillna(
+            details['PRECIO LISTA']
+        )
+
+        details.drop(columns=['PRECIO LISTA'], inplace=True)
 
         details['GENERO'] = Constants.FEMALE_CHILD
-        details['COLOR'] = Constants.FEMALE_CHILD
+        details['COLOR'] = Constants.COLOR_GENERIC
         details['MARCA'] = Constants.PAMPILI
 
         details = details.melt(
@@ -117,3 +125,5 @@ class DetailsPampili():
         self.details['MARCA'] = self.details['MARCA'].map(
             Constants.CODE_BRANDS
         )
+
+        self.details.to_excel('a.xlsx')
