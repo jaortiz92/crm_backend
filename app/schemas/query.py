@@ -85,3 +85,17 @@ class InvoiceWithoutDetail(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CustomerTripWithoutOrder(BaseModel):
+    id_customer_trip: int
+    company_name: str
+    seller_name: str
+    collection_name: str
+    line_name: str
+    closed: Optional[bool]
+    budget: float
+    budget_quantities: float
+
+    class Config:
+        from_attributes = True

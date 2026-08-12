@@ -281,6 +281,56 @@ def get_orders_without_details(db: Session, id_user: int, access_type: str) -> l
     ]
 
 
+def get_customer_trips_without_orders(closed: bool, db: Session, id_user: int, access_type: str) -> list:
+    auth = Constants.get_auth_to_customers(access_type)
+
+    query = db.query(
+        CustomerTripModel.id_customer_trip,
+        CustomerModel.company_name,
+        (UserModel.first_name + " " + UserModel.last_name).label("seller_name"),
+        CollectionModel.collection_name,
+        LineModel.line_name,
+        CustomerTripModel.closed,
+        CustomerTripModel.budget,
+        CustomerTripModel.budget_quantities
+    ).select_from(CustomerTripModel)\
+     .join(CustomerModel, CustomerTripModel.id_customer == CustomerModel.id_customer)\
+     .join(UserModel, CustomerTripModel.id_seller == UserModel.id_user)\
+     .join(CollectionModel, CustomerTripModel.id_collection == CollectionModel.id_collection)\
+     .join(LineModel, CollectionModel.id_line == LineModel.id_line)\
+     .outerjoin(OrderModel, CustomerTripModel.id_customer_trip == OrderModel.id_customer_trip)\
+     .filter(
+         OrderModel.id_order == None,
+         CustomerTripModel.closed == closed
+     )
+
+    if auth == Constants.FILTER:
+        id_customers = crud.get_id_customers_by_seller(db, id_user)
+        query = query.filter(
+            or_(
+                CustomerTripModel.id_customer.in_(id_customers),
+                CustomerTripModel.id_seller == id_user
+            )
+        )
+
+    query = query.order_by(CustomerTripModel.id_customer_trip.desc())
+    results = query.all()
+
+    return [
+        {
+            "id_customer_trip": r.id_customer_trip,
+            "company_name": r.company_name,
+            "seller_name": r.seller_name,
+            "collection_name": r.collection_name,
+            "line_name": r.line_name,
+            "closed": r.closed,
+            "budget": r.budget,
+            "budget_quantities": r.budget_quantities
+        }
+        for r in results
+    ]
+
+
 def get_invoices_without_details(db: Session, id_user: int, access_type: str) -> list:
     auth = Constants.get_auth_to_customers(access_type)
 

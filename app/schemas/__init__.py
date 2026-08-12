@@ -37,7 +37,7 @@ from .shipment import Shipment, ShipmentCreate, ShipmentFull
 from .token import Token, TokenData, LoginData
 from .query import (
     CustomerSummary, CustomerTripSummary, CollectionSummary, CustomerValidationResult,
-    OrderWithoutInvoice, InvoiceWithoutDetail
+    OrderWithoutInvoice, InvoiceWithoutDetail, CustomerTripWithoutOrder
 )
 from .photo import Photo, PhotoCreate
 from .customerBrand import CustomerBrand, CustomerBrandCreate, CustomerBrandBase

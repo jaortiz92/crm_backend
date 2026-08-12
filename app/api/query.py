@@ -6,7 +6,8 @@ from typing import List
 # App
 from app.schemas import (
     CustomerSummary, CustomerTripSummary, CollectionSummary, User,
-    CustomerValidationResult, OrderWithoutInvoice, InvoiceWithoutDetail
+    CustomerValidationResult, OrderWithoutInvoice, InvoiceWithoutDetail,
+    CustomerTripWithoutOrder
 )
 
 from app import get_db
@@ -114,3 +115,16 @@ def get_invoices_without_details(
     Get invoices that do not have any linked invoice details.
     """
     return crud.get_invoices_without_details(db, current_user.id_user, access_type)
+
+
+@query.get("/customer_trips_without_orders/{closed}", response_model=List[CustomerTripWithoutOrder])
+def get_customer_trips_without_orders(
+    closed: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access_type: str = Depends(crud.get_me_access_type)
+):
+    """
+    Get customer trips that do not have any linked orders.
+    """
+    return crud.get_customer_trips_without_orders(closed, db, current_user.id_user, access_type)
