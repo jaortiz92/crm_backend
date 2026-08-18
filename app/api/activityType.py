@@ -1,10 +1,10 @@
 # Python
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
 # App
-from app.schemas import ActivityType, ActivityTypeCreate
+from app.schemas import ActivityType, ActivityTypeCreate, ActivityTypeBatchReorder
 from app import get_db
 import app.crud as crud
 from app.api.utils import Exceptions
@@ -121,19 +121,56 @@ def update_activity_type(id_activity_type: int, activity_type: ActivityTypeCreat
     return db_activity_type
 
 
+@activity_type.put("/reorder/", response_model=List[ActivityType])
+def batch_reorder_activity_types(
+    reorder_data: ActivityTypeBatchReorder,
+    db: Session = Depends(get_db)
+):
+    """
+    Reordenar actividades obligatorias
+
+    Recibe una lista de actividades con sus nuevos órdenes y las actualiza
+    de forma atómica. Valida que no haya órdenes duplicados y que todas
+    las actividades sean obligatorias.
+    """
+    orders = [item.activity_order for item in reorder_data.activities]
+    if len(orders) != len(set(orders)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Duplicate activity_order values are not allowed"
+        )
+
+    for item in reorder_data.activities:
+        activity = crud.get_activity_type_by_id(db, item.id_activity_type)
+        if not activity:
+            Exceptions.register_not_found("Activity type", item.id_activity_type)
+        if not activity.mandatory:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Activity type {item.id_activity_type} is not mandatory"
+            )
+
+    result = crud.batch_reorder_mandatory_activities(
+        db,
+        [item.model_dump() for item in reorder_data.activities]
+    )
+    return result
+
+
 @activity_type.delete("/{id_activity_type}")
 def delete_activity_type(id_activity_type: int, db: Session = Depends(get_db)):
     """
-    Delete an Activity Type
+    Eliminar actividad y renumerar si es obligatoria
 
-    This path operation deletes an activity type from the app.
-
-    Parameters:
-    - Register path parameter
-        - id_activity_type: int
-
-    Returns a message confirming the deletion.
+    Si la actividad eliminada era obligatoria, renumera automáticamente
+    las actividades restantes para mantener el orden consecutivo.
     """
+    activity = crud.get_activity_type_by_id(db, id_activity_type)
+    if not activity:
+        Exceptions.register_not_found("Activity type", id_activity_type)
+
+    deleted_order = activity.activity_order if activity.mandatory else None
+
     success = crud.delete_activity_type(db, id_activity_type)
     if not success['deleted']:
         if success['elimination_allow']:
@@ -142,5 +179,8 @@ def delete_activity_type(id_activity_type: int, db: Session = Depends(get_db)):
             Exceptions.conflict_with_register(
                 "Activity type", id_activity_type
             )
+
+    if deleted_order:
+        crud.renumber_mandatory_activities_after_delete(db, deleted_order)
 
     return {"message": "Activity type deleted successfully"}

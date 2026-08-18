@@ -62,3 +62,51 @@ def delete_activity_type(db: Session, id_activity_type: int) -> dict[str, bool]:
             db.commit()
             status['deleted'] = True
     return status
+
+
+def batch_reorder_mandatory_activities(
+    db: Session,
+    reorder_data: list[dict]
+) -> list[ActivityTypeSchema]:
+    """Reordenar múltiples actividades obligatorias de forma atómica."""
+    try:
+        updated_activities = []
+        for item in reorder_data:
+            db_activity = db.query(ActivityTypeModel).filter(
+                ActivityTypeModel.id_activity_type == item['id_activity_type']
+            ).first()
+
+            if db_activity and db_activity.mandatory:
+                db_activity.activity_order = item['activity_order']
+                updated_activities.append(db_activity)
+
+        db.commit()
+        for activity in updated_activities:
+            db.refresh(activity)
+        return updated_activities
+    except Exception as e:
+        db.rollback()
+        raise e
+
+
+def renumber_mandatory_activities_after_delete(
+    db: Session,
+    deleted_order: int
+) -> list[ActivityTypeSchema]:
+    """Renumerar actividades obligatorias después de eliminar una."""
+    try:
+        activities_to_renumber = db.query(ActivityTypeModel).filter(
+            ActivityTypeModel.mandatory == True,
+            ActivityTypeModel.activity_order > deleted_order
+        ).order_by(ActivityTypeModel.activity_order.asc()).all()
+
+        for activity in activities_to_renumber:
+            activity.activity_order -= 1
+
+        db.commit()
+        for activity in activities_to_renumber:
+            db.refresh(activity)
+        return activities_to_renumber
+    except Exception as e:
+        db.rollback()
+        raise e
