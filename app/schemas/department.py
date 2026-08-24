@@ -1,8 +1,6 @@
-# Python
 from datetime import date, datetime
 from typing import Optional, List, Dict
 
-# Pydantic
 from pydantic import BaseModel, Field
 
 
@@ -17,10 +15,10 @@ class DepartmentBase(BaseModel):
         max_length=80,
         description='Department name (max 80 characters)'
     )
-    zone: str = Field(
-        ...,
-        max_length=20,
-        description='Zone (max 20 characters)'
+    id_zone: Optional[int] = Field(
+        None,
+        gt=0,
+        description='FK to zone'
     )
 
 

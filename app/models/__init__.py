@@ -26,3 +26,13 @@ from .query import CustomerSummary, CustomerTripSummary, CollectionSummary
 from .photo import Photo
 from .customerBrand import CustomerBrand
 from .shipment import Shipment, Base
+from .zone import Zone
+from .management import Management
+from .area import Area
+from .budget import (
+    CostCenter, ActualExpense, ActualCost,
+    Budget, BudgetLine,
+    AccountReceivable, PaymentLedger,
+    BudgetScenario,
+    AccountPayable, PayableLedger,
+)

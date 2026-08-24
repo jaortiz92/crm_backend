@@ -1,0 +1,31 @@
+"""
+ActualCost Model
+
+Records of real financial costs (The Actuals).
+Ingested from accounting system reports (e.g. CostosFinal.xlsx).
+"""
+
+from sqlalchemy import Column, ForeignKey, Float, Integer, String, Date, DateTime, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
+from app.db import Base
+
+
+class ActualCost(Base):
+    """
+    Records of real financial costs (The Actuals).
+    Ingested from accounting system reports (e.g. CostosFinal.xlsx).
+    """
+    __tablename__ = "actual_costs"
+
+    id_actual_cost = Column(Integer, primary_key=True, index=True)
+    id_cost_center = Column(Integer, ForeignKey("cost_centers.id_cost_center"), nullable=False)
+    cost_date = Column(Date, nullable=False)
+    cost_type = Column(String(60), nullable=False)
+    description = Column(Text)
+    amount = Column(Float, nullable=False, server_default="0")
+    source_file = Column(String(200))
+    created_at = Column(DateTime, server_default=func.now())
+
+    cost_center = relationship("CostCenter", back_populates="actual_costs")

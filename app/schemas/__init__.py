@@ -6,7 +6,7 @@ from .collection import Collection, CollectionCreate, CollectionFull
 from .contact import Contact, ContactCreate, ContactFull
 from .customer import Customer, CustomerCreate, CustomerFull, CustomerBaseWithCity
 from .customerTrip import CustomerTrip, CustomerTripCreate, CustomerTripFull
-from .department import Department
+from .department import Department, DepartmentCreate
 from .line import Line, LineCreate
 from .order import Order, OrderCreate, OrderFull, OrderWithoutTrip
 from .orderDetail import (
@@ -41,3 +41,19 @@ from .query import (
 )
 from .photo import Photo, PhotoCreate
 from .customerBrand import CustomerBrand, CustomerBrandCreate, CustomerBrandBase
+from .zone import Zone, ZoneCreate
+from .management import Management, ManagementCreate
+from .area import Area, AreaCreate
+from .budget import (
+    CostCenter, CostCenterCreate,
+    ActualExpense, ActualExpenseCreate,
+    ActualCost, ActualCostCreate,
+    Budget, BudgetCreate, BudgetFull,
+    BudgetLine, BudgetLineCreate, BudgetLineFull,
+    AccountReceivable, AccountReceivableCreate, AccountReceivableFull,
+    PaymentLedger, PaymentLedgerCreate,
+    BudgetScenario, BudgetScenarioCreate,
+    AccountPayable, AccountPayableCreate, AccountPayableFull,
+    PayableLedger, PayableLedgerCreate,
+    BudgetVsActual, CashFlowProjection, BudgetTrackingSummary,
+)

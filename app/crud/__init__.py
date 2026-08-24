@@ -25,3 +25,7 @@ from .role import *
 from .paymentMethod import *
 from .query import *
 from .photo import *
+from .zone import *
+from .management import *
+from .area import *
+from .budget import *
