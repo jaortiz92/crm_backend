@@ -5,12 +5,18 @@ Accounts receivable / portfolio status.
 Ingested from EstadoCuenta306090.xlsx.
 Linked to CRM customers for cross-referencing.
 """
+import enum
 
-from sqlalchemy import Column, ForeignKey, Float, Integer, String, Date, DateTime
+from sqlalchemy import Column, Enum,ForeignKey, Float, Integer, String, Date, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db import Base
+
+class ReceivableStatusEnum(str, enum.Enum):
+    OPEN = 'OPEN'
+    PARTIAL = 'PARTIAL'
+    PAID = 'PAID'
 
 
 class AccountReceivable(Base):
@@ -29,7 +35,7 @@ class AccountReceivable(Base):
     total_amount = Column(Float, nullable=False, server_default="0")
     paid_amount = Column(Float, server_default="0")
     balance = Column(Float, server_default="0")
-    status = Column(String(20), server_default="'open'")
+    status = Column(Enum(ReceivableStatusEnum), nullable=False, server_default=ReceivableStatusEnum.OPEN)
     aging_bucket = Column(String(20))
     source_file = Column(String(200))
     created_at = Column(DateTime, server_default=func.now())

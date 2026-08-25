@@ -7,7 +7,7 @@ Represents the consolidated debt with Asian suppliers or logistics providers.
 
 import enum
 
-from sqlalchemy import Column, Enum, ForeignKey, Float, Integer, String, Date, DateTime
+from sqlalchemy import Column, Enum, ForeignKey, Float, Integer, String, Date, DateTime, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -15,9 +15,9 @@ from app.db import Base
 
 
 class PayableStatusEnum(str, enum.Enum):
-    OPEN = "open"
-    PARTIAL = "partial"
-    PAID = "paid"
+    OPEN = 'OPEN'
+    PARTIAL = 'PARTIAL'
+    PAID = 'PAID'
 
 
 class AccountPayable(Base):
@@ -33,7 +33,7 @@ class AccountPayable(Base):
     total_amount = Column(Float, nullable=False)
     balance = Column(Float, nullable=False)
     due_date = Column(Date, nullable=False)
-    status = Column(Enum(PayableStatusEnum), nullable=False, server_default="'open'")
+    status = Column(Enum(PayableStatusEnum), nullable=False, server_default=PayableStatusEnum.OPEN)
     created_at = Column(DateTime, server_default=func.now())
 
     cost_center = relationship("CostCenter", backref="accounts_payable")
