@@ -8,6 +8,7 @@ from .customer import Customer, CustomerCreate, CustomerFull, CustomerBaseWithCi
 from .customerTrip import CustomerTrip, CustomerTripCreate, CustomerTripFull
 from .department import Department, DepartmentCreate
 from .line import Line, LineCreate
+from .linePaymentRule import LinePaymentRule, LinePaymentRuleCreate
 from .order import Order, OrderCreate, OrderFull, OrderWithoutTrip
 from .orderDetail import (
     OrderDetail, OrderDetailCreate, OrderDetailFull,

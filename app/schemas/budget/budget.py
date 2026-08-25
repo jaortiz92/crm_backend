@@ -60,7 +60,7 @@ class BudgetVsActual(BaseModel):
     id_cost_center: int
     cost_center_code: str
     cost_center_name: str
-    month: int
+    budget_month: int
     budgeted_amount: float
     actual_amount: float
     variance: float
@@ -69,7 +69,7 @@ class BudgetVsActual(BaseModel):
 
 class CashFlowProjection(BaseModel):
     """Response schema for cash flow projection."""
-    month: int
+    payment_month: int
     expected_inflows: float
     expected_outflows: float
     net_cash_flow: float

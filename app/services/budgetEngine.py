@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 
 # App
+from app.core.constants import TAX_RATE
 from app.models.budget import (
     CostCenter as CostCenterModel,
     ActualExpense as ActualExpenseModel,
@@ -65,15 +66,13 @@ class BudgetEngine:
 
         Returns a list of monthly projections with:
         - month: int
-        - expected_inflows: float (from accounts receivable)
-        - expected_outflows: float (from budget expense lines + accounts payable)
+        - expected_inflows: float (cash inflows with tax)
+        - expected_outflows: float (fixed expenses + variable expenses + accounts payable)
         - net_cash_flow: float
         - cumulative_cash_flow: float
 
-        Accounts payable balances are projected as cash outflows in the month
-        of their due_date. To prevent double counting, budget_lines expense
-        projections are suppressed for any (month, cost_center) pair that
-        already has a real obligation in accounts_payable.
+        Income projections in budget_lines are NET (without tax).
+        Cash inflows include tax: net_income * (1 + TAX_RATE).
 
         Args:
             budget_year: Fiscal year for the projection.
@@ -82,6 +81,7 @@ class BudgetEngine:
         """
         inflows_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
         outflows_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
+        net_income_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
 
         ar_rows = (
             self.db.query(
@@ -95,7 +95,7 @@ class BudgetEngine:
             .all()
         )
         for row in ar_rows:
-            inflows_by_month[int(row.month)] += float(row[1])
+            net_income_by_month[int(row.month)] += float(row[1])
 
         ap_rows = (
             self.db.query(
@@ -116,9 +116,33 @@ class BudgetEngine:
             outflows_by_month[month] += float(row[2])
             ap_keys.add((month, row.id_cost_center))
 
-        bl_query = (
+        income_query = (
             self.db.query(
-                BudgetLineModel.month,
+                extract("month", BudgetLineModel.budget_date).label("budget_month"),
+                func.coalesce(func.sum(BudgetLineModel.projected_amount), 0),
+            )
+            .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
+            .filter(
+                BudgetModel.budget_year == budget_year,
+                BudgetLineModel.line_type == "income",
+            )
+        )
+        if id_budget is not None:
+            income_query = income_query.filter(BudgetLineModel.id_budget == id_budget)
+
+        income_rows = income_query.group_by("budget_month").all()
+        for row in income_rows:
+            net_income_by_month[int(row.budget_month)] += float(row[1])
+
+        for month in range(1, 13):
+            inflows_by_month[month] = net_income_by_month[month] * (1 + TAX_RATE)
+
+        fixed_expense_query = (
+            self.db.query(
+                func.coalesce(
+                    extract("month", BudgetLineModel.payment_date),
+                    extract("month", BudgetLineModel.budget_date),
+                ).label("payment_month"),
                 BudgetLineModel.id_cost_center,
                 func.coalesce(func.sum(BudgetLineModel.projected_amount), 0),
             )
@@ -126,19 +150,71 @@ class BudgetEngine:
             .filter(
                 BudgetModel.budget_year == budget_year,
                 BudgetLineModel.line_type == "expense",
+                BudgetLineModel.behavior_type == "fixed",
             )
         )
         if id_budget is not None:
-            bl_query = bl_query.filter(BudgetLineModel.id_budget == id_budget)
+            fixed_expense_query = fixed_expense_query.filter(BudgetLineModel.id_budget == id_budget)
 
-        bl_rows = (
-            bl_query.group_by(BudgetLineModel.month, BudgetLineModel.id_cost_center)
+        fixed_rows = (
+            fixed_expense_query.group_by("payment_month", BudgetLineModel.id_cost_center)
             .all()
         )
-        for row in bl_rows:
-            month = int(row.month)
+        for row in fixed_rows:
+            month = int(row.payment_month)
             if (month, row.id_cost_center) not in ap_keys:
                 outflows_by_month[month] += float(row[2])
+
+        variable_sales_query = (
+            self.db.query(
+                func.coalesce(
+                    extract("month", BudgetLineModel.payment_date),
+                    extract("month", BudgetLineModel.budget_date),
+                ).label("payment_month"),
+                BudgetLineModel.variable_rate,
+                func.coalesce(func.sum(BudgetLineModel.projected_amount), 0),
+            )
+            .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
+            .filter(
+                BudgetModel.budget_year == budget_year,
+                BudgetLineModel.line_type == "expense",
+                BudgetLineModel.behavior_type == "variable_sales",
+            )
+        )
+        if id_budget is not None:
+            variable_sales_query = variable_sales_query.filter(BudgetLineModel.id_budget == id_budget)
+
+        variable_sales_rows = variable_sales_query.group_by("payment_month", BudgetLineModel.variable_rate).all()
+        for row in variable_sales_rows:
+            month = int(row.payment_month)
+            rate = float(row.variable_rate) if row.variable_rate else 0.0
+            variable_cost = float(row[2]) * rate
+            outflows_by_month[month] += variable_cost
+
+        variable_receivables_query = (
+            self.db.query(
+                func.coalesce(
+                    extract("month", BudgetLineModel.payment_date),
+                    extract("month", BudgetLineModel.budget_date),
+                ).label("payment_month"),
+                BudgetLineModel.variable_rate,
+            )
+            .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
+            .filter(
+                BudgetModel.budget_year == budget_year,
+                BudgetLineModel.line_type == "expense",
+                BudgetLineModel.behavior_type == "variable_receivables",
+            )
+        )
+        if id_budget is not None:
+            variable_receivables_query = variable_receivables_query.filter(BudgetLineModel.id_budget == id_budget)
+
+        variable_receivables_rows = variable_receivables_query.all()
+        for row in variable_receivables_rows:
+            month = int(row.payment_month)
+            rate = float(row.variable_rate) if row.variable_rate else 0.0
+            variable_cost = net_income_by_month[month] * rate
+            outflows_by_month[month] += variable_cost
 
         result = []
         cumulative = 0.0
@@ -146,7 +222,7 @@ class BudgetEngine:
             net = inflows_by_month[month] - outflows_by_month[month]
             cumulative += net
             result.append({
-                "month": month,
+                "payment_month": month,
                 "expected_inflows": round(inflows_by_month[month], 2),
                 "expected_outflows": round(outflows_by_month[month], 2),
                 "net_cash_flow": round(net, 2),

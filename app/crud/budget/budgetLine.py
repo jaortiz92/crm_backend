@@ -44,7 +44,7 @@ def get_budget_lines_by_budget(
     """Get all budget lines for a given budget."""
     return db.query(BudgetLineModel).filter(
         BudgetLineModel.id_budget == id_budget
-    ).order_by(BudgetLineModel.month, BudgetLineModel.id_cost_center).all()
+    ).order_by(BudgetLineModel.budget_date, BudgetLineModel.id_cost_center).all()
 
 
 def get_budget_lines_by_cost_center(
@@ -56,7 +56,7 @@ def get_budget_lines_by_cost_center(
     )
     if id_budget is not None:
         query = query.filter(BudgetLineModel.id_budget == id_budget)
-    return query.order_by(BudgetLineModel.month).all()
+    return query.order_by(BudgetLineModel.budget_date).all()
 
 
 def update_budget_line(

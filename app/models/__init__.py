@@ -5,6 +5,7 @@ from .user import User
 from .storeType import StoreType
 from .originType import OriginType
 from .line import Line
+from .linePaymentRule import LinePaymentRule
 from .brand import Brand
 from .collection import Collection
 from .customer import Customer

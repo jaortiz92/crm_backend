@@ -154,6 +154,132 @@ class BudgetTemplates:
         return self.df
 
     # ──────────────────────────────────────────────
+    # Budget Plan Income (Formato Solicitud Presupuesto Ingresos.xlsx)
+    # ──────────────────────────────────────────────
+
+    def process_budget_plan_income(self) -> DataFrame:
+        """
+        Process income budget plan Excel template.
+
+        Reads the Excel file with skiprows=7, maps cost center codes,
+        collection short names, and computes payment_date from payment rules.
+
+        Returns:
+            DataFrame with columns: id_cost_center, budget_date, id_collection,
+            projected_amount, description, line_type, behavior_type
+        """
+        self.df = pd.read_excel(
+            BytesIO(self.file),
+            engine="openpyxl",
+            skiprows=7,
+        )
+        self._clean_column_names()
+
+        self.df["id_cost_center_code"] = (
+            self.df["centro_de_costo"]
+            .astype(str)
+            .str.strip()
+            .str.split()
+            .str[0]
+        )
+
+        self.df["budget_date"] = pd.to_datetime(
+            self.df["fecha_de_la_facturacion__proyectada_"], errors="coerce"
+        ).dt.date
+
+        self.df["short_collection_name"] = (
+            self.df["temporada"]
+            .astype(str)
+            .str.strip()
+        )
+
+        self.df["projected_amount"] = pd.to_numeric(
+            self.df["monto"], errors="coerce"
+        ).fillna(0.0)
+
+        self.df["description"] = self.df["observaciones_adicionales"].astype(str)
+
+        self.df["line_type"] = "income"
+        self.df["behavior_type"] = "fixed"
+
+        return self.df
+
+    # ──────────────────────────────────────────────
+    # Budget Plan Expense (Formato Solicitud Presupuesto Gastos.xlsx)
+    # ──────────────────────────────────────────────
+
+    def process_budget_plan_expense(self) -> DataFrame:
+        """
+        Process expense budget plan Excel template.
+
+        Reads the Excel file with skiprows=7, maps cost center codes,
+        collection short names, translates behavior types, and applies
+        conditional amount logic.
+
+        Returns:
+            DataFrame with columns: id_cost_center, budget_date, payment_date,
+            description, id_collection, behavior_type, projected_amount,
+            variable_rate, line_type
+        """
+        self.df = pd.read_excel(
+            BytesIO(self.file),
+            engine="openpyxl",
+            skiprows=7,
+        )
+        self._clean_column_names()
+
+        self.df["id_cost_center_code"] = (
+            self.df["centro_de_costo"]
+            .astype(str)
+            .str.strip()
+            .str.split()
+            .str[0]
+        )
+
+        self.df["budget_date"] = pd.to_datetime(
+            self.df["fecha_del_gasto__proyectada_"], errors="coerce"
+        ).dt.date
+
+        self.df["payment_date"] = pd.to_datetime(
+            self.df["fecha_de_pago__proyectada_"], errors="coerce"
+        ).dt.date
+
+        self.df["description"] = self.df["concepto_del_gasto"].astype(str)
+
+        self.df["short_collection_name"] = (
+            self.df["temporada"]
+            .astype(str)
+            .str.strip()
+        )
+
+        behavior_map = {
+            "Fijo": "fixed",
+            "Variable por Facturación": "variable_sales",
+            "Variable por Recaudo": "variable_receivables",
+        }
+        self.df["behavior_type"] = (
+            self.df["comportamiento"]
+            .astype(str)
+            .str.strip()
+            .map(behavior_map)
+        )
+
+        raw_amount = pd.to_numeric(
+            self.df["monto_o_tasa_solicitado"], errors="coerce"
+        ).fillna(0.0)
+
+        self.df["projected_amount"] = raw_amount.where(
+            self.df["behavior_type"] == "fixed", 0.0
+        )
+        self.df["variable_rate"] = raw_amount.where(
+            self.df["behavior_type"] != "fixed", None
+        )
+
+        self.df["line_type"] = "expense"
+
+        return self.df
+
+    # ──────────────────────────────────────────────
     # Private Helper Methods
     # ──────────────────────────────────────────────
 

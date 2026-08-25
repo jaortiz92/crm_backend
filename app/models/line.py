@@ -15,3 +15,4 @@ class Line(Base):
 
     brands = relationship("Brand", back_populates="line")
     collections = relationship("Collection", back_populates="line")
+    payment_rules = relationship("LinePaymentRule", backref="line")

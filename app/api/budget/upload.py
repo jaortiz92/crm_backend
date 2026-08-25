@@ -4,12 +4,19 @@ ETL Upload API Endpoints
 Excel file ingestion endpoints for the Budget module.
 """
 
-from fastapi import APIRouter, Depends, UploadFile, File
+from datetime import date, timedelta
+from io import BytesIO
+from typing import Optional, List, Dict, Any
+
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.schemas import User
+import app.crud as crud
+from app.schemas import User, BudgetCreate, BudgetLineCreate
 from app import get_db
 from app.core.auth import get_current_user
+from app.api.utils import Exceptions
+from app.utils.templates import BudgetTemplates
 
 router = APIRouter()
 
@@ -82,3 +89,237 @@ async def upload_payment_ledger(
     """
     # TODO: Implement ETL processing via BudgetTemplates
     return {"message": "Payment ledger upload endpoint - implementation pending"}
+
+
+@router.post("/budget-plan-income")
+async def upload_budget_plan_income(
+    budget_name: str = Form(...),
+    budget_year: int = Form(...),
+    budget_period: str = Form(...),
+    id_department: Optional[int] = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upload and process income budget plan Excel template.
+    Creates a draft budget and bulk inserts budget lines.
+    """
+    file_content = await file.read()
+    file_bytes = BytesIO(file_content)
+
+    budget_data = BudgetCreate(
+        budget_name=budget_name,
+        budget_year=budget_year,
+        budget_period=budget_period,
+        id_department=id_department,
+        status="draft",
+    )
+    new_budget = crud.create_budget(db, budget_data)
+
+    try:
+        etl = BudgetTemplates(file_bytes)
+        df = etl.process_budget_plan_income()
+        records = etl.dataframe_to_records()
+
+        missing_cost_centers = []
+        missing_collections = []
+        budget_lines_data: List[Dict[str, Any]] = []
+
+        for record in records:
+            cc_code = record.get("id_cost_center_code")
+            cc = crud.get_cost_center_by_code(db, cc_code)
+            if not cc:
+                missing_cost_centers.append(cc_code)
+                continue
+
+            coll_short = record.get("short_collection_name")
+            coll = crud.get_collection_by_short_name(db, coll_short)
+            if not coll:
+                missing_collections.append(coll_short)
+                continue
+
+            budget_date = record.get("budget_date")
+            if isinstance(budget_date, str):
+                from datetime import datetime
+                budget_date = datetime.strptime(budget_date, "%Y-%m-%d").date()
+
+            id_line = cc.id_line
+            payment_date = budget_date
+
+            if id_line:
+                rules = crud.get_line_payment_rules_by_line(db, id_line)
+                if rules:
+                    if len(rules) == 1 and rules[0].payment_days == 0:
+                        payment_date = budget_date
+                    else:
+                        for rule in rules:
+                            rule_payment_date = budget_date + timedelta(days=rule.payment_days)
+                            partial_amount = record.get("projected_amount", 0) * rule.payment_pct
+                            budget_lines_data.append({
+                                "id_budget": new_budget.id_budget,
+                                "id_cost_center": cc.id_cost_center,
+                                "line_type": "income",
+                                "budget_date": budget_date,
+                                "payment_date": rule_payment_date,
+                                "id_collection": coll.id_collection,
+                                "projected_amount": partial_amount,
+                                "description": record.get("description"),
+                                "behavior_type": "fixed",
+                            })
+                        continue
+
+            budget_lines_data.append({
+                "id_budget": new_budget.id_budget,
+                "id_cost_center": cc.id_cost_center,
+                "line_type": "income",
+                "budget_date": budget_date,
+                "payment_date": payment_date,
+                "id_collection": coll.id_collection,
+                "projected_amount": record.get("projected_amount", 0),
+                "description": record.get("description"),
+                "behavior_type": "fixed",
+            })
+
+        if missing_cost_centers or missing_collections:
+            db.rollback()
+            detail_parts = []
+            if missing_cost_centers:
+                detail_parts.append(f"Cost centers not found: {missing_cost_centers}")
+            if missing_collections:
+                detail_parts.append(f"Collections not found: {missing_collections}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="; ".join(detail_parts),
+            )
+
+        if budget_lines_data:
+            lines_to_create = [BudgetLineCreate(**data) for data in budget_lines_data]
+            crud.create_budget_lines_bulk(db, lines_to_create)
+
+        return {
+            "message": "Income budget plan uploaded successfully",
+            "id_budget": new_budget.id_budget,
+            "budget_lines_count": len(budget_lines_data),
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing income budget plan: {str(e)}",
+        )
+
+
+@router.post("/budget-plan-expense")
+async def upload_budget_plan_expense(
+    budget_name: str = Form(...),
+    budget_year: int = Form(...),
+    budget_period: str = Form(...),
+    id_department: Optional[int] = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upload and process expense budget plan Excel template.
+    Creates a draft budget and bulk inserts budget lines.
+    """
+    file_content = await file.read()
+    file_bytes = BytesIO(file_content)
+
+    budget_data = BudgetCreate(
+        budget_name=budget_name,
+        budget_year=budget_year,
+        budget_period=budget_period,
+        id_department=id_department,
+        status="draft",
+    )
+    new_budget = crud.create_budget(db, budget_data)
+
+    try:
+        etl = BudgetTemplates(file_bytes)
+        df = etl.process_budget_plan_expense()
+        records = etl.dataframe_to_records()
+
+        missing_cost_centers = []
+        missing_collections = []
+        budget_lines_data: List[Dict[str, Any]] = []
+
+        for record in records:
+            cc_code = record.get("id_cost_center_code")
+            cc = crud.get_cost_center_by_code(db, cc_code)
+            if not cc:
+                missing_cost_centers.append(cc_code)
+                continue
+
+            coll_short = record.get("short_collection_name")
+            coll = crud.get_collection_by_short_name(db, coll_short)
+            if not coll:
+                missing_collections.append(coll_short)
+                continue
+
+            budget_date = record.get("budget_date")
+            if isinstance(budget_date, str):
+                from datetime import datetime
+                budget_date = datetime.strptime(budget_date, "%Y-%m-%d").date()
+
+            payment_date = record.get("payment_date")
+            if isinstance(payment_date, str):
+                from datetime import datetime
+                payment_date = datetime.strptime(payment_date, "%Y-%m-%d").date()
+
+            behavior_type = record.get("behavior_type", "fixed")
+            projected_amount = record.get("projected_amount", 0)
+            variable_rate = record.get("variable_rate")
+
+            if behavior_type != "fixed" and variable_rate is not None:
+                projected_amount = 0
+
+            budget_lines_data.append({
+                "id_budget": new_budget.id_budget,
+                "id_cost_center": cc.id_cost_center,
+                "line_type": "expense",
+                "budget_date": budget_date,
+                "payment_date": payment_date,
+                "id_collection": coll.id_collection,
+                "projected_amount": projected_amount,
+                "description": record.get("description"),
+                "behavior_type": behavior_type,
+                "variable_rate": variable_rate,
+            })
+
+        if missing_cost_centers or missing_collections:
+            db.rollback()
+            detail_parts = []
+            if missing_cost_centers:
+                detail_parts.append(f"Cost centers not found: {missing_cost_centers}")
+            if missing_collections:
+                detail_parts.append(f"Collections not found: {missing_collections}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="; ".join(detail_parts),
+            )
+
+        if budget_lines_data:
+            lines_to_create = [BudgetLineCreate(**data) for data in budget_lines_data]
+            crud.create_budget_lines_bulk(db, lines_to_create)
+
+        return {
+            "message": "Expense budget plan uploaded successfully",
+            "id_budget": new_budget.id_budget,
+            "budget_lines_count": len(budget_lines_data),
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing expense budget plan: {str(e)}",
+        )

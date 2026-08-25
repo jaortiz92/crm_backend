@@ -8,6 +8,7 @@ from .contact import *
 from .order import *
 from .orderDetail import *
 from .line import *
+from .linePaymentRule import *
 from .brand import *
 from .collection import *
 from .storeType import *
