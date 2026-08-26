@@ -123,7 +123,6 @@ async def upload_budget_plan_income(
         records = etl.dataframe_to_records()
 
         missing_cost_centers = []
-        missing_collections = []
         budget_lines_data: List[Dict[str, Any]] = []
 
         for record in records:
@@ -135,9 +134,7 @@ async def upload_budget_plan_income(
 
             coll_short = record.get("short_collection_name")
             coll = crud.get_collection_by_short_name(db, coll_short)
-            if not coll:
-                missing_collections.append(coll_short)
-                continue
+            id_collection = coll.id_collection if coll else None
 
             budget_date = record.get("budget_date")
             if isinstance(budget_date, str):
@@ -162,7 +159,7 @@ async def upload_budget_plan_income(
                                 "line_type": "income",
                                 "budget_date": budget_date,
                                 "payment_date": rule_payment_date,
-                                "id_collection": coll.id_collection,
+                                "id_collection": id_collection,
                                 "projected_amount": partial_amount,
                                 "description": record.get("description"),
                                 "behavior_type": "fixed",
@@ -175,22 +172,17 @@ async def upload_budget_plan_income(
                 "line_type": "income",
                 "budget_date": budget_date,
                 "payment_date": payment_date,
-                "id_collection": coll.id_collection,
+                "id_collection": id_collection,
                 "projected_amount": record.get("projected_amount", 0),
                 "description": record.get("description"),
                 "behavior_type": "fixed",
             })
 
-        if missing_cost_centers or missing_collections:
+        if missing_cost_centers:
             db.rollback()
-            detail_parts = []
-            if missing_cost_centers:
-                detail_parts.append(f"Cost centers not found: {missing_cost_centers}")
-            if missing_collections:
-                detail_parts.append(f"Collections not found: {missing_collections}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="; ".join(detail_parts),
+                detail=f"Cost centers not found: {missing_cost_centers}",
             )
 
         if budget_lines_data:
@@ -246,7 +238,6 @@ async def upload_budget_plan_expense(
         records = etl.dataframe_to_records()
 
         missing_cost_centers = []
-        missing_collections = []
         budget_lines_data: List[Dict[str, Any]] = []
 
         for record in records:
@@ -258,9 +249,7 @@ async def upload_budget_plan_expense(
 
             coll_short = record.get("short_collection_name")
             coll = crud.get_collection_by_short_name(db, coll_short)
-            if not coll:
-                missing_collections.append(coll_short)
-                continue
+            id_collection = coll.id_collection if coll else None
 
             budget_date = record.get("budget_date")
             if isinstance(budget_date, str):
@@ -285,23 +274,18 @@ async def upload_budget_plan_expense(
                 "line_type": "expense",
                 "budget_date": budget_date,
                 "payment_date": payment_date,
-                "id_collection": coll.id_collection,
+                "id_collection": id_collection,
                 "projected_amount": projected_amount,
                 "description": record.get("description"),
                 "behavior_type": behavior_type,
                 "variable_rate": variable_rate,
             })
 
-        if missing_cost_centers or missing_collections:
+        if missing_cost_centers:
             db.rollback()
-            detail_parts = []
-            if missing_cost_centers:
-                detail_parts.append(f"Cost centers not found: {missing_cost_centers}")
-            if missing_collections:
-                detail_parts.append(f"Collections not found: {missing_collections}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="; ".join(detail_parts),
+                detail=f"Cost centers not found: {missing_cost_centers}",
             )
 
         if budget_lines_data:
@@ -314,7 +298,7 @@ async def upload_budget_plan_expense(
             "budget_lines_count": len(budget_lines_data),
         }
 
-    except HTTPException:
+    except HTTPException as e:
         db.rollback()
         raise
     except Exception as e:

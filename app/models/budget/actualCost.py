@@ -21,6 +21,7 @@ class ActualCost(Base):
 
     id_actual_cost = Column(Integer, primary_key=True, index=True)
     id_cost_center = Column(Integer, ForeignKey("cost_centers.id_cost_center"), nullable=False)
+    id_reference = Column(Integer, ForeignKey("product_references.id_reference"), nullable=True)
     cost_date = Column(Date, nullable=False)
     cost_type = Column(String(60), nullable=False)
     description = Column(Text)
@@ -29,3 +30,4 @@ class ActualCost(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     cost_center = relationship("CostCenter", back_populates="actual_costs")
+    reference = relationship("Reference", back_populates="actual_costs")

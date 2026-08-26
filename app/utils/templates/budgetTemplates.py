@@ -52,7 +52,7 @@ class BudgetTemplates:
             description, amount
         """
         self.df = pd.read_excel(
-            BytesIO(self.file),
+            self.file,
             engine="openpyxl",
         )
         self._clean_column_names()
@@ -76,7 +76,7 @@ class BudgetTemplates:
             description, amount
         """
         self.df = pd.read_excel(
-            BytesIO(self.file),
+            self.file,
             engine="openpyxl",
         )
         self._clean_column_names()
@@ -100,7 +100,7 @@ class BudgetTemplates:
             paid_amount, balance, aging_bucket, id_customer
         """
         self.df = pd.read_excel(
-            BytesIO(self.file),
+            self.file,
             engine="openpyxl",
             skiprows=3,
         )
@@ -126,7 +126,7 @@ class BudgetTemplates:
             payment_amount, payment_method, reference_number, id_invoice
         """
         self.df = pd.read_excel(
-            BytesIO(self.file),
+            self.file,
             engine="openpyxl",
         )
         self._clean_column_names()
@@ -147,7 +147,7 @@ class BudgetTemplates:
             id_department, id_line, description
         """
         self.df = pd.read_excel(
-            BytesIO(self.file),
+            self.file,
             engine="openpyxl",
         )
         self._clean_column_names()
@@ -169,11 +169,12 @@ class BudgetTemplates:
             projected_amount, description, line_type, behavior_type
         """
         self.df = pd.read_excel(
-            BytesIO(self.file),
+            self.file,
             engine="openpyxl",
             skiprows=7,
         )
-        self._clean_column_names()
+
+        self._clean_column_names()  
 
         self.df["id_cost_center_code"] = (
             self.df["centro_de_costo"]
@@ -202,6 +203,7 @@ class BudgetTemplates:
         self.df["line_type"] = "income"
         self.df["behavior_type"] = "fixed"
 
+
         return self.df
 
     # ──────────────────────────────────────────────
@@ -222,7 +224,7 @@ class BudgetTemplates:
             variable_rate, line_type
         """
         self.df = pd.read_excel(
-            BytesIO(self.file),
+            self.file,
             engine="openpyxl",
             skiprows=7,
         )
@@ -294,6 +296,8 @@ class BudgetTemplates:
                 .str.lower()
                 .str.replace(" ", "_")
                 .str.replace("-", "_")
+                .str.replace("(", "_")
+                .str.replace(")", "_")
             )
 
     def _cast_numeric_columns(self, columns: List[str]) -> None:

@@ -45,6 +45,7 @@ from .customerBrand import CustomerBrand, CustomerBrandCreate, CustomerBrandBase
 from .zone import Zone, ZoneCreate
 from .management import Management, ManagementCreate
 from .area import Area, AreaCreate
+from .reference import Reference, ReferenceCreate, BulkUploadResult, BulkDeleteResult
 from .budget import (
     CostCenter, CostCenterCreate,
     ActualExpense, ActualExpenseCreate,

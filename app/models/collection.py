@@ -20,5 +20,6 @@ class Collection(Base):
     quarter = Column(Integer, nullable=False)
 
     line = relationship("Line", back_populates="collections")
+    references = relationship("Reference", back_populates="collection")
     
     customer_trips = relationship("CustomerTrip", back_populates="collection")

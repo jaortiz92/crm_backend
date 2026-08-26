@@ -45,11 +45,7 @@ if not INCOME_EXCEL_PATH or not EXPENSE_EXCEL_PATH:
     print("ERROR: INCOME_EXCEL_PATH y EXPENSE_EXCEL_PATH son requeridos en .env_test")
     sys.exit(1)
 
-print(BASE_URL)
-print(USERNAME)
-print(PASSWORD)
-print(INCOME_EXCEL_PATH)
-print(EXPENSE_EXCEL_PATH)
+
 
 # Datos para crear presupuesto de prueba
 TEST_BUDGET_NAME = "Smoke Test Budget"
@@ -326,7 +322,7 @@ def test_12_verify_budget_lines_income():
         return False
     
     budget_id = state.created_budget_ids[-1]
-    response = api_request("GET", f"/budget/line/by-budget/{budget_id}")
+    response = api_request("GET", f"/budget/line/budget/{budget_id}")
     if response and response.status_code == 200:
         data = response.json()
         if len(data) > 0:
@@ -393,7 +389,7 @@ def test_15_verify_budget_lines_expense():
         return False
     
     budget_id = state.created_budget_ids[-1]
-    response = api_request("GET", f"/budget/line/by-budget/{budget_id}")
+    response = api_request("GET", f"/budget/line/budget/{budget_id}")
     if response and response.status_code == 200:
         data = response.json()
         if len(data) > 0:

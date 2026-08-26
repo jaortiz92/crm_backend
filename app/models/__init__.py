@@ -30,6 +30,7 @@ from .shipment import Shipment, Base
 from .zone import Zone
 from .management import Management
 from .area import Area
+from .reference import Reference
 from .budget import (
     CostCenter, ActualExpense, ActualCost,
     Budget, BudgetLine,

@@ -16,6 +16,7 @@ class OrderDetail(Base):
 
     id_order_detail = Column(Integer, primary_key=True, index=True)
     id_order = Column(Integer, ForeignKey("orders.id_order"))
+    id_reference = Column(Integer, ForeignKey("product_references.id_reference"), nullable=True)
     product = Column(String(50), nullable=False)
     description = Column(String(50), nullable=False)
     color = Column(String(50), nullable=False)
@@ -29,3 +30,4 @@ class OrderDetail(Base):
 
     order = relationship("Order", back_populates="order_details")
     brand = relationship("Brand", back_populates="order_details")
+    reference = relationship("Reference", back_populates="order_details")

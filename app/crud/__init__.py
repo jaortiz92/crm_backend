@@ -29,4 +29,5 @@ from .photo import *
 from .zone import *
 from .management import *
 from .area import *
+from .reference import *
 from .budget import *
