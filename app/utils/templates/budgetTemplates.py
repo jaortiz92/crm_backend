@@ -1,4 +1,4 @@
-"""
+﻿"""
 Budget Module - ETL Templates
 
 Processes Excel files from the accounting system and transforms them
@@ -15,12 +15,31 @@ Uses pandas + openpyxl for data cleansing and transformation.
 
 # Python
 from io import BytesIO
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 # Pandas
 import pandas as pd
 from pandas.core.frame import DataFrame
 import numpy as np
+
+# SQLAlchemy
+from sqlalchemy.orm import Session
+
+# App models (for relational mapping)
+from app.models.reference import Reference as ReferenceModel
+from app.models.brand import Brand as BrandModel
+from app.models.budget.costCenter import CostCenter as CostCenterModel
+from app.models.invoice import Invoice as InvoiceModel
+from app.models.order import Order as OrderModel
+from app.models.customerTrip import CustomerTrip as CustomerTripModel
+from app.models.customer import Customer as CustomerModel
+from app.models.city import City as CityModel
+from app.models.department import Department as DepartmentModel
+
+# App CRUD & schemas
+import app.crud as crud
+from app.models.budget.actualCost import ActualCost as ActualCostModel
+from app.schemas.budget import ActualCostCreate
 
 
 class BudgetTemplates:
@@ -40,25 +59,366 @@ class BudgetTemplates:
     # CostosFinal.xlsx -> Actual Costs
     # ──────────────────────────────────────────────
 
-    def process_costos_final(self) -> DataFrame:
+    def process_cost(self) -> DataFrame:
         """
         Process CostosFinal.xlsx for actual cost records.
 
-        Reads the Excel file, cleans column names, maps codigo_ceco
-        to cost center references, and returns a structured DataFrame.
+        Steps:
+        1. Read Excel with header=3, skipfooter=1
+        2. Rename columns to standard names
+        3. Clean document numbers (FV->FVFE, PND->NDCL, etc.)
+        4. Extract product code from description
+        5. Cast numeric and date columns
+        6. Calculate amount = quantity * unit_cost
 
         Returns:
-            DataFrame with columns: codigo_ceco, cost_date, cost_type,
-            description, amount
+            DataFrame with cleaned and transformed data
         """
         self.df = pd.read_excel(
             self.file,
             engine="openpyxl",
+            header=3,
+            skipfooter=1
+        ).rename(columns={
+            'Doc': 'document_number',
+            'CódigoInventario': 'description',
+            'Unidades': 'quantity',
+            'Costo Unitario': 'unit_cost',
+            'Fecha': 'cost_date'
+        })
+
+        # Drop rows without document
+        self.df.dropna(subset=['document_number'], inplace=True)
+
+        # Clean document numbers
+        self.df['document_number'] = self.df['document_number'].apply(
+            self._clean_document
         )
-        self._clean_column_names()
-        self._cast_numeric_columns(["amount"])
-        self._cast_date_columns(["cost_date"])
+
+        # Extract reference code from description (first word before space)
+        self.df['reference_code'] = self.df['description'].apply(
+            self._extract_reference_code
+        )
+
+        # Cast types
+        self.df['quantity'] = pd.to_numeric(
+            self.df['quantity'], errors='coerce'
+        ).fillna(0).astype(int)
+        self.df['unit_cost'] = pd.to_numeric(
+            self.df['unit_cost'], errors='coerce'
+        ).fillna(0.0)
+        self.df['cost_date'] = pd.to_datetime(
+            self.df['cost_date'], errors='coerce'
+        ).dt.date
+        self.df['amount'] = self.df['quantity'] * self.df['unit_cost']
+
+        # Standardize text
+        self.df['document_number'] = (
+            self.df['document_number'].astype(str).str.strip()
+        )
+        self.df['reference_code'] = (
+            self.df['reference_code'].astype(str).str.strip()
+        )
+
+        # Description is used only to extract reference_code, not persisted in bulk uploads
+        self.df['description'] = None
+
         return self.df
+
+    @staticmethod
+    def _clean_document(x: str) -> str:
+        """
+        Clean document number following business rules:
+        - FV + not FE -> FVFE + suffix
+        - DMCDMC -> remove prefix
+        - PND -> NDCL + suffix
+        - PNC -> NCCL + suffix
+        - M- -> remove prefix
+        """
+        value = str(x).replace(' ', '')
+        if 'FV' in value and 'FE' not in value:
+            value = 'FVFE' + value[2:]
+        elif 'DMCDMC' in value:
+            value = value[3:]
+        elif 'PND' in value:
+            value = 'NDCL{}'.format(value[7:])
+        elif 'PNC' in value:
+            value = 'NCCL{}'.format(value[7:])
+        elif 'M-' in value:
+            value = value[2:]
+        return value
+
+    @staticmethod
+    def _extract_reference_code(description: str) -> str:
+        """
+        Extract product code from description field.
+        Takes first word before space.
+        Example: "REF123 Zapatilla Nike" -> "REF123"
+        """
+        if not description or pd.isna(description):
+            return ""
+        return str(description).split(' ')[0].strip()
+
+    def _map_relational_data(self, db: Session) -> DataFrame:
+        """
+        Map Excel data to foreign keys:
+        1. reference_code -> id_reference (from product_references)
+        2. document_number -> id_zone (via invoice -> order -> customer_trip
+           -> customer -> city -> department -> zone)
+        3. id_zone + id_line + cost_center_code LIKE '00%' -> id_cost_center
+
+        Returns:
+            DataFrame with id_reference, id_cost_center added
+        """
+        # 1. Load reference map into memory: reference_code -> id_reference
+        references_map = {
+            ref.reference: ref.id_reference
+            for ref in db.query(ReferenceModel).all()
+        }
+
+        # 2. Load invoice_number -> id_zone mapping into memory
+        invoice_zone_map = self._load_invoice_zone_mapping(db)
+
+        # 3. Load (id_zone, id_line) -> id_cost_center mapping
+        cost_center_map = self._load_cost_center_mapping(db)
+
+        # 4. Build a map: id_reference -> id_line (via brand)
+        #    Batch approach: only query brands for references in our data
+        needed_ref_ids = set(
+            references_map[code]
+            for code in self.df['reference_code'].unique()
+            if code in references_map
+        )
+        ref_line_map = {}
+        if needed_ref_ids:
+            ref_brand_rows = db.query(
+                ReferenceModel.id_reference,
+                ReferenceModel.id_brand
+            ).filter(
+                ReferenceModel.id_reference.in_(needed_ref_ids)
+            ).all()
+
+            needed_brand_ids = set(
+                r.id_brand for r in ref_brand_rows if r.id_brand
+            )
+            brand_line_map = {}
+            if needed_brand_ids:
+                brand_rows = db.query(
+                    BrandModel.id_brand,
+                    BrandModel.id_line
+                ).filter(
+                    BrandModel.id_brand.in_(needed_brand_ids)
+                ).all()
+                brand_line_map = {
+                    b.id_brand: b.id_line for b in brand_rows
+                }
+
+            ref_line_map = {
+                r.id_reference: brand_line_map.get(r.id_brand)
+                for r in ref_brand_rows
+            }
+
+        # 5. Apply mappings to DataFrame
+        self.df['id_reference'] = self.df['reference_code'].map(references_map)
+        self.df['id_zone'] = self.df['document_number'].map(invoice_zone_map)
+        self.df['id_line'] = self.df['id_reference'].map(ref_line_map)
+        self.df['id_cost_center'] = self.df.apply(
+            lambda row: self._find_cost_center(
+                cost_center_map,
+                row.get('id_zone'),
+                row.get('id_line')
+            ),
+            axis=1
+        )
+
+        return self.df
+
+    def _load_invoice_zone_mapping(self, db: Session) -> Dict[str, int]:
+        """
+        Load invoice_number -> id_zone mapping into memory.
+        Query path: invoice -> order -> customer_trip -> customer
+                    -> city -> department -> zone
+        Only loads mappings for invoice_numbers present in the DataFrame.
+        """
+        doc_numbers = self.df['document_number'].unique().tolist()
+
+        rows = db.query(
+            InvoiceModel.invoice_number,
+            DepartmentModel.id_zone
+        ).join(
+            OrderModel,
+            OrderModel.id_order == InvoiceModel.id_order
+        ).join(
+            CustomerTripModel,
+            CustomerTripModel.id_customer_trip == OrderModel.id_customer_trip
+        ).join(
+            CustomerModel,
+            CustomerModel.id_customer == CustomerTripModel.id_customer
+        ).join(
+            CityModel,
+            CityModel.id_city == CustomerModel.id_city
+        ).join(
+            DepartmentModel,
+            DepartmentModel.id_department == CityModel.id_department
+        ).filter(
+            InvoiceModel.invoice_number.in_(doc_numbers)
+        ).all()
+
+        return {row.invoice_number: row.id_zone for row in rows}
+
+    def _load_cost_center_mapping(self, db: Session) -> Dict[Tuple[int, int], int]:
+        """
+        Load (id_zone, id_line) -> id_cost_center mapping.
+        Only includes active cost centers where code starts with '00'.
+        """
+        rows = db.query(CostCenterModel).filter(
+            CostCenterModel.cost_center_code.like('00%'),
+            CostCenterModel.is_active == True
+        ).all()
+
+        return {
+            (cc.id_zone, cc.id_line): cc.id_cost_center
+            for cc in rows
+            if cc.id_zone is not None and cc.id_line is not None
+        }
+
+    @staticmethod
+    def _find_cost_center(
+        cost_center_map: Dict[Tuple[int, int], int],
+        id_zone: Optional[int],
+        id_line: Optional[int]
+    ) -> Optional[int]:
+        """Find cost center by (id_zone, id_line) combination."""
+        if id_zone is None or id_line is None:
+            return None
+        if pd.isna(id_zone) or pd.isna(id_line):
+            return None
+        return cost_center_map.get((int(id_zone), int(id_line)))
+
+    def _validate_data_integrity(
+        self, db: Session, excel_total_cost: float
+    ) -> None:
+        """
+        Validate data integrity before insertion:
+        1. Check all references exist in catalog
+        2. Check all cost centers were resolved
+        3. Validate SUM(amount) matches Excel Total Cost (tolerance: 100)
+        """
+        from fastapi import HTTPException, status as http_status
+
+        # 1. Missing references
+        missing_refs = self.df[
+            self.df['id_reference'].isna()
+            & self.df['reference_code'].notna()
+            & (self.df['reference_code'] != "")
+            & (self.df['reference_code'] != "nan")
+        ]['reference_code'].unique().tolist()
+
+        if missing_refs:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"References not found in catalog: {missing_refs}"
+            )
+
+        # 2. Missing cost centers
+        missing_cc = self.df[self.df['id_cost_center'].isna()]
+        if not missing_cc.empty:
+            error_details = []
+            for _, row in missing_cc.head(10).iterrows():
+                error_details.append({
+                    "document_number": str(row['document_number']),
+                    "reference_code": str(row['reference_code']),
+                    "id_zone": row.get('id_zone'),
+                    "id_line": row.get('id_line'),
+                    "reason": (
+                        "Cost center not found with filters: "
+                        "id_zone + id_line + code LIKE '00%'"
+                    )
+                })
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": (
+                        f"Could not resolve cost center for "
+                        f"{len(missing_cc)} records"
+                    ),
+                    "examples": error_details[:10]
+                }
+            )
+
+        # 3. Total amount validation (tolerance: 100)
+        calculated_total = float(self.df['amount'].sum())
+        if abs(calculated_total - excel_total_cost) > 100:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Total amount validation failed",
+                    "excel_total": excel_total_cost,
+                    "calculated_total": calculated_total,
+                    "difference": abs(calculated_total - excel_total_cost),
+                    "tolerance": 100
+                }
+            )
+
+    def _handle_duplicate_documents(self, db: Session) -> int:
+        """
+        Detect if any document_number in the new file already exists in DB.
+        If duplicates found, delete all existing records with those document_numbers.
+
+        This deletion runs within the same transaction as the subsequent bulk insert.
+        If the bulk insert fails, a rollback will restore the deleted records.
+
+        Returns:
+            Number of records deleted (0 if no duplicates)
+        """
+        new_document_numbers = self.df['document_number'].unique().tolist()
+
+        existing_count = db.query(ActualCostModel).filter(
+            ActualCostModel.document_number.in_(new_document_numbers)
+        ).count()
+
+        if existing_count == 0:
+            return 0
+
+        deleted_count = db.query(ActualCostModel).filter(
+            ActualCostModel.document_number.in_(new_document_numbers)
+        ).delete(synchronize_session=False)
+
+        return deleted_count
+
+    def _bulk_insert(
+        self, db: Session, source_filename: str
+    ) -> list:
+        """
+        Convert DataFrame to ActualCostCreate records and perform bulk insert.
+        Transaction is atomic (all-or-nothing).
+        """
+        records = []
+        for _, row in self.df.iterrows():
+            id_ref = row.get('id_reference')
+            if pd.isna(id_ref):
+                id_ref = None
+            else:
+                id_ref = int(id_ref)
+
+            cost_date = row['cost_date']
+            if hasattr(cost_date, 'isoformat'):
+                cost_date = cost_date.isoformat()
+
+            records.append(ActualCostCreate(
+                id_cost_center=int(row['id_cost_center']),
+                document_number=str(row['document_number']),
+                id_reference=id_ref,
+                quantity=int(row['quantity']),
+                unit_cost=float(row['unit_cost']),
+                cost_date=cost_date,
+                cost_type='invoice',
+                amount=float(row['amount']),
+                description=None,
+                source_file=source_filename,
+            ))
+
+        return crud.create_actual_costs_bulk(db, records)
 
     # ──────────────────────────────────────────────
     # LibroAuxiliarCECO.xlsx -> Actual Expenses

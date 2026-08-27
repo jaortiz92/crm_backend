@@ -1,4 +1,4 @@
-"""
+﻿"""
 Actual Cost API Endpoints
 """
 
@@ -87,6 +87,24 @@ def update_actual_cost(
     if db_cost is None:
         Exceptions.register_not_found("ActualCost", id_actual_cost)
     return db_cost
+
+
+
+
+@router.delete("/by-document/{document_number}")
+def delete_actual_costs_by_document(
+    document_number: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete all actual cost records associated with a specific document_number."""
+    deleted_count = crud.delete_actual_costs_by_document(db, document_number)
+    if deleted_count == 0:
+        Exceptions.register_not_found("ActualCost", f"document_number={document_number}")
+    return {
+        "message": f"Actual costs deleted successfully for document_number: {document_number}",
+        "records_deleted": deleted_count
+    }
 
 
 @router.delete("/{id_actual_cost}")

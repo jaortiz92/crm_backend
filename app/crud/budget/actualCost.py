@@ -95,3 +95,12 @@ def delete_actual_cost(db: Session, id_actual_cost: int) -> bool:
         db.commit()
         return True
     return False
+
+def delete_actual_costs_by_document(db: Session, document_number: str) -> int:
+    """Delete all actual cost records with the given document_number.
+    Returns the number of records deleted."""
+    deleted_count = db.query(ActualCostModel).filter(
+        ActualCostModel.document_number == document_number
+    ).delete(synchronize_session=False)
+    db.commit()
+    return deleted_count

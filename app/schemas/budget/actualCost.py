@@ -1,4 +1,4 @@
-"""
+﻿"""
 ActualCost Schemas
 """
 
@@ -10,10 +10,14 @@ from pydantic import BaseModel, Field
 
 class ActualCostBase(BaseModel):
     id_cost_center: int = Field(..., gt=0, description="FK to cost center")
+    document_number: str = Field(..., max_length=50, description="Invoice/document number")
+    id_reference: Optional[int] = Field(None, gt=0, description="FK to product reference")
+    quantity: int = Field(..., ge=0, description="Quantity of units")
+    unit_cost: float = Field(..., ge=0, description="Cost per unit")
     cost_date: date = Field(..., description="Date of the cost")
     cost_type: str = Field(..., max_length=60, description="Category of cost")
-    description: Optional[str] = Field(None, description="Detail of the cost")
-    amount: float = Field(..., ge=0, description="Cost amount")
+    amount: float = Field(..., ge=0, description="Total cost (quantity * unit_cost)")
+    description: Optional[str] = Field(None, description="Optional description of the cost")
     source_file: Optional[str] = Field(None, max_length=200, description="Source Excel file")
 
 
@@ -27,3 +31,4 @@ class ActualCost(ActualCostBase):
 
     class Config:
         from_attributes = True
+

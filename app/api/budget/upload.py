@@ -1,4 +1,4 @@
-"""
+﻿"""
 ETL Upload API Endpoints
 
 Excel file ingestion endpoints for the Budget module.
@@ -52,15 +52,63 @@ async def upload_actual_expenses(
 @router.post("/actual-costs")
 async def upload_actual_costs(
     file: UploadFile = File(...),
+    excel_total_cost: float = Form(..., description="Total cost from Excel for validation"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Upload and process CostosFinal.xlsx for actual costs.
-    Maps records against cost centers by codigo_ceco.
+
+    Process:
+    1. Read Excel file
+    2. Clean and transform data (document numbers, reference codes)
+    3. Map references to id_reference
+    4. Infer id_zone from invoice -> order -> customer_trip -> customer -> city -> department
+    5. Resolve id_cost_center using (id_zone, id_line, code LIKE '00%')
+    6. Validate data integrity (missing references, cost centers, total amount)
+    7. Bulk insert into actual_costs table
+
+    Returns:
+        JSON with insertion summary
     """
-    # TODO: Implement ETL processing via BudgetTemplates
-    return {"message": "Actual costs upload endpoint - implementation pending"}
+    file_content = await file.read()
+    file_bytes = BytesIO(file_content)
+
+    try:
+        # Phase A: Data cleansing
+        etl = BudgetTemplates(file_bytes)
+        df = etl.process_cost()
+
+        # Phase B: Relational mapping
+        df = etl._map_relational_data(db)
+
+        # Phase C: Safety checks
+        etl._validate_data_integrity(db, excel_total_cost)
+
+        # Phase D: Detect duplicates and replace if needed
+        records_deleted = etl._handle_duplicate_documents(db)
+
+        # Phase E: Bulk insert
+        inserted_records = etl._bulk_insert(db, file.filename)
+
+        return {
+            "message": "Actual costs uploaded successfully",
+            "records_inserted": len(inserted_records),
+            "total_amount": sum(r.amount for r in inserted_records),
+            "source_file": file.filename,
+            "replaced": records_deleted > 0,
+            "records_deleted": records_deleted
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing actual costs: {str(e)}"
+        )
 
 
 @router.post("/accounts-receivable")
