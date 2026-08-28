@@ -424,25 +424,198 @@ class BudgetTemplates:
     # LibroAuxiliarCECO.xlsx -> Actual Expenses
     # ──────────────────────────────────────────────
 
-    def process_libro_auxiliar_ceco(self) -> DataFrame:
+    def process_actual_expenses(self) -> DataFrame:
         """
         Process LibroAuxiliarCECO.xlsx for actual expense records.
 
-        Reads the Excel file, maps codigo_ceco to cost center references,
-        and returns a structured DataFrame.
+        Steps:
+        1. Read Excel with header=3
+        2. Drop rows without NumDoc
+        3. Exclude rows with "Total" in CuentaContable
+        4. Filter only expenses (CuentaContable starts with "5")
+        5. Calculate amount = Débitos - Créditos
+        6. Cast numeric and date columns
 
         Returns:
-            DataFrame with columns: codigo_ceco, expense_date, expense_type,
-            description, amount
+            DataFrame with cleaned and transformed data
         """
         self.df = pd.read_excel(
             self.file,
             engine="openpyxl",
+            header=3,
         )
-        self._clean_column_names()
-        self._cast_numeric_columns(["amount"])
-        self._cast_date_columns(["expense_date"])
+        self.total_rows_raw = len(self.df)
+
+        # Drop rows without document number
+        self.df.dropna(subset=['NumDoc'], inplace=True)
+        self.df = self.df[self.df['NumDoc'].astype(str).str.strip() != '']
+
+        # Exclude "Total" rows
+        self.df = self.df[
+            ~self.df['CuentaContable'].astype(str).str.contains('Total', case=False, na=False)
+        ]
+
+        # Filter only expenses (CuentaContable starts with "5")
+        self.df = self.df[
+            self.df['CuentaContable'].astype(str).str.startswith('5')
+        ]
+
+        # Calculate net amount
+        self.df['amount'] = (
+            pd.to_numeric(self.df['Débitos'], errors='coerce').fillna(0)
+            - pd.to_numeric(self.df['Créditos'], errors='coerce').fillna(0)
+        )
+
+        # Extract accounting_account and expense_type from CuentaContable
+        cuenta_split = self.df['CuentaContable'].astype(str).str.split(' ', n=1)
+        self.df['accounting_account'] = cuenta_split.str[0].str.strip()
+        self.df['expense_type'] = cuenta_split.str[1].fillna('').str.strip()
+
+        # Cast dates
+        self.df['expense_date'] = pd.to_datetime(
+            self.df['Fecha'], errors='coerce'
+        ).dt.date
+
+        # Standardize text fields
+        self.df['document_number'] = self.df['NumDoc'].astype(str).str.strip().str.replace(' ', '', regex=False)
+        self.df['description'] = self.df['Notas'].where(
+            self.df['Notas'].notna(), None
+        )
+        self.df['third_party_account'] = self.df['Cuenta Tercero'].where(
+            self.df['Cuenta Tercero'].notna(), None
+        )
+        self.df['centro_costos_raw'] = self.df['CentroCostos'].astype(str).str.strip()
+
         return self.df
+
+    def _map_actual_expenses_relational_data(self, db: Session) -> DataFrame:
+        """
+        Map CentroCostos names to id_cost_center FK.
+        Excel contains cost center names (not codes).
+        Applies fallback rules for empty CentroCostos using code-based lookup.
+        """
+        cost_centers = db.query(CostCenterModel).all()
+        name_to_id = {cc.cost_center_name.strip(): cc.id_cost_center for cc in cost_centers}
+        code_to_id = {cc.cost_center_code: cc.id_cost_center for cc in cost_centers}
+
+        aliases = {
+            'Comercial': 'Comercial General',
+        }
+
+        fallback_map = {
+            '51': '410100',
+            '52': '210700',
+            '53': '510100',
+            '54': '999100',
+        }
+
+        def resolve_cost_center(row):
+            cc_raw = row['centro_costos_raw']
+            if cc_raw == '' or cc_raw == 'nan' or pd.isna(row['CentroCostos']):
+                prefix = row['accounting_account'][:2]
+                fallback_code = fallback_map.get(prefix)
+                if fallback_code:
+                    return code_to_id.get(fallback_code)
+                return None
+            resolved = name_to_id.get(cc_raw)
+            if resolved is None and cc_raw in aliases:
+                resolved = name_to_id.get(aliases[cc_raw])
+            return resolved
+
+        self.df['cost_center_lookup'] = self.df.apply(resolve_cost_center, axis=1)
+        self.df['id_cost_center'] = self.df['cost_center_lookup']
+
+        return self.df
+
+    def _validate_actual_expenses_integrity(self, db: Session) -> None:
+        """
+        Validate data integrity before insertion:
+        1. Check all cost center codes exist in catalog
+        2. Validate dates and amounts
+        """
+        from fastapi import HTTPException, status as http_status
+
+        # 1. Missing cost centers
+        missing_cc = self.df[self.df['id_cost_center'].isna()]
+        if not missing_cc.empty:
+            invalid_names = missing_cc['centro_costos_raw'].unique().tolist()
+            error_details = []
+            for name in invalid_names:
+                affected_docs = (
+                    missing_cc[missing_cc['centro_costos_raw'] == name]['document_number']
+                    .unique().tolist()
+                )
+                error_details.append({
+                    "cost_center_name": name,
+                    "affected_documents": affected_docs[:10],
+                    "total_affected": len(affected_docs),
+                })
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": f"Cost centers not found in catalog: {invalid_names}",
+                    "invalid_cost_centers": error_details,
+                }
+            )
+
+        # 2. Invalid dates
+        invalid_dates = self.df[self.df['expense_date'].isna()]
+        if not invalid_dates.empty:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"{len(invalid_dates)} records have invalid dates"
+            )
+
+    def _handle_actual_expense_duplicates(self, db: Session) -> int:
+        """
+        Detect if any document_number in the new file already exists in DB.
+        If duplicates found, delete all existing records with those document_numbers.
+
+        This deletion runs within the same transaction as the subsequent bulk insert.
+        If the bulk insert fails, a rollback will restore the deleted records.
+
+        Returns:
+            Number of records deleted (0 if no duplicates)
+        """
+        from app.models.budget.actualExpense import ActualExpense as ActualExpenseModel
+
+        new_document_numbers = self.df['document_number'].unique().tolist()
+
+        existing_count = db.query(ActualExpenseModel).filter(
+            ActualExpenseModel.document_number.in_(new_document_numbers)
+        ).count()
+
+        if existing_count == 0:
+            return 0
+
+        deleted_count = db.query(ActualExpenseModel).filter(
+            ActualExpenseModel.document_number.in_(new_document_numbers)
+        ).delete(synchronize_session=False)
+
+        return deleted_count
+
+    def _bulk_insert_actual_expenses(self, db: Session, source_filename: str) -> list:
+        """
+        Convert DataFrame to ActualExpenseCreate records and perform bulk insert.
+        Transaction is atomic (all-or-nothing).
+        """
+        from app.schemas.budget import ActualExpenseCreate
+
+        records = []
+        for _, row in self.df.iterrows():
+            records.append(ActualExpenseCreate(
+                id_cost_center=int(row['id_cost_center']),
+                accounting_account=str(row['accounting_account']),
+                expense_type=str(row['expense_type']),
+                description=row.get('description'),
+                amount=float(row['amount']),
+                document_number=str(row['document_number']),
+                expense_date=row['expense_date'],
+                third_party_account=row.get('third_party_account'),
+                source_file=source_filename,
+            ))
+
+        return crud.create_actual_expenses_bulk(db, records)
 
     # ──────────────────────────────────────────────
     # EstadoCuenta306090.xlsx -> Accounts Receivable

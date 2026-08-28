@@ -45,8 +45,49 @@ async def upload_actual_expenses(
     Upload and process LibroAuxiliarCECO.xlsx for actual expenses.
     Maps records against cost centers by codigo_ceco.
     """
-    # TODO: Implement ETL processing via BudgetTemplates
-    return {"message": "Actual expenses upload endpoint - implementation pending"}
+    file_content = await file.read()
+    file_bytes = BytesIO(file_content)
+
+    try:
+        etl = BudgetTemplates(file_bytes)
+
+        # Fase A: Limpieza
+        df = etl.process_actual_expenses()
+        total_rows_raw = etl.total_rows_raw
+
+        # Fase B: Mapeo relacional
+        etl._map_actual_expenses_relational_data(db)
+
+        # Fase C: Validaciones
+        etl._validate_actual_expenses_integrity(db)
+
+        # Fase C (cont.): Reemplazo atómico
+        records_deleted = etl._handle_actual_expense_duplicates(db)
+
+        # Fase D: Bulk insert
+        inserted_records = etl._bulk_insert_actual_expenses(db, file.filename)
+
+        return {
+            "message": "Actual expenses uploaded successfully",
+            "records_inserted": len(inserted_records),
+            "records_replaced": records_deleted,
+            "source_file": file.filename,
+            "details": {
+                "total_rows_processed": total_rows_raw,
+                "rows_filtered": total_rows_raw - len(df),
+                "valid_expenses": len(df)
+            }
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing actual expenses: {str(e)}"
+        )
 
 
 @router.post("/actual-costs")

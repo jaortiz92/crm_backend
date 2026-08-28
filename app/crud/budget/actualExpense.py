@@ -95,3 +95,23 @@ def delete_actual_expense(db: Session, id_actual_expense: int) -> bool:
         db.commit()
         return True
     return False
+
+
+def delete_actual_expenses_by_document(db: Session, document_number: str) -> int:
+    """Eliminar todos los registros con un document_number específico."""
+    count = db.query(ActualExpenseModel).filter(
+        ActualExpenseModel.document_number == document_number
+    ).delete(synchronize_session=False)
+    db.commit()
+    return count
+
+
+def delete_actual_expenses_by_documents(
+    db: Session, document_numbers: List[str]
+) -> int:
+    """Eliminar registros por lista de document_numbers (para reemplazo atómico).
+    NO hace commit - el caller controla la transacción."""
+    count = db.query(ActualExpenseModel).filter(
+        ActualExpenseModel.document_number.in_(document_numbers)
+    ).delete(synchronize_session=False)
+    return count

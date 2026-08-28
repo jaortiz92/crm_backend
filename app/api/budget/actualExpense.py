@@ -110,3 +110,22 @@ def delete_actual_expense(
     if not success:
         Exceptions.register_not_found("ActualExpense", id_actual_expense)
     return {"message": "Actual expense deleted successfully"}
+
+
+@router.delete("/by-document/{document_number}")
+def delete_actual_expense_by_document(
+    document_number: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Eliminar registros por número de documento."""
+    deleted_count = crud.delete_actual_expenses_by_document(db, document_number)
+
+    if deleted_count == 0:
+        Exceptions.register_not_found("ActualExpense", document_number)
+
+    return {
+        "message": "Actual expenses deleted successfully",
+        "records_deleted": deleted_count,
+        "document_number": document_number
+    }
