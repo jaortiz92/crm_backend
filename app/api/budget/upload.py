@@ -169,15 +169,79 @@ async def upload_accounts_receivable(
 @router.post("/payment-ledger")
 async def upload_payment_ledger(
     file: UploadFile = File(...),
+    include_initial_balances: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Upload and process RecibosDePago.xlsx for payment ledger.
-    Maps records against account receivables and collections.
+    Upload and process Recibos.xlsx for the payment ledger (cash-flow ETL).
+
+    Phases: process -> map -> validate -> dedupe (atomic replace by
+    receipt_number) -> bulk insert, all in a single transaction.
     """
-    # TODO: Implement ETL processing via BudgetTemplates
-    return {"message": "Payment ledger upload endpoint - implementation pending"}
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .xlsx files are supported",
+        )
+    file_content = await file.read()
+    file_bytes = BytesIO(file_content)
+
+    try:
+        # Fase A: Limpieza y clasificación por naturaleza
+        etl = BudgetTemplates(file_bytes)
+        df = etl.process_payment_ledger(include_initial_balances=include_initial_balances)
+
+        # Fase B: Imputación de documento afectado y cliente opcional
+        etl._map_payment_ledger_relational_data(db)
+
+        # Fase C: Validaciones y reemplazo atómico por recibo
+        etl._validate_payment_ledger_integrity(db)
+        records_deleted = etl._handle_payment_ledger_duplicates(db)
+
+        # Fase D: Inserción masiva (commit)
+        inserted_records = etl._bulk_insert_payment_ledger(db, file.filename)
+
+        cash = df[df['transaction_nature'] == 'CASH']
+        non_cash = df[df['transaction_nature'] == 'NON_CASH_ADJUSTMENT']
+        cash_in = cash[cash['cash_flow'] == 'in']
+        cash_out = cash[cash['cash_flow'] == 'out']
+
+        return {
+            "message": "Payment ledger uploaded successfully",
+            "records_inserted": len(inserted_records),
+            "records_replaced": records_deleted,
+            "source_file": file.filename,
+            "include_initial_balances": include_initial_balances,
+            "details": {
+                "total_rows_processed": etl.total_rows_raw,
+                "rows_excluded_totals": etl.rows_excluded_totals,
+                "rows_excluded_documents": etl.rows_excluded_documents,
+                "rows_excluded_initial_balances": etl.rows_excluded_initial_balances,
+                "rows_skipped_null": etl.rows_skipped_null,
+                "cash_records": len(cash),
+                "non_cash_records": len(non_cash),
+                "cash_in_count": len(cash_in),
+                "cash_out_count": len(cash_out),
+                "total_cash_in": round(float(cash_in['payment_amount'].sum()), 2),
+                "total_cash_out": round(float(cash_out['payment_amount'].sum()), 2),
+                "net_liquidity": round(float(cash['payment_amount'].sum()), 2),
+                "total_non_cash_adjustments": round(float(non_cash['payment_amount'].sum()), 2),
+                "rows_with_document_candidate": etl.rows_with_document_candidate,
+                "invoices_imputed": etl.invoices_imputed,
+                "documents_not_imputed": etl.documents_not_imputed,
+            },
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing payment ledger: {str(e)}",
+        )
 
 
 @router.post("/budget-plan-income")

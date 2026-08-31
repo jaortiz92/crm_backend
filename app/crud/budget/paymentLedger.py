@@ -55,6 +55,10 @@ def get_payment_ledger(
     id_account_receivable: Optional[int] = None,
     date_ge: Optional[date] = None,
     date_le: Optional[date] = None,
+    transaction_nature: Optional[str] = None,
+    cash_flow: Optional[str] = None,
+    receipt_number: Optional[str] = None,
+    third_party: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
 ) -> List[PaymentLedgerModel]:
@@ -66,6 +70,14 @@ def get_payment_ledger(
         query = query.filter(PaymentLedgerModel.payment_date >= date_ge)
     if date_le is not None:
         query = query.filter(PaymentLedgerModel.payment_date <= date_le)
+    if transaction_nature is not None:
+        query = query.filter(PaymentLedgerModel.transaction_nature == transaction_nature)
+    if cash_flow is not None:
+        query = query.filter(PaymentLedgerModel.cash_flow == cash_flow)
+    if receipt_number is not None:
+        query = query.filter(PaymentLedgerModel.receipt_number == receipt_number)
+    if third_party is not None:
+        query = query.filter(PaymentLedgerModel.third_party.ilike(f"%{third_party}%"))
     return query.order_by(
         PaymentLedgerModel.payment_date.desc()
     ).offset(skip).limit(limit).all()
@@ -96,3 +108,11 @@ def delete_payment_ledger(db: Session, id_payment_ledger: int) -> bool:
         db.commit()
         return True
     return False
+
+
+def delete_payment_ledger_by_receipts(db: Session, receipt_numbers: List[str]) -> int:
+    """Delete ledger rows by receipt_number list (atomic replace). No commit here."""
+    count = db.query(PaymentLedgerModel).filter(
+        PaymentLedgerModel.receipt_number.in_(receipt_numbers)
+    ).delete(synchronize_session=False)
+    return count

@@ -8,12 +8,13 @@ Supported files:
 - CostosFinal.xlsx -> actual_costs
 - LibroAuxiliarCECO.xlsx -> actual_expenses
 - EstadoCuenta306090.xlsx -> accounts_receivable (with skiprows=3)
-- RecibosDePago.xlsx -> payment_ledger
+- Recibos.xlsx -> payment_ledger (SIIGO auxiliares: cash-flow & adjustments)
 
 Uses pandas + openpyxl for data cleansing and transformation.
 """
 
 # Python
+import re
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -51,9 +52,34 @@ class BudgetTemplates:
     and returning a structured DataFrame ready for bulk insertion.
     """
 
+    # Payment ledger (Recibos.xlsx) nature classification (§6.4)
+    CASH_PREFIXES = {"RC", "CE"}
+    NON_CASH_PREFIXES = {"NC", "NO", "DMC"}
+    INITIAL_BALANCE_PREFIXES = {"SI"}
+    # Ordered by precedence: first candidate that resolves wins (§3.2a)
+    DOC_CANDIDATE_PATTERNS = [
+        r"VENTA\s+(\d{3,7})",
+        r"\bFV\s+(\d{3,7})",
+        r"\bFE\s+(\d{3,7})",
+        r"\bDSC\s+(\d{3,7})",
+        r"\bDMC\s+(\d{3,7})",
+        r"\bNC\s+(\d{3,7})",
+    ]
+
     def __init__(self, file: BytesIO) -> None:
         self.file: BytesIO = file
         self.df: Optional[DataFrame] = None
+        # Payment ledger ETL detail counters
+        self.total_rows_raw: int = 0
+        self.rows_excluded_totals: int = 0
+        self.rows_excluded_documents: int = 0
+        self.rows_excluded_initial_balances: int = 0
+        self.rows_skipped_null: int = 0
+        self.rows_non_numeric_movement: int = 0
+        self.rows_with_document_candidate: int = 0
+        self.invoices_imputed: int = 0
+        self.documents_not_imputed: int = 0
+        self.payment_ledger_replacement_receipts: List[str] = []
 
     # ──────────────────────────────────────────────
     # CostosFinal.xlsx -> Actual Costs
@@ -644,28 +670,325 @@ class BudgetTemplates:
         return self.df
 
     # ──────────────────────────────────────────────
-    # RecibosDePago.xlsx -> Payment Ledger
+    # Recibos.xlsx -> Payment Ledger (cash-flow ETL)
     # ──────────────────────────────────────────────
 
-    def process_recibos_de_pago(self) -> DataFrame:
+    def process_payment_ledger(
+        self, include_initial_balances: bool = False
+    ) -> DataFrame:
         """
-        Process RecibosDePago.xlsx for payment ledger records.
+        Process Recibos.xlsx (SIIGO auxiliares export) for payment ledger rows.
 
-        Reads the Excel file, maps payment references to account
-        receivables and collections.
+        Phase A (data cleansing):
+        1. Read Excel (sheet 0) and ffill hierarchy columns
+        2. Normalize receipt_number and derive document prefix
+        3. Filter by transaction nature (RC/CE -> CASH, NC/NO/DMC -> NON_CASH,
+           SI -> only if include_initial_balances; FV/FC/otros excluded)
+        4. payment_amount = Movimiento * -1 (bank's perspective) for all rows
+        5. cash_flow direction only for CASH rows (NULL for NON_CASH or 0)
+        6. Drop kept rows with null Movimiento/Fecha (rows_skipped_null)
 
         Returns:
-            DataFrame with columns: document_number, payment_date,
-            payment_amount, payment_method, reference_number, id_invoice
+            DataFrame with cleaned payment ledger columns
         """
         self.df = pd.read_excel(
             self.file,
             engine="openpyxl",
+            sheet_name=0,
         )
-        self._clean_column_names()
-        self._cast_numeric_columns(["payment_amount"])
-        self._cast_date_columns(["payment_date"])
+        self.total_rows_raw = len(self.df)
+
+        # Flatten hierarchy: carry third-party context to every detail row
+        for col in ('Nombres', 'Empresa', 'Tipo de Cuenta'):
+            self.df[col] = self.df[col].ffill()
+
+        # Normalize receipt number: strip + collapse inner whitespace, derive
+        # the prefix from the first token, then remove every non-alphanumeric
+        # char for storage ("RC  - 3017" -> "RC3017").
+        receipt = (
+            self.df['IdCuentaContableDocumento'].astype(str).str.strip()
+            .str.replace(r'\s+', ' ', regex=True)
+        )
+        receipt = receipt.where(receipt != 'nan', '')
+        self.df['prefix'] = receipt.str.split(' ').str[0].fillna('')
+        self.df['receipt_number'] = receipt.str.replace(
+            r'[^0-9A-Za-z]', '', regex=True
+        )
+
+        cash_mask = self.df['prefix'].isin(self.CASH_PREFIXES)
+        non_cash_mask = self.df['prefix'].isin(self.NON_CASH_PREFIXES)
+        si_mask = self.df['prefix'].isin(self.INITIAL_BALANCE_PREFIXES)
+        empty_mask = receipt == ''
+        keep_mask = cash_mask | non_cash_mask | (si_mask & include_initial_balances)
+
+        # Atomic replacement scope (D10): every ledger-related receipt found
+        # in the file (CASH/NON_CASH/SI prefixes), regardless of the flag.
+        # The file "owns" SI receipts even when include_initial_balances is
+        # False, so re-uploading without the flag reverts previously
+        # included saldo-initial rows instead of leaving them orphaned.
+        ledger_related_mask = cash_mask | non_cash_mask | si_mask
+        self.payment_ledger_replacement_receipts = (
+            self.df.loc[ledger_related_mask, 'receipt_number'].unique().tolist()
+        )
+
+        # Exclusion counters (for upload response details)
+        self.rows_excluded_totals = int(empty_mask.sum())
+        self.rows_excluded_initial_balances = int((si_mask & ~keep_mask).sum())
+        self.rows_excluded_documents = int(
+            (~empty_mask & ~si_mask & ~keep_mask).sum()
+        )
+
+        self.df = self.df[keep_mask].copy()
+
+        # Nature from prefix only (never from Tipo de Cuenta, D9)
+        self.df['transaction_nature'] = np.where(
+            self.df['prefix'].isin(self.CASH_PREFIXES),
+            'CASH',
+            'NON_CASH_ADJUSTMENT',
+        )
+
+        # Skip kept rows with null Movimiento/Fecha; flag non-numeric ones
+        raw_movement = self.df['Movimiento']
+        movement_num = pd.to_numeric(raw_movement, errors='coerce')
+        null_movement = raw_movement.isna() | (
+            raw_movement.astype(str).str.strip().isin(['', 'nan'])
+        )
+        null_date = self.df['Fecha'].isna()
+        skip_mask = null_movement | null_date
+        self.rows_skipped_null = int(skip_mask.sum())
+        self.df = self.df[~skip_mask].copy()
+
+        # Signed bank-view amount (D4/D5): inversion applies to every row
+        self.df['payment_amount'] = pd.to_numeric(
+            self.df['Movimiento'], errors='coerce'
+        ) * -1.0
+        self.rows_non_numeric_movement = int(self.df['payment_amount'].isna().sum())
+
+        # Direction only for CASH rows; 0-amount CASH rows stay NULL
+        is_cash = self.df['transaction_nature'] == 'CASH'
+        amount = self.df['payment_amount']
+        self.df['cash_flow'] = np.select(
+            [is_cash & (amount > 0), is_cash & (amount < 0)],
+            ['in', 'out'],
+            default=None,
+        )
+
+        self.df['payment_date'] = pd.to_datetime(
+            self.df['Fecha'], errors='coerce'
+        ).dt.date
+
+        # accounting_account: first token of Cuenta (same rule as actual expenses)
+        cuenta = self.df['Cuenta'].astype(str).str.split(' ', n=1).str[0].str.strip()
+        self.df['accounting_account'] = cuenta.where(cuenta != 'nan', '')
+
+        self.df['description'] = self.df['Concepto'].where(
+            self.df['Concepto'].notna(), None
+        )
+        self.df['third_party'] = self.df['Nombres'].where(
+            self.df['Nombres'].notna(), None
+        )
+
         return self.df
+
+    @staticmethod
+    def _extract_doc_candidates(description: Any) -> List[str]:
+        """
+        Extract affected-document candidates from a Concepto text (D6/D7).
+
+        A number is a candidate only when it immediately follows a marker
+        (VENTA, FV, FE, DSC, DMC, NC). Months/years without marker are
+        never candidates. Candidates are returned in pattern-precedence
+        order, deduplicated by first occurrence.
+        """
+        if description is None or (isinstance(description, float) and pd.isna(description)):
+            return []
+        text = str(description).upper()
+        candidates: List[str] = []
+        for pattern in BudgetTemplates.DOC_CANDIDATE_PATTERNS:
+            for match in re.finditer(pattern, text):
+                number = match.group(1)
+                if number not in candidates:
+                    candidates.append(number)
+        return candidates
+
+    def _map_payment_ledger_relational_data(self, db: Session) -> DataFrame:
+        """
+        Phase B: impute affected document (id_invoice) and optional customer.
+
+        - Candidates extracted from description with ordered marker regexes.
+        - Validated in batch against invoices using normalized forms
+          {str(n), "FVFE"+n} (same convention as the cost ETL's
+          _clean_document). First candidate that resolves wins; when an
+          invoice_number has multiple installment rows, link the lowest key.
+        - id_customer: only for RC rows, exact upper/trim match against
+          Customer.company_name. Never blocks.
+        - id_account_receivable stays NULL (left to manual CRUD).
+        """
+        self.df['_candidates'] = self.df['description'].apply(
+            self._extract_doc_candidates
+        )
+        self.rows_with_document_candidate = int(
+            (self.df['_candidates'].str.len() > 0).sum()
+        )
+
+        # Batch validation against invoices (no per-row queries)
+        all_forms = set()
+        for candidates in self.df['_candidates']:
+            for number in candidates:
+                all_forms.add(number)
+                all_forms.add(f"FVFE{number}")
+
+        invoice_form_map: Dict[str, Tuple[int, int]] = {}
+        if all_forms:
+            rows = db.query(
+                InvoiceModel.invoice_number,
+                InvoiceModel.key,
+                InvoiceModel.id_invoice,
+            ).filter(
+                InvoiceModel.invoice_number.in_(list(all_forms))
+            ).all()
+            for row in rows:
+                previous = invoice_form_map.get(row.invoice_number)
+                if previous is None or row.key < previous[0]:
+                    invoice_form_map[row.invoice_number] = (row.key, row.id_invoice)
+
+        def resolve_invoice(candidates: List[str]) -> Optional[int]:
+            for number in candidates:
+                hits = [
+                    invoice_form_map[form]
+                    for form in (number, f"FVFE{number}")
+                    if form in invoice_form_map
+                ]
+                if hits:
+                    return min(hits)[1]
+            return None
+
+        self.df['id_invoice'] = self.df['_candidates'].apply(resolve_invoice)
+        self.invoices_imputed = int(self.df['id_invoice'].notna().sum())
+        self.documents_not_imputed = (
+            self.rows_with_document_candidate - self.invoices_imputed
+        )
+
+        # Optional non-blocking customer link, RC rows only (D11)
+        self.df['id_account_receivable'] = None
+        self.df['id_customer'] = None
+        rc_mask = self.df['prefix'] == 'RC'
+        if rc_mask.any():
+            customer_map: Dict[str, int] = {}
+            for id_customer, company_name in db.query(
+                CustomerModel.id_customer, CustomerModel.company_name
+            ).all():
+                name_key = str(company_name or '').strip().upper()
+                if name_key and name_key not in customer_map:
+                    customer_map[name_key] = id_customer
+
+            def match_customer(third_party: Any) -> Optional[int]:
+                if third_party is None or pd.isna(third_party):
+                    return None
+                return customer_map.get(str(third_party).strip().upper())
+
+            self.df.loc[rc_mask, 'id_customer'] = self.df.loc[
+                rc_mask, 'third_party'
+            ].apply(match_customer)
+
+        return self.df
+
+    def _validate_payment_ledger_integrity(self, db: Session) -> None:
+        """
+        Phase C: blocking validations for the payment ledger ETL.
+
+        1. Empty receipt_number -> 400 (whole rejection)
+        2. Invalid payment_date -> 400 "N records have invalid dates"
+        3. Non-numeric Movimiento -> 400 (whole rejection)
+
+        Non-blocking issues (candidates without invoice, third_party
+        without customer) are only reported via counters.
+        """
+        from fastapi import HTTPException, status as http_status
+
+        empty_receipts = self.df[
+            self.df['receipt_number'].isna() | (self.df['receipt_number'] == '')
+        ]
+        if not empty_receipts.empty:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"{len(empty_receipts)} records have empty receipt_number",
+            )
+
+        invalid_dates = self.df[self.df['payment_date'].isna()]
+        if not invalid_dates.empty:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"{len(invalid_dates)} records have invalid dates",
+            )
+
+        if self.rows_non_numeric_movement > 0:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"{self.rows_non_numeric_movement} records have "
+                    f"non-numeric Movimiento"
+                ),
+            )
+
+    def _handle_payment_ledger_duplicates(self, db: Session) -> int:
+        """
+        Atomic replace by receipt_number (D10): delete existing rows whose
+        receipt_number appears in the file, within the same transaction as
+        the subsequent bulk insert (no commit here, caller controls it).
+        If the insert fails, a rollback restores the deleted records.
+
+        The deletion scope is the set of ledger-related receipts found in
+        the raw file (computed in process_payment_ledger), independent of
+        include_initial_balances, so an upload without the flag also
+        purges SI rows previously ingested with it.
+
+        Returns:
+            Number of records deleted (0 if no duplicates)
+        """
+        receipts = self.payment_ledger_replacement_receipts
+        if not receipts:
+            receipts = self.df['receipt_number'].unique().tolist()
+        if not receipts:
+            return 0
+
+        return crud.delete_payment_ledger_by_receipts(db, receipts)
+
+    def _bulk_insert_payment_ledger(self, db: Session, source_filename: str) -> list:
+        """
+        Phase D: convert DataFrame rows to PaymentLedgerCreate records and
+        perform the bulk insert. Transaction is atomic (all-or-nothing).
+        """
+        from app.schemas.budget import PaymentLedgerCreate
+
+        def optional_text(value: Any) -> Optional[str]:
+            if value is None or pd.isna(value):
+                return None
+            return str(value)
+
+        def optional_int(value: Any) -> Optional[int]:
+            if value is None or pd.isna(value):
+                return None
+            return int(value)
+
+        records = []
+        for _, row in self.df.iterrows():
+            records.append(PaymentLedgerCreate(
+                receipt_number=str(row['receipt_number']),
+                transaction_nature=str(row['transaction_nature']),
+                cash_flow=optional_text(row['cash_flow']),
+                payment_date=row['payment_date'],
+                payment_amount=float(row['payment_amount']),
+                accounting_account=str(row['accounting_account']),
+                description=optional_text(row['description']),
+                third_party=optional_text(row['third_party']),
+                id_account_receivable=optional_int(row['id_account_receivable']),
+                id_customer=optional_int(row['id_customer']),
+                id_invoice=optional_int(row['id_invoice']),
+                source_file=source_filename,
+            ))
+
+        return crud.create_payment_ledger_bulk(db, records)
 
     # ──────────────────────────────────────────────
     # Cost Centers Catalog

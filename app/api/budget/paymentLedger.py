@@ -5,7 +5,7 @@ Payment Ledger API Endpoints
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.schemas import User
@@ -36,6 +36,10 @@ def get_payment_ledger(
     id_account_receivable: Optional[int] = None,
     date_ge: Optional[date] = None,
     date_le: Optional[date] = None,
+    transaction_nature: Optional[str] = None,
+    cash_flow: Optional[str] = None,
+    receipt_number: Optional[str] = None,
+    third_party: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -45,6 +49,8 @@ def get_payment_ledger(
     return crud.get_payment_ledger(
         db, id_account_receivable=id_account_receivable,
         date_ge=date_ge, date_le=date_le,
+        transaction_nature=transaction_nature, cash_flow=cash_flow,
+        receipt_number=receipt_number, third_party=third_party,
         skip=skip, limit=limit,
     )
 
@@ -69,11 +75,16 @@ def create_payment_ledger(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new payment ledger record."""
-    ar = crud.get_account_receivable_by_id(db, payment_ledger.id_account_receivable)
-    if ar is None:
-        Exceptions.register_not_found(
-            "AccountReceivable", payment_ledger.id_account_receivable
-        )
+    if payment_ledger.id_account_receivable is not None:
+        ar = crud.get_account_receivable_by_id(db, payment_ledger.id_account_receivable)
+        if ar is None:
+            Exceptions.register_not_found(
+                "AccountReceivable", payment_ledger.id_account_receivable
+            )
+    if payment_ledger.id_customer is not None:
+        customer = crud.get_customer_by_id(db, payment_ledger.id_customer)
+        if customer is None:
+            Exceptions.register_not_found("Customer", payment_ledger.id_customer)
     if payment_ledger.id_invoice is not None:
         inv = crud.get_invoice_by_id(db, payment_ledger.id_invoice)
         if inv is None:
@@ -106,3 +117,29 @@ def delete_payment_ledger(
     if not success:
         Exceptions.register_not_found("PaymentLedger", id_payment_ledger)
     return {"message": "Payment ledger record deleted successfully"}
+
+
+@router.delete("/by-receipt/{receipt_number}")
+def delete_payment_ledger_by_receipt(
+    receipt_number: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Eliminar registros por receipt_number (todas las filas del recibo)."""
+    if not receipt_number or not receipt_number.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="receipt_number must not be empty",
+        )
+
+    deleted_count = crud.delete_payment_ledger_by_receipts(db, [receipt_number])
+    db.commit()
+
+    if deleted_count == 0:
+        Exceptions.register_not_found("PaymentLedger", receipt_number)
+
+    return {
+        "message": "Payment ledger records deleted successfully",
+        "records_deleted": deleted_count,
+        "receipt_number": receipt_number,
+    }
