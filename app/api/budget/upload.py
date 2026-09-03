@@ -155,15 +155,81 @@ async def upload_actual_costs(
 @router.post("/accounts-receivable")
 async def upload_accounts_receivable(
     file: UploadFile = File(...),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Upload and process EstadoCuenta306090.xlsx for accounts receivable.
-    Applies skiprows=3 for header omission and structures the DataFrame.
+
+    Phases: process (cutoff + cleaning) -> map (customers/invoices/aging)
+    -> validate (customers, dates, amounts, stale-cutoff guard) -> atomic
+    replace by document_number -> snapshot closures -> bulk insert, all in
+    a single transaction (only commit happens in phase D).
+
+    Parameters:
+    - force: bypass the stale-statement guard when the file cutoff is older
+      than the stored one (marks this upload with "forced": true).
     """
-    # TODO: Implement ETL processing via BudgetTemplates
-    return {"message": "Accounts receivable upload endpoint - implementation pending"}
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .xlsx files are supported",
+        )
+    file_content = await file.read()
+    file_bytes = BytesIO(file_content)
+
+    try:
+        etl = BudgetTemplates(file_bytes)
+
+        # Fase A: Limpieza + parseo de corte (sin DB)
+        df = etl.process_accounts_receivable()
+
+        # Fase B: Mapeo relacional (customers/contacts/invoices/aging)
+        etl._map_accounts_receivable_relational_data(db)
+
+        # Fase C1: Validaciones bloqueantes + guarda de corte (sin escribir)
+        etl._validate_accounts_receivable_integrity(db, force=force)
+
+        # Fase C2: Reemplazo atómico por documento (nullify + delete)
+        records_replaced = etl._handle_accounts_receivable_duplicates(db)
+
+        # Fase C3: Cierre por marcaje PAID de deuda desaparecida
+        docs = df['document_number'].unique().tolist()
+        records_closed = etl._close_settled_accounts_receivable(db, docs)
+
+        # Fase D: Inserción masiva (único commit)
+        inserted_records = etl._bulk_insert_accounts_receivable(db, file.filename)
+
+        return {
+            "message": "Accounts receivable uploaded successfully",
+            "records_inserted": len(inserted_records),
+            "records_replaced": records_replaced,
+            "records_closed": records_closed,
+            "source_file": file.filename,
+            "statement_date": str(etl.ar_statement_date),
+            "forced": etl.ar_forced,
+            "details": {
+                "total_rows_raw": etl.total_rows_raw,
+                "rows_excluded_subtotals": etl.ar_rows_excluded_subtotals,
+                "total_outstanding_balance": round(
+                    float(df['Valor Total'].sum()), 2
+                ),
+                "legacy_debt_records": etl.ar_legacy_debt_records,
+                "unique_customers": int(df['id_customer'].nunique()),
+                "contact_fallback_resolved": etl.ar_contact_fallback_resolved,
+            },
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing accounts receivable: {str(e)}",
+        )
 
 
 @router.post("/payment-ledger")

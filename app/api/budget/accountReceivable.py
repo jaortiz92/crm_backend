@@ -57,6 +57,32 @@ def get_accounts_receivable(
     )
 
 
+# Declared before the /{id_account_receivable} routes for safe ordering
+# (two-segment path never collides with the single-param one).
+@router.delete("/by-document/{document_number}")
+def delete_account_receivable_by_document(
+    document_number: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Eliminar todos los registros de cartera (OPEN o PAID) cuyo
+    document_number coincida de forma exacta (case-sensitive).
+    Libera los punteros payment_ledger.id_account_receivable en la
+    misma transacción.
+    """
+    deleted_count = crud.delete_accounts_receivable_by_document(db, document_number)
+
+    if deleted_count == 0:
+        Exceptions.register_not_found("AccountReceivable", document_number)
+
+    return {
+        "message": "Accounts receivable deleted successfully",
+        "records_deleted": deleted_count,
+        "document_number": document_number,
+    }
+
+
 @router.post("/", response_model=AccountReceivable)
 def create_account_receivable(
     account_receivable: AccountReceivableCreate,

@@ -38,6 +38,10 @@ class AccountReceivable(Base):
     status = Column(Enum(ReceivableStatusEnum), nullable=False, server_default=ReceivableStatusEnum.OPEN)
     aging_bucket = Column(String(20))
     source_file = Column(String(200))
+    # --- Snapshot traceability (D-1) and statement cutoff (D-3) ---
+    customer_document = Column(Float)                    # numeric root of Identificacion (JOIN-able)
+    identification_original = Column(String(50))         # raw Excel text, e.g. "NIT 900576607 - 7"
+    statement_date = Column(Date)                        # statement cutoff date
     created_at = Column(DateTime, server_default=func.now())
 
     customer = relationship("Customer", backref="accounts_receivable")

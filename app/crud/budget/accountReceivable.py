@@ -8,6 +8,8 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.budget import AccountReceivable as AccountReceivableModel
+from app.models.budget import PaymentLedger as PaymentLedgerModel
+from app.models.budget.accountReceivable import ReceivableStatusEnum
 from app.schemas.budget import AccountReceivableCreate
 
 
@@ -87,3 +89,81 @@ def delete_account_receivable(db: Session, id_account_receivable: int) -> bool:
         db.commit()
         return True
     return False
+
+
+def nullify_payment_ledger_refs_for(
+    db: Session, id_accounts_receivable: List[int]
+) -> int:
+    """Liberar punteros payment_ledger.id_account_receivable (FK sin ondelete).
+    NO hace commit - el caller controla la transacción."""
+    if not id_accounts_receivable:
+        return 0
+    return db.query(PaymentLedgerModel).filter(
+        PaymentLedgerModel.id_account_receivable.in_(id_accounts_receivable)
+    ).update(
+        {PaymentLedgerModel.id_account_receivable: None},
+        synchronize_session=False,
+    )
+
+
+def delete_accounts_receivable_by_documents(
+    db: Session, document_numbers: List[str]
+) -> int:
+    """Eliminar registros por lista de document_numbers (reemplazo atómico ETL,
+    fase C2). Nullifica el ledger afectado antes del DELETE.
+    NO hace commit - el caller controla la transacción.
+    Retorna filas borradas (no documentos)."""
+    if not document_numbers:
+        return 0
+    ids = [
+        row.id_account_receivable
+        for row in db.query(AccountReceivableModel.id_account_receivable).filter(
+            AccountReceivableModel.document_number.in_(document_numbers)
+        ).all()
+    ]
+    nullify_payment_ledger_refs_for(db, ids)
+    return db.query(AccountReceivableModel).filter(
+        AccountReceivableModel.document_number.in_(document_numbers)
+    ).delete(synchronize_session=False)
+
+
+def close_accounts_receivable_not_in(
+    db: Session, document_numbers: List[str]
+) -> int:
+    """Cierre por marcaje (D-2): documentos OPEN ausentes del archivo pasan a
+    PAID con el saldo consumido (paid_amount = balance, balance = 0).
+    NO toca PAID/PARTIAL ni aging_bucket/statement_date (auditoría).
+    NO hace commit - el caller controla la transacción."""
+    if not document_numbers:
+        # Evita NOT IN () inválido; el ETL nunca llega aquí con archivo vacío.
+        return 0
+    return db.query(AccountReceivableModel).filter(
+        AccountReceivableModel.status == ReceivableStatusEnum.OPEN,
+        AccountReceivableModel.document_number.notin_(document_numbers),
+    ).update(
+        {
+            AccountReceivableModel.status: ReceivableStatusEnum.PAID,
+            AccountReceivableModel.paid_amount: AccountReceivableModel.balance,
+            AccountReceivableModel.balance: 0,
+        },
+        synchronize_session=False,
+    )
+
+
+def delete_accounts_receivable_by_document(
+    db: Session, document_number: str
+) -> int:
+    """Eliminar todos los registros con un document_number exacto
+    (case-sensitive). Nullifica el ledger antes (misma transacción)."""
+    ids = [
+        row.id_account_receivable
+        for row in db.query(AccountReceivableModel.id_account_receivable).filter(
+            AccountReceivableModel.document_number == document_number
+        ).all()
+    ]
+    nullify_payment_ledger_refs_for(db, ids)
+    count = db.query(AccountReceivableModel).filter(
+        AccountReceivableModel.document_number == document_number
+    ).delete(synchronize_session=False)
+    db.commit()
+    return count

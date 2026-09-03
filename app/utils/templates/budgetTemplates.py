@@ -7,7 +7,7 @@ into structured data for bulk insertion into the budget module tables.
 Supported files:
 - CostosFinal.xlsx -> actual_costs
 - LibroAuxiliarCECO.xlsx -> actual_expenses
-- EstadoCuenta306090.xlsx -> accounts_receivable (with skiprows=3)
+- EstadoCuenta306090.xlsx -> accounts_receivable (snapshot ETL, header=3)
 - Recibos.xlsx -> payment_ledger (SIIGO auxiliares: cash-flow & adjustments)
 
 Uses pandas + openpyxl for data cleansing and transformation.
@@ -15,6 +15,7 @@ Uses pandas + openpyxl for data cleansing and transformation.
 
 # Python
 import re
+from datetime import date
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -24,6 +25,7 @@ from pandas.core.frame import DataFrame
 import numpy as np
 
 # SQLAlchemy
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 # App models (for relational mapping)
@@ -34,12 +36,18 @@ from app.models.invoice import Invoice as InvoiceModel
 from app.models.order import Order as OrderModel
 from app.models.customerTrip import CustomerTrip as CustomerTripModel
 from app.models.customer import Customer as CustomerModel
+from app.models.contact import Contact as ContactModel
 from app.models.city import City as CityModel
 from app.models.department import Department as DepartmentModel
 
 # App CRUD & schemas
 import app.crud as crud
 from app.models.budget.actualCost import ActualCost as ActualCostModel
+from app.models.budget.accountReceivable import (
+    AccountReceivable as AccountReceivableModel,
+    ReceivableStatusEnum,
+)
+from app.models.budget.paymentLedger import PaymentLedger as PaymentLedgerModel
 from app.schemas.budget import ActualCostCreate
 
 
@@ -66,6 +74,17 @@ class BudgetTemplates:
         r"\bNC\s+(\d{3,7})",
     ]
 
+    # Accounts receivable snapshot aging: ordered cascade over Excel range
+    # columns (BR-6); first bucket != 0 wins, all-zero -> NULL. The accented
+    # name 'Más De 90' is the literal header (never 'Mas De 90').
+    AR_AGING_BUCKETS = [
+        ('Por Vencer', 'current'),
+        ('1 A 30', '1_to_30'),
+        ('31 A 60', '31_to_60'),
+        ('61 A 90', '61_to_90'),
+        ('Más De 90', 'over_90'),
+    ]
+
     def __init__(self, file: BytesIO) -> None:
         self.file: BytesIO = file
         self.df: Optional[DataFrame] = None
@@ -80,6 +99,13 @@ class BudgetTemplates:
         self.invoices_imputed: int = 0
         self.documents_not_imputed: int = 0
         self.payment_ledger_replacement_receipts: List[str] = []
+        # Accounts receivable (Estado de Cuenta) ETL counters
+        self.ar_rows_excluded_subtotals: int = 0
+        self.ar_contact_fallback_resolved: int = 0   # rows resolved via contacts (D-4)
+        self.ar_legacy_debt_records: int = 0         # rows with id_invoice NULL (A-5)
+        self.ar_rows_closed: int = 0                 # rows marked PAID (D-2)
+        self.ar_statement_date: Optional[date] = None  # parsed cutoff (guard + response)
+        self.ar_forced: bool = False                 # stale-cutoff guard bypassed via force
 
     # ──────────────────────────────────────────────
     # CostosFinal.xlsx -> Actual Costs
@@ -645,29 +671,352 @@ class BudgetTemplates:
 
     # ──────────────────────────────────────────────
     # EstadoCuenta306090.xlsx -> Accounts Receivable
+    # (snapshot ETL: reemplazo atómico por documento +
+    #  cierre por marcaje PAID de deuda desaparecida)
     # ──────────────────────────────────────────────
 
-    def process_estado_cuenta(self) -> DataFrame:
+    def _parse_statement_cutoff(self) -> date:
         """
-        Process EstadoCuenta306090.xlsx for accounts receivable.
+        Parse the statement cutoff date embedded in row 2 of the Excel
+        ("... fecha de corte DD/MM/YYYY"). Requires a light header=None
+        read; the BytesIO is rewound afterwards for the main read.
 
-        Applies skiprows=3 to omit header rows and correctly structure
-        the DataFrame. Maps customer documents and aging buckets.
+        Raises:
+            HTTPException 400 when no cutoff can be parsed (BR-8).
+        """
+        from fastapi import HTTPException, status as http_status
+
+        raw = pd.read_excel(self.file, engine='openpyxl', header=None, nrows=3)
+        self.file.seek(0)
+
+        match = re.search(
+            r'fecha de corte\s+(\d{1,2}/\d{1,2}/\d{4})',
+            str(raw.iloc[1, 0]),
+            re.IGNORECASE,
+        )
+        if not match:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "No statement cutoff date found in file (expected "
+                    "'... fecha de corte DD/MM/YYYY' in row 2)"
+                ),
+            )
+        return pd.to_datetime(match.group(1), format='%d/%m/%Y').date()
+
+    def process_accounts_receivable(self) -> DataFrame:
+        """
+        Fase A: process EstadoCuenta306090.xlsx (limpieza, sin DB).
+
+        Steps:
+        1. Parse cutoff date from row 2 (BR-8) -> self.ar_statement_date
+        2. Read Excel with header=3
+        3. Drop subtotal rows without Doc (BR-1)
+        4. Build document_number = Doc + Num without spaces, case-preserving (BR-2)
+        5. Extract numeric identification root (BR-3)
+        6. Cast dates and numeric columns (Valor Total keeps negatives, A-2)
 
         Returns:
-            DataFrame with columns: document_number, due_date, total_amount,
-            paid_amount, balance, aging_bucket, id_customer
+            DataFrame with cleaned detail rows ready for relational mapping
         """
+        from fastapi import HTTPException, status as http_status
+
+        self.ar_statement_date = self._parse_statement_cutoff()
+
         self.df = pd.read_excel(
             self.file,
             engine="openpyxl",
-            skiprows=3,
+            header=3,
         )
-        self._clean_column_names()
-        self._cast_numeric_columns(["total_amount", "paid_amount", "balance"])
-        self._cast_date_columns(["due_date"])
-        self._compute_aging_buckets()
+        self.total_rows_raw = len(self.df)
+
+        # BR-1: subtotal rows (per customer/branch) carry no Doc
+        doc_text = self.df['Doc'].astype(str).str.strip()
+        subtotal_mask = self.df['Doc'].isna() | doc_text.isin(['', 'nan'])
+        self.ar_rows_excluded_subtotals = int(subtotal_mask.sum())
+        self.df = self.df[~subtotal_mask].copy()
+
+        # BR-2: "FV" + "FE 1544" -> "FVFE1544" (null Num -> Doc only)
+        doc = self.df['Doc'].astype(str).str.strip()
+        num = self.df['Num'].astype(str).str.strip()
+        self.df['document_number'] = (
+            (doc + ' ' + num).where(num != 'nan', doc)
+            .str.replace(r'\s+', '', regex=True)
+        )
+
+        # BR-3: first digit run drops the NIT/CC prefix and check digit
+        self.df['identification_root'] = (
+            self.df['Identificacion'].astype(str).str.extract(r'(\d+)')[0]
+        )
+
+        # Type casts ('Más De 90' referenced with its exact accented name)
+        self.df['Fecha Vence'] = pd.to_datetime(
+            self.df['Fecha Vence'], errors='coerce'
+        ).dt.date
+        self.df['Valor Total'] = pd.to_numeric(
+            self.df['Valor Total'], errors='coerce'
+        )
+        for bucket_col, _ in self.AR_AGING_BUCKETS:
+            self.df[bucket_col] = pd.to_numeric(self.df[bucket_col], errors='coerce')
+
+        if self.df.empty:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "No valid detail rows found (all rows were subtotals "
+                    "or the file structure changed)"
+                ),
+            )
+
         return self.df
+
+    def _map_accounts_receivable_relational_data(self, db: Session) -> DataFrame:
+        """
+        Fase B: map foreign keys and derived columns (batch queries only).
+
+        - id_customer: customers.document first, fallback contacts.document
+          assigning contact.id_customer, never id_contact (BR-4/D-4);
+          contact resolution never filters by active.
+        - id_invoice: exact invoice_number match; multi-installment keeps the
+          lowest key (BR-5/A-3); miss -> NULL (legacy debt, A-5).
+        - aging_bucket: ordered cascade over the Excel range columns (BR-6).
+        - customer_document / identification_original: traceability for every
+          row regardless of resolution (D-1).
+        """
+        # Step 1: batch customers.document lookup (roots as float)
+        roots = {
+            float(r) for r in self.df['identification_root'].dropna().unique()
+        }
+        customer_map: Dict[float, int] = {}
+        if roots:
+            customer_map = {
+                document: id_customer
+                for id_customer, document in db.query(
+                    CustomerModel.id_customer, CustomerModel.document
+                ).filter(CustomerModel.document.in_(list(roots))).all()
+            }
+
+        # Step 2: fallback contacts.document for roots missing in customers
+        contact_map: Dict[float, int] = {}
+        missing_roots = list(roots - set(customer_map))
+        if missing_roots:
+            contact_map = {
+                document: id_customer
+                for id_customer, document in db.query(
+                    ContactModel.id_customer, ContactModel.document
+                ).filter(ContactModel.document.in_(missing_roots)).all()
+                if id_customer is not None
+            }
+
+        def resolve_customer(root) -> Tuple[Optional[int], bool]:
+            if root is None or (isinstance(root, float) and pd.isna(root)):
+                return None, False
+            key = float(root)
+            if key in customer_map:
+                return customer_map[key], False
+            if key in contact_map:
+                return contact_map[key], True
+            return None, False
+
+        resolved = [resolve_customer(r) for r in self.df['identification_root']]
+        self.df['id_customer'] = [pair[0] for pair in resolved]
+        self.ar_contact_fallback_resolved = sum(1 for pair in resolved if pair[1])
+
+        # Step 3: invoices by normalized document_number (min key per number)
+        docs = self.df['document_number'].unique().tolist()
+        invoice_form_map: Dict[str, Tuple[int, int]] = {}
+        if docs:
+            rows = db.query(
+                InvoiceModel.invoice_number,
+                InvoiceModel.key,
+                InvoiceModel.id_invoice,
+            ).filter(InvoiceModel.invoice_number.in_(docs)).all()
+            for row in rows:
+                previous = invoice_form_map.get(row.invoice_number)
+                if previous is None or row.key < previous[0]:
+                    invoice_form_map[row.invoice_number] = (row.key, row.id_invoice)
+
+        self.df['id_invoice'] = self.df['document_number'].map(
+            lambda d: invoice_form_map[d][1] if d in invoice_form_map else None
+        )
+        self.ar_legacy_debt_records = int(self.df['id_invoice'].isna().sum())
+
+        # Step 4: aging cascade over the Excel snapshot columns (BR-6)
+        masks = [self.df[col].fillna(0) != 0 for col, _ in self.AR_AGING_BUCKETS]
+        choices = [bucket for _, bucket in self.AR_AGING_BUCKETS]
+        self.df['aging_bucket'] = np.select(masks, choices, default=None)
+
+        # Step 5: snapshot traceability (D-1)
+        self.df['customer_document'] = self.df['identification_root'].astype(float)
+        ident = self.df['Identificacion']
+        self.df['identification_original'] = (
+            ident.astype(str).str.strip().where(ident.notna(), None)
+        )
+
+        return self.df
+
+    def _validate_accounts_receivable_integrity(
+        self, db: Session, force: bool = False
+    ) -> None:
+        """
+        Fase C1: blocking validations before any write (A-10).
+
+        V1: rows without id_customer -> 400 with structured listing (BR-10)
+        V2: invalid Fecha Vence -> 400
+        V4: non-numeric Valor Total -> 400
+        V3: stale-cutoff guard (BR-9/D-3): file cutoff older than stored
+            MAX(statement_date) -> 400 unless force=true (sets self.ar_forced).
+        Equal or newer cutoff is always allowed (reload idempotency).
+        """
+        from fastapi import HTTPException, status as http_status
+
+        # V1: unresolvable customers abort the whole upload
+        missing = self.df[self.df['id_customer'].isna()]
+        if not missing.empty:
+            missing_identifications: List[str] = []
+            examples: List[Dict[str, Any]] = []
+            for root in missing['identification_root'].unique():
+                label = str(root) if pd.notna(root) else 'identificacion sin digitos'
+                missing_identifications.append(label)
+                group = (
+                    missing[missing['identification_root'].isna()]
+                    if pd.isna(root)
+                    else missing[missing['identification_root'] == root]
+                )
+                examples.append({
+                    "identification": label,
+                    "customer_name": str(group['Nombres'].iloc[0]),
+                    "documents": group['document_number'].unique().tolist(),
+                })
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": (
+                        "Customers not found in catalog (checked "
+                        "customers.document and contacts.document)"
+                    ),
+                    "missing_count": len(missing),
+                    "missing_identifications": missing_identifications,
+                    "examples": examples[:20],
+                },
+            )
+
+        # V2: unparseable due dates
+        invalid_dates = self.df[self.df['Fecha Vence'].isna()]
+        if not invalid_dates.empty:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"{len(invalid_dates)} records have invalid dates",
+            )
+
+        # V4: non-numeric amounts
+        invalid_amounts = self.df[self.df['Valor Total'].isna()]
+        if not invalid_amounts.empty:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=f"{len(invalid_amounts)} records have non-numeric amounts",
+            )
+
+        # V3: stale statement guard (before any write happens)
+        stored_cutoff = db.query(
+            func.max(AccountReceivableModel.statement_date)
+        ).scalar()
+        if self.ar_statement_date and stored_cutoff:
+            if self.ar_statement_date < stored_cutoff:
+                if not force:
+                    raise HTTPException(
+                        status_code=http_status.HTTP_400_BAD_REQUEST,
+                        detail={
+                            "message": (
+                                f"Stale statement file: cutoff "
+                                f"{self.ar_statement_date.isoformat()} is "
+                                f"older than stored cutoff "
+                                f"{stored_cutoff.isoformat()}. Marking "
+                                f"documents as paid would produce false "
+                                f"closures. Re-send with force=true to "
+                                f"override."
+                            ),
+                            "file_cutoff": self.ar_statement_date.isoformat(),
+                            "stored_cutoff": stored_cutoff.isoformat(),
+                        },
+                    )
+                self.ar_forced = True
+
+    def _handle_accounts_receivable_duplicates(self, db: Session) -> int:
+        """
+        Fase C2: atomic replace by document_number. Existing rows (OPEN and
+        PAID) for the documents found in the file are deleted within the same
+        transaction as the subsequent bulk insert (no commit here); their
+        payment_ledger pointers are nullified by the CRUD helper (FK has no
+        ondelete).
+
+        Returns:
+            Number of records deleted (rows, not documents; 0 if no duplicates)
+        """
+        docs = self.df['document_number'].unique().tolist()
+        return crud.delete_accounts_receivable_by_documents(db, docs)
+
+    def _close_settled_accounts_receivable(
+        self, db: Session, document_numbers: List[str]
+    ) -> int:
+        """
+        Fase C3: snapshot-sync closures (D-2). OPEN documents absent from the
+        newest statement are marked PAID with their balance consumed
+        (paid_amount = previous balance, balance = 0). PAID/PARTIAL rows and
+        aging_bucket/statement_date are preserved for audit. No commit here.
+
+        Returns:
+            Number of rows closed
+        """
+        closed = crud.close_accounts_receivable_not_in(db, document_numbers)
+        self.ar_rows_closed = closed
+        return closed
+
+    def _bulk_insert_accounts_receivable(
+        self, db: Session, source_filename: str
+    ) -> list:
+        """
+        Fase D: convert DataFrame rows to AccountReceivableCreate records and
+        perform the bulk insert (BR-7). This is the only commit of the
+        request; any later exception triggers db.rollback() in the endpoint.
+        """
+        from app.schemas.budget import AccountReceivableCreate
+
+        def optional_int(value: Any) -> Optional[int]:
+            if value is None or pd.isna(value):
+                return None
+            return int(value)
+
+        def optional_float(value: Any) -> Optional[float]:
+            if value is None or pd.isna(value):
+                return None
+            return float(value)
+
+        def optional_text(value: Any) -> Optional[str]:
+            if value is None or pd.isna(value):
+                return None
+            return str(value)
+
+        records = []
+        for _, row in self.df.iterrows():
+            total_amount = float(row['Valor Total'])
+            records.append(AccountReceivableCreate(
+                id_customer=optional_int(row['id_customer']),
+                id_invoice=optional_int(row['id_invoice']),
+                document_number=str(row['document_number']),
+                due_date=row['Fecha Vence'],
+                total_amount=total_amount,
+                paid_amount=0,
+                balance=total_amount,
+                status='OPEN',
+                aging_bucket=optional_text(row['aging_bucket']),
+                source_file=source_filename,
+                customer_document=optional_float(row['customer_document']),
+                identification_original=optional_text(row['identification_original']),
+                statement_date=self.ar_statement_date,
+            ))
+
+        return crud.create_accounts_receivable_bulk(db, records)
 
     # ──────────────────────────────────────────────
     # Recibos.xlsx -> Payment Ledger (cash-flow ETL)
@@ -1172,6 +1521,10 @@ class BudgetTemplates:
 
     def _compute_aging_buckets(self) -> None:
         """
+        DEPRECATED: sin uso desde el ETL de accounts_receivable (spec 02_08).
+        Sus valores (current/30/60/90+) no corresponden al vocabulario de
+        snapshot; el aging ahora se declara via AR_AGING_BUCKETS (BR-6).
+
         Compute aging buckets based on due_date vs current date.
         Creates an 'aging_bucket' column with values: current, 30, 60, 90+
         """
