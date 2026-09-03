@@ -125,5 +125,3 @@ class DetailsPampili():
         self.details['MARCA'] = self.details['MARCA'].map(
             Constants.CODE_BRANDS
         )
-
-        self.details.to_excel('a.xlsx')
