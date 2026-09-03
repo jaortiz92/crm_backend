@@ -67,10 +67,12 @@ def delete_account_receivable_by_document(
 ):
     """
     Eliminar todos los registros de cartera (OPEN o PAID) cuyo
-    document_number coincida de forma exacta (case-sensitive).
+    document_number coincida de forma exacta (case-insensitive: el
+    documento se normaliza a mayusculas, forma canónica de almacenamiento).
     Libera los punteros payment_ledger.id_account_receivable en la
     misma transacción.
     """
+    document_number = document_number.upper()
     deleted_count = crud.delete_accounts_receivable_by_document(db, document_number)
 
     if deleted_count == 0:

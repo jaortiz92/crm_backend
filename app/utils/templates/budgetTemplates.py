@@ -712,7 +712,7 @@ class BudgetTemplates:
         1. Parse cutoff date from row 2 (BR-8) -> self.ar_statement_date
         2. Read Excel with header=3
         3. Drop subtotal rows without Doc (BR-1)
-        4. Build document_number = Doc + Num without spaces, case-preserving (BR-2)
+        4. Build document_number = Doc + Num without spaces, UPPERCASE (BR-2)
         5. Extract numeric identification root (BR-3)
         6. Cast dates and numeric columns (Valor Total keeps negatives, A-2)
 
@@ -736,12 +736,14 @@ class BudgetTemplates:
         self.ar_rows_excluded_subtotals = int(subtotal_mask.sum())
         self.df = self.df[~subtotal_mask].copy()
 
-        # BR-2: "FV" + "FE 1544" -> "FVFE1544" (null Num -> Doc only)
+        # BR-2: "FV" + "FE 1544" -> "FVFE1544" (null Num -> Doc only), stored
+        # uppercase per stakeholder rule (e.g. "rc2468" -> "RC2468")
         doc = self.df['Doc'].astype(str).str.strip()
         num = self.df['Num'].astype(str).str.strip()
         self.df['document_number'] = (
             (doc + ' ' + num).where(num != 'nan', doc)
             .str.replace(r'\s+', '', regex=True)
+            .str.upper()
         )
 
         # BR-3: first digit run drops the NIT/CC prefix and check digit

@@ -5,7 +5,7 @@ AccountReceivable Schemas
 from datetime import date, datetime
 from typing import Optional, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .paymentLedger import PaymentLedger
 
@@ -36,6 +36,12 @@ class AccountReceivableBase(BaseModel):
         None, max_length=50, description="Raw identification text from source file"
     )
     statement_date: Optional[date] = Field(None, description="Statement cutoff date")
+
+    @field_validator("document_number")
+    @classmethod
+    def uppercase_document_number(cls, v: str) -> str:
+        """document_number is always stored uppercase (stakeholder rule)."""
+        return v.upper()
 
 
 class AccountReceivableCreate(AccountReceivableBase):

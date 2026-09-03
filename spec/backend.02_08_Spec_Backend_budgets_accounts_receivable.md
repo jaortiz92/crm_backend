@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Documento** | Spec ETL Accounts Receivable — Estado de Cuenta 30-60-90 (SIIGO) |
 | **Módulo** | `budget` → tabla `accounts_receivable` |
-| **Versión** | 1.0 (consolidada) |
+| **Versión** | 1.1 (consolidada; 2026-09-03: `document_number` se guarda **siempre en mayúsculas**) |
 | **Fecha** | 2026-09-01 |
 | **Estado** | Aprobada para implementación |
 | **Origen** | `EstadoCuenta306090.xlsx` (export cartera SIIGO) |
@@ -214,7 +214,7 @@ Justificación: el proyecto no usa Alembic; `create_all` solo crea tablas nuevas
 
 | Campo destino | Origen | Transformación |
 | :--- | :--- | :--- |
-| `document_number` | `Doc` + `Num` | `(Doc + ' ' + Num)` → `str.replace(r'\s+', '', regex=True)`. Mayúsculas **preservadas** (`'rc2468'` se guarda tal cual). Si `Num` es nulo ⇒ solo `Doc`. |
+| `document_number` | `Doc` + `Num` | `(Doc + ' ' + Num)` → `str.replace(r'\s+', '', regex=True)` → `str.upper()` (**siempre mayúsculas**, stakeholder 2026-09-03: `'rc2468'` se guarda como `'RC2468'`). Si `Num` es nulo ⇒ solo `Doc`. |
 | `id_customer` | raíz → `customers.document` → `contacts.document` | §5.2.1–5.2.2. **Nunca NULL** al insertar (validación bloqueante §5.3.1). |
 | `id_invoice` | `document_number` → `invoices.invoice_number` | Coincidencia exacta post-normalización; multi-cuota ⇒ menor `key` (A-3); ausente ⇒ `NULL` (Legacy Debt). |
 | `customer_document` | raíz `str.extract(r'(\d+)')` | `float()` de la raíz. |
@@ -550,7 +550,7 @@ Importaciones de la clase template a adicionar: `AccountReceivable as AccountRec
 | ID | Regla | Fase | Fuente |
 | :-- | :--- | :--- | :--- |
 | BR-1 | Se descartan filas sin `Doc` (subtotales por cliente/sucursal) | A | borrador §3.1 |
-| BR-2 | `document_number = Doc+Num` sin espacios, case-preserving; `Num` nulo ⇒ `Doc` | A | borrador §3.1 |
+| BR-2 | `document_number = Doc+Num` sin espacios, **SIEMPRE MAYÚSCULAS** (revisión stakeholder 2026-09-03; reemplaza "case-preserving"); `Num` nulo ⇒ `Doc` | A | borrador §3.1 |
 | BR-3 | Raíz de identificación = primera racha `\d+` del texto (descarta prefijo y dígito) | A | borrador §3.1 + D-4 |
 | BR-4 | Resolución de cliente: `customers.document` → fallback `contacts.document` (asigna `contact.id_customer`, jamás `id_contact`); precedencia customer > contact | B | **D-4** |
 | BR-5 | `id_invoice` por igualdad exacta de `document_number`; multi-cuota ⇒ `id_invoice` de menor `key`; sin hit ⇒ `NULL` | B | A-3 + borrador §3.2 |
@@ -591,7 +591,7 @@ Cada AC ejecutable sobre BD dev (`docker compose -f docker-compose-dev.yaml up`,
 | :-- | :--- |
 | **AC-1** (esquema) | Tras correr §4.3.1: las 3 columnas existen; `python -c "from app.models.budget import AccountReceivable"` sin error; GET `/budget/account-receivable/` responde 200 con los 3 campos nuevos (null en filas viejas). |
 | **AC-2** (carga inicial) | `POST upload` ⇒ 200; `records_inserted == 121`; `rows_excluded_subtotals == 155`; `total_outstanding_balance == 439696679.72`; `unique_customers == 77`; `statement_date == "2026-08-26"`; `records_replaced == 0`; `records_closed == 0`. |
-| **AC-3** (integridad filas) | En SQL: `SELECT count(*) FROM accounts_receivable WHERE source_file='EstadoCuenta306090.xlsx'` = 121; 0 filas con `id_customer IS NULL` o `customer_document IS NULL` o `identification_original IS NULL` o `statement_date IS NULL`; 56 filas con `total_amount < 0` (A-2); todos los `document_number LIKE 'rc%'` (51) tienen `id_invoice IS NULL`. |
+| **AC-3** (integridad filas) | En SQL: `SELECT count(*) FROM accounts_receivable WHERE source_file='EstadoCuenta306090.xlsx'` = 121; 0 filas con `id_customer IS NULL` o `customer_document IS NULL` o `identification_original IS NULL` o `statement_date IS NULL`; 56 filas con `total_amount < 0` (A-2); todos los `document_number LIKE 'RC%'` (51) tienen `id_invoice IS NULL` (`document_number` se almacena en mayúsculas). |
 | **AC-4** (idempotencia) | Recarga del mismo archivo ⇒ 200, `records_replaced == 121`, `records_closed == 0`, y el conteo total de la tabla + `SUM(balance)` quedan idénticos a AC-2/AC-3. |
 | **AC-5** (legacy) | `legacy_debt_records >= 51` y coincide exactamente con `count(*) WHERE id_invoice IS NULL AND source_file = ...` (A-5). |
 | **AC-6** (contact fallback) | Insertando un `contacts.document` con una raíz ausente de `customers` ⇒ la subida pasa, la fila apunta al `id_customer` del contacto, y `contact_fallback_resolved >= 1`; **no** se escribe ninguna columna `id_contact` en `accounts_receivable`. |

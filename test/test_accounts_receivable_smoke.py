@@ -195,9 +195,9 @@ def test_01_login():
 
 
 def test_02_create_account_receivable():
-    """Crear registro minimo valido (sin FKs, con campos de trazabilidad D-1/D-3)."""
+    """Crear registro minimo valido (sin FKs, trazabilidad D-1/D-3, doc normalizado a MAYUSCULAS)."""
     ar_data = {
-        "document_number": "TESTAR001",
+        "document_number": "testar001",
         "due_date": "2026-01-15",
         "total_amount": 1500.00,
         "balance": 1500.00,
@@ -212,16 +212,18 @@ def test_02_create_account_receivable():
         data = response.json()
         ar_id = data.get("id_account_receivable")
         state.created_ar_ids.append(ar_id)
-        traz_ok = (data.get("customer_document") == 111222333
+        traz_ok = (data.get("document_number") == "TESTAR001"
+                   and data.get("customer_document") == 111222333
                    and data.get("identification_original") == "CC 111222333 -"
                    and data.get("statement_date") == "2026-01-01")
         if traz_ok:
             log_test(2, 16, "Create account receivable", True,
-                     f"id={ar_id}, trazabilidad D-1/D-3 persistida")
+                     f"id={ar_id}, 'testar001' -> 'TESTAR001', trazabilidad OK")
             return True
         else:
             log_test(2, 16, "Create account receivable", False,
-                     f"creado id={ar_id} pero campos nuevos no coinciden: "
+                     f"creado id={ar_id} pero no coincide: "
+                     f"{data.get('document_number')}/"
                      f"{data.get('customer_document')}/"
                      f"{data.get('identification_original')}/"
                      f"{data.get('statement_date')}")
@@ -517,11 +519,17 @@ def test_11_verify_row_integrity():
     if n_neg != EXPECTED_NEGATIVES:
         problems.append(f"negativos={n_neg} != {EXPECTED_NEGATIVES}")
 
-    rc_rows = [r for r in etl_rows if str(r.get("document_number", "")).startswith("rc")]
+    rc_rows = [r for r in etl_rows if str(r.get("document_number", "")).startswith("RC")]
     rc_linked = [r for r in rc_rows if r.get("id_invoice") is not None]
     if len(rc_rows) != EXPECTED_RC_DOCS or rc_linked:
-        problems.append(f"rc={len(rc_rows)} (exp {EXPECTED_RC_DOCS}), "
+        problems.append(f"RC={len(rc_rows)} (exp {EXPECTED_RC_DOCS}), "
                         f"rc_con_invoice={len(rc_linked)}")
+
+    lowercase_docs = [r.get("document_number") for r in etl_rows
+                      if r.get("document_number")
+                      != str(r.get("document_number", "")).upper()]
+    if lowercase_docs:
+        problems.append(f"docs no-mayusculas={lowercase_docs[:3]}")
 
     bad_bucket = {r.get("aging_bucket") for r in etl_rows} - ALLOWED_BUCKETS
     if bad_bucket:
@@ -533,8 +541,8 @@ def test_11_verify_row_integrity():
 
     if not problems:
         log_test(11, 16, "Verify row integrity", True,
-                 f"{len(etl_rows)} filas, 56 negativos, {len(rc_rows)} rc legacy, "
-                 "buckets/corte validos")
+                 f"{len(etl_rows)} filas, 56 negativos, {len(rc_rows)} RC legacy, "
+                 "docs mayusculas, buckets/corte validos")
         return True
     else:
         log_test(11, 16, "Verify row integrity", False, "; ".join(problems)[:200])
@@ -635,8 +643,9 @@ def test_14_upload_reemplazo_idempotente():
 
 
 def test_15_delete_by_document():
-    """AC-11: DELETE by-document FVFE1595 => records_deleted==2; inexistente => 404."""
-    response = api_request("DELETE", f"{AR_BASE}/by-document/{quote(DUPLICATE_DOC)}")
+    """AC-11: DELETE by-document (param minusculas => normalizado) borra 2 filas;
+    inexistente => 404."""
+    response = api_request("DELETE", f"{AR_BASE}/by-document/{quote(DUPLICATE_DOC.lower())}")
     dup_ok = False
     if response is not None and response.status_code == 200:
         data = response.json()
@@ -722,7 +731,7 @@ def main():
         test_13_verify_balance_invariant,
         test_14_upload_reemplazo_idempotente,
         test_15_delete_by_document,
-        #test_16_cleanup_etl_records,
+        test_16_cleanup_etl_records,
     ]
 
     for test_func in tests:
