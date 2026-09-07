@@ -18,13 +18,13 @@ Implements the core financial engine for the Budget and Cash Flow module:
 """
 
 # Python
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional, Dict, Any
 from copy import deepcopy
 
 # SQLAlchemy
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, case
 
 # App
 from app.core.constants import TAX_RATE
@@ -774,3 +774,294 @@ class BudgetEngine:
         """
         # TODO: Implement cost center aggregation
         return []
+
+    # ──────────────────────────────────────────────
+    # Pilar 2 — Cash Flow (spec backend.02_10)
+    # ──────────────────────────────────────────────
+
+    def _cash_buckets(self, date_from: date, date_to: date,
+                      granularity: str) -> List[tuple]:
+        """Regresa [(label_iso, coverage_start, coverage_end)] cubriendo la ventana.
+
+        weekly = lunes ISO; label = inicio REAL del bucket de calendario (puede ser
+        anterior a date_from cuando la ventana abre a mitad de semana/mes, BR-34);
+        la cobertura se recorta a [date_from, date_to]. Cero-fill garantizado: no
+        se consulta generate_series; los buckets sin movimientos existen igual."""
+        buckets: List[tuple] = []
+        if granularity == "daily":
+            d = date_from
+            while d <= date_to:
+                buckets.append((d.isoformat(), d, d))
+                d += timedelta(days=1)
+        elif granularity == "weekly":
+            monday = date_from - timedelta(days=date_from.weekday())
+            while monday <= date_to:
+                sunday = monday + timedelta(days=6)
+                buckets.append((monday.isoformat(),
+                                max(monday, date_from), min(sunday, date_to)))
+                monday += timedelta(days=7)
+        else:  # monthly
+            y, m = date_from.year, date_from.month
+            while (y, m) <= (date_to.year, date_to.month):
+                start = date(y, m, 1)
+                nxt = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+                buckets.append((start.isoformat(),
+                                max(start, date_from),
+                                min(nxt - timedelta(days=1), date_to)))
+                y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+        return buckets
+
+    def get_cash_flow(
+        self,
+        date_from: date,
+        date_to: date,
+        granularity: str = "monthly",              # daily | weekly | monthly (BR-34)
+        id_budget: Optional[int] = None,           # D-7 (misma semantica que get_pnl)
+        initial_balance: Optional[float] = None,   # D-4 (parameter manda)
+        outflow_source: str = "both",              # budget | ap | both (D-1)
+        overdue_as: str = "clamp_cutoff",          # clamp_cutoff | first_bucket | exclude (D-2)
+        cutoff_date: Optional[date] = None,        # as-of; default date.today() (D-3)
+    ) -> Dict[str, Any]:
+        """Build the liquidity curve (Pilar 2): real cash vs AR/AP/budget projection.
+
+        Pure read-only aggregation layer (BR-32): no add/flush/commit/delete
+        anywhere in this method. Queries Q0-Q5 per spec §5.4; bucket assembly,
+        status split (BR-24) and running accumulation (BR-35) per §5.5; overlap
+        warnings (D-1/BR-29) per §5.6. project_cash_flow (legacy) is untouched.
+        """
+        cutoff = cutoff_date or date.today()       # BR-37 (UTC del contenedor)
+        slice_lo = max(date_from, cutoff)          # piso de anclas proyectadas (BR-26/27)
+        warnings: List[str] = []
+
+        # ── Q0: resolve the comparison budget (D-7 / BR-31, shared literals
+        #        with get_pnl; sin presupuesto => Q5 = 0.0, nunca null) ─────
+        budget_row = None
+        if id_budget is not None:
+            # Missing id_budget is a 404 at the endpoint (§10 E-CF-2).
+            budget_row = self.db.query(BudgetModel).filter(
+                BudgetModel.id_budget == id_budget).first()
+        else:
+            candidates = (self.db.query(BudgetModel)
+                          .filter(BudgetModel.budget_year == date_to.year,
+                                  BudgetModel.status == "active",
+                                  BudgetModel.is_scenario.is_(False))
+                          .order_by(BudgetModel.id_budget).all())
+            if candidates:
+                budget_row = candidates[0]
+                if len(candidates) > 1:
+                    warnings.append(
+                        "More than one active non-scenario budget for "
+                        f"{date_to.year}; using the lowest id_budget "
+                        f"({budget_row.id_budget})"
+                    )
+            else:
+                warnings.append(
+                    f"No active non-scenario budget for {date_to.year}"
+                )
+
+        if budget_row is not None and id_budget is not None and budget_row.is_scenario:
+            warnings.append("Comparing against scenario budget")
+
+        resolved_id: Optional[int] = None
+        budget_source: Optional[Dict[str, Any]] = None
+        if budget_row is not None:
+            resolved_id = budget_row.id_budget
+            budget_source = {
+                "id_budget": budget_row.id_budget,
+                "budget_name": budget_row.budget_name,
+                "status": budget_row.status,
+            }
+
+        # ── Buckets: cero-fill en Python, nunca generate_series (D-6/BR-33) ──
+        buckets = self._cash_buckets(date_from, date_to, granularity)
+
+        # ── Q1: real CASH movements in the window (BR-22/BR-23/BR-25) ───────
+        _signed = case(
+            (PaymentLedgerModel.cash_flow == "in", func.abs(PaymentLedgerModel.payment_amount)),
+            (PaymentLedgerModel.cash_flow == "out", -func.abs(PaymentLedgerModel.payment_amount)),
+            else_=0.0,
+        )
+        real_rows = (self.db.query(
+                PaymentLedgerModel.payment_date,
+                func.coalesce(func.sum(case(
+                    (PaymentLedgerModel.cash_flow == "in",
+                     func.abs(PaymentLedgerModel.payment_amount)), else_=0.0)), 0.0),
+                func.coalesce(func.sum(case(
+                    (PaymentLedgerModel.cash_flow == "out",
+                     func.abs(PaymentLedgerModel.payment_amount)), else_=0.0)), 0.0))
+             .filter(PaymentLedgerModel.transaction_nature == "CASH",
+                     PaymentLedgerModel.cash_flow.in_(("in", "out")),   # excluye NULL (BR-22)
+                     PaymentLedgerModel.payment_date >= date_from,
+                     PaymentLedgerModel.payment_date <= date_to)
+             .group_by(PaymentLedgerModel.payment_date)
+             .all())
+        # -> {date: (inflows, outflows_abs)}; cada monto entra en su bucket por
+        # cobertura (BR-25: una fila real futura cuenta como real igual)
+        real_by_day: Dict[date, tuple] = {
+            r[0]: (float(r[1]), float(r[2])) for r in real_rows
+        }
+
+        # ── Q2: derived starting balance (D-4/BR-30; omitido si llega el
+        #        parametro, que manda sobre la base ledger-relativa) ──────────
+        if initial_balance is not None:
+            starting_balance = float(initial_balance)
+            initial_balance_source = "provided"
+        else:
+            starting_balance = float(self.db.query(
+                func.coalesce(func.sum(_signed), 0.0)
+            ).filter(
+                PaymentLedgerModel.transaction_nature == "CASH",
+                PaymentLedgerModel.cash_flow.in_(("in", "out")),
+                PaymentLedgerModel.payment_date < date_from,
+            ).scalar())
+            initial_balance_source = "derived_from_ledger"
+            warnings.append("starting_balance is ledger-relative: set "
+                            "initial_balance for the true bank position")
+
+        # ── Q3: projected inflows = AR deudor en [slice_lo, date_to] (BR-26) ──
+        # `balance` ya es neto (settle del CRUD 02_08); jamas filtrar por status.
+        ar_rows = (self.db.query(
+                AccountReceivableModel.due_date,
+                func.sum(AccountReceivableModel.balance))
+             .filter(AccountReceivableModel.balance > 0,        # saldo deudor (A-6)
+                     AccountReceivableModel.due_date >= slice_lo,
+                     AccountReceivableModel.due_date <= date_to)
+             .group_by(AccountReceivableModel.due_date)
+             .all())
+        ar_by_day: Dict[date, float] = {r[0]: float(r[1]) for r in ar_rows}
+
+        # ── Q4: AP outflows anchored per overdue_as (D-2/BR-28; skipped when
+        #        outflow_source=budget per §5.4 invocation rules) ──────────────
+        ap_anchored: List[tuple] = []       # (anchor_date, id_cost_center, amount)
+        overdue_outflows = 0.0
+        n_excluded = 0
+        if outflow_source in ("ap", "both"):
+            ap_rows = (self.db.query(
+                    AccountPayableModel.id_cost_center,
+                    AccountPayableModel.due_date,
+                    AccountPayableModel.balance)
+                 .filter(AccountPayableModel.balance > 0)   # nunca por status (§13)
+                 .all())
+            for cc, due, bal in ap_rows:
+                if due >= cutoff:
+                    anchor = due
+                elif overdue_as == "clamp_cutoff":
+                    anchor = cutoff
+                    overdue_outflows += float(bal)
+                elif overdue_as == "first_bucket":
+                    anchor = date_from
+                    overdue_outflows += float(bal)
+                else:                            # exclude
+                    overdue_outflows += float(bal)   # se reporta el monto excluido igual
+                    n_excluded += 1
+                    continue
+                if date_from <= anchor <= date_to:
+                    ap_anchored.append((anchor, cc, float(bal)))
+            if overdue_as == "exclude" and overdue_outflows:
+                warnings.append(f"{n_excluded} past-due payable obligation(s) "
+                                "excluded (overdue_as=exclude)")
+
+        # ── Q5: budget expense outflows (BR-27; skipped when outflow_source=ap
+        #        or no resolved budget => salidas 0.0, no null, D-7) ──────────
+        bud_anchored: List[tuple] = []      # (anchor_date, id_cost_center, amount)
+        if outflow_source in ("budget", "both") and resolved_id is not None:
+            bud_rows = (self.db.query(
+                    BudgetLineModel.id_cost_center,
+                    func.coalesce(BudgetLineModel.payment_date,
+                                  BudgetLineModel.budget_date).label("anchor"),
+                    func.sum(BudgetLineModel.projected_amount))
+                 .filter(BudgetLineModel.id_budget == resolved_id,
+                         BudgetLineModel.line_type == "expense",
+                         func.coalesce(BudgetLineModel.payment_date,
+                                       BudgetLineModel.budget_date) >= slice_lo,
+                         func.coalesce(BudgetLineModel.payment_date,
+                                       BudgetLineModel.budget_date) <= date_to)
+                 .group_by(BudgetLineModel.id_cost_center, "anchor")
+                 .all())
+            bud_anchored = [(r[1], r[0], float(r[2])) for r in bud_rows]
+
+        # ── Imputation: cada ancla cae en el bucket que la cubre (§5.5) ─────
+        def _cover(d: date) -> Optional[str]:
+            for label, b_start, b_end in buckets:
+                if b_start <= d <= b_end:
+                    return label
+            return None
+
+        inflow_by_bucket: Dict[str, float] = {label: 0.0 for label, _s, _e in buckets}
+        outflow_by_bucket: Dict[str, float] = {label: 0.0 for label, _s, _e in buckets}
+        budget_side: Dict[tuple, float] = {}    # (cc, label) totals for overlap (BR-29)
+        ap_side: Dict[tuple, float] = {}
+
+        for day, (rin, rout) in real_by_day.items():
+            label = _cover(day)
+            inflow_by_bucket[label] += rin
+            outflow_by_bucket[label] += rout
+        for day, amount in ar_by_day.items():
+            inflow_by_bucket[_cover(day)] += amount
+        for anchor, cc, amount in bud_anchored:
+            label = _cover(anchor)
+            outflow_by_bucket[label] += amount
+            budget_side[(cc, label)] = budget_side.get((cc, label), 0.0) + amount
+        for anchor, cc, amount in ap_anchored:
+            label = _cover(anchor)
+            outflow_by_bucket[label] += amount
+            ap_side[(cc, label)] = ap_side.get((cc, label), 0.0) + amount
+
+        # ── Overlap detection, only in both mode (D-1/BR-29): se denuncia,
+        #        nunca se deduplica; orden estable por (cc, label) ────────────
+        if outflow_source == "both":
+            for key in sorted(set(budget_side) & set(ap_side)):
+                cc, label = key
+                warnings.append(
+                    f"Potential outflow overlap (cost center {cc} in {label}): "
+                    f"budget expense {budget_side[key]:.2f} and payable obligation "
+                    f"{ap_side[key]:.2f} may double-count"
+                )
+
+        # ── Assembly: status split (BR-24), magnitudes abs con signo de
+        #        payload (BR-23/A-6), running sum (BR-35), 2 dec (BR-38) ──────
+        points: List[Dict[str, Any]] = []
+        starting_balance = round(starting_balance, 2)
+        accumulated = starting_balance
+        for label, b_start, b_end in buckets:
+            inflow = inflow_by_bucket[label]
+            outflow = outflow_by_bucket[label]
+            status = "actual" if b_end < cutoff else "projected"
+            net = round(inflow - outflow, 2)
+            accumulated = round(accumulated + net, 2)
+            points.append({
+                "period": label, "status": status,
+                "inflows": round(inflow, 2),
+                "outflows": -round(outflow, 2),     # payload SIEMPRE negativo (A-6)
+                "net_flow": net,
+                "accumulated_balance": accumulated,
+            })
+
+        return {
+            "summary": {
+                "starting_balance": starting_balance,
+                "ending_balance": accumulated,
+                "net_flow": round(accumulated - starting_balance, 2),
+            },
+            "time_series": points,
+            "meta": {
+                "granularity": granularity,
+                "cutoff": cutoff.isoformat(),
+                "initial_balance_source": initial_balance_source,
+                "outflow_source": outflow_source,
+                "overdue_as": overdue_as,
+                "budget_source": budget_source,
+                "overdue_outflows": round(overdue_outflows, 2),
+                "filters": {
+                    "date_from": date_from.isoformat(),
+                    "date_to": date_to.isoformat(),
+                    "granularity": granularity,
+                    "id_budget": id_budget,
+                    "initial_balance": initial_balance,
+                    "outflow_source": outflow_source,
+                    "overdue_as": overdue_as,
+                    "cutoff_date": cutoff_date.isoformat() if cutoff_date is not None else None,
+                },
+                "warnings": warnings,
+            },
+        }

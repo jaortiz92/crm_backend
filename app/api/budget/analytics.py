@@ -5,7 +5,7 @@ Cash flow projection, budget vs actual tracking, and scenario cloning.
 """
 
 from datetime import date
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ from app.schemas.budget import (
     Budget,
     BudgetVsActual,
     CashFlowProjection,
+    CashFlowResponse,
     BudgetTrackingSummary,
     PnLResponse,
 )
@@ -136,4 +137,44 @@ def get_pnl(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error computing P&L: {str(e)}",
+        )
+
+
+@router.get("/cash-flow", response_model=CashFlowResponse)
+def get_cash_flow(
+    date_from: date = Query(..., description="Ventana de la serie (inclusive)"),
+    date_to: date = Query(..., description="Ventana de la serie (inclusive)"),
+    granularity: Literal["daily", "weekly", "monthly"] = Query("monthly"),
+    id_budget: Optional[int] = Query(None, description="Presupuesto para salidas (D-7; permite escenarios)"),
+    initial_balance: Optional[float] = Query(None, description="Saldo real de banco antes de date_from; default: derivado del ledger (D-4)"),
+    outflow_source: Literal["budget", "ap", "both"] = Query("both", description="Fuente de salidas proyectadas (D-1)"),
+    overdue_as: Literal["clamp_cutoff", "first_bucket", "exclude"] = Query("clamp_cutoff", description="Ubicacion de deuda AP vencida (D-2)"),
+    cutoff_date: Optional[date] = Query(None, description="As-of del punto de inflexion; default hoy (D-3)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Pilar 2 - Curva de liquidez: caja real vs proyeccion AR/AP/presupuesto."""
+    # Literal enums make manual validation redundant: FastAPI returns native
+    # 422 for out-of-enum values or malformed dates (§10 E-CF-3).
+    if date_from > date_to:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="date_from must be on or before date_to",
+        )
+    if id_budget is not None and crud.get_budget_by_id(db, id_budget) is None:
+        Exceptions.register_not_found("Budget", id_budget)
+    try:
+        engine = BudgetEngine(db)
+        return engine.get_cash_flow(
+            date_from=date_from, date_to=date_to, granularity=granularity,
+            id_budget=id_budget, initial_balance=initial_balance,
+            outflow_source=outflow_source, overdue_as=overdue_as,
+            cutoff_date=cutoff_date,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:  # E-CF-5: any other DB/parse failure (analítica pattern)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error computing cash flow: {str(e)}",
         )

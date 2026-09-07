@@ -147,3 +147,41 @@ class PnLResponse(BaseModel):
     period: dict          # {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}  — mismo shape que el HSpec
     pnl_statement: PnLStatement
     meta: PnLMeta
+
+
+# ──────────────────────────────────────────────
+# Cash Flow (Pilar 2) Response Schemas  — spec 02_10 §4.3
+# ──────────────────────────────────────────────
+
+class CashFlowPoint(BaseModel):
+    period: str                        # label ISO del bucket (BR-34; puede ser anterior a
+                                       # date_from en el primer bucket semanal parcial)
+    status: str                        # "actual" | "projected" (D-3/BR-24)
+    inflows: float                     # >= 0
+    outflows: float                    # <= 0 (convencion del JSON de ejemplo del HSpec)
+    net_flow: float                    # = inflows + outflows (nunca se "resta el negativo")
+    accumulated_balance: float         # running-sum desde starting_balance (BR-35)
+
+
+class CashFlowSummary(BaseModel):
+    starting_balance: float
+    ending_balance: float              # = starting + SUM(net_flow)  (invariante BR-35)
+    net_flow: float                    # suma de net_flow de toda la ventana
+
+
+class CashFlowMeta(BaseModel):
+    granularity: str
+    cutoff: str                        # fecha del punto de inflexion realmente usada (BR-37)
+    initial_balance_source: str        # "provided" | "derived_from_ledger" (D-4)
+    outflow_source: str                # eco efectivo (D-1)
+    overdue_as: str                    # eco efectivo (D-2)
+    budget_source: Optional[dict] = None   # {id_budget, budget_name, status} | null (D-7)
+    overdue_outflows: float = 0.0      # total AP clampado/excluido segun modo
+    filters: dict                      # eco de los query params efectivos (BR-39)
+    warnings: List[str] = []
+
+
+class CashFlowResponse(BaseModel):
+    summary: CashFlowSummary
+    time_series: List[CashFlowPoint]
+    meta: CashFlowMeta
