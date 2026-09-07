@@ -58,4 +58,7 @@ from .budget import (
     AccountPayable, AccountPayableCreate, AccountPayableFull,
     PayableLedger, PayableLedgerCreate,
     BudgetVsActual, CashFlowProjection, BudgetTrackingSummary,
+    LineCostRate, LineCostRateCreate, LineCostRateUpdate,
+    PnLResponse, PnLMeta, PnLStatement, PnLComparison,
+    PnLProfit, PnLOpex, OpexBreakdownItem, CogsBudgetTraceItem,
 )

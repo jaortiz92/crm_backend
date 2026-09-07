@@ -37,4 +37,5 @@ from .budget import (
     AccountReceivable, PaymentLedger,
     BudgetScenario,
     AccountPayable, PayableLedger,
+    LineCostRate,
 )
