@@ -38,4 +38,5 @@ from .budget import (
     BudgetScenario,
     AccountPayable, PayableLedger,
     LineCostRate,
+    CommissionRate,
 )

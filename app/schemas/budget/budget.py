@@ -4,7 +4,7 @@ Budget Schemas
 Includes analytical / aggregation response schemas at the bottom.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field
@@ -185,3 +185,59 @@ class CashFlowResponse(BaseModel):
     summary: CashFlowSummary
     time_series: List[CashFlowPoint]
     meta: CashFlowMeta
+
+
+# ──────────────────────────────────────────────
+# Commission Engine (Pilar 3) Response Schemas  — spec 02_11 §4.4
+# ──────────────────────────────────────────────
+
+class CommissionRateTrace(BaseModel):
+    id_commission_rate: Optional[int] = None   # NULL cuando no habia tasa (pct=0)
+    id_line: Optional[int] = None              # NULL = balde global / sin-linea
+    line_name: Optional[str] = None
+    commission_pct: float                      # 0.0 si no hubo tasa aplicable (A-11)
+    base_net: float                            # porcion de la base neta en este tramo
+    commission_earned: float                   # round(base_net * pct / 100, 2)
+
+
+class CommissionDetailRow(BaseModel):
+    id_payment_ledger: int                     # traza directa al libro (soporte de pago)
+    receipt_number: str
+    payment_date: date
+    invoice_number: Optional[str] = None       # NULL en ruta anticipo (D-2 paso 3)
+    collected_amount: float                    # bruto recaudado, SIEMPRE >= 0 (D-6)
+    commission_base: float                     # neto de IVA: collected / (1 + TAX_RATE) (D-1)
+    commission_rate_applied: float             # pct echo: tasa unica o blend (BR-47)
+    rate_details: List[CommissionRateTrace]    # traza conciliable renglon a renglon
+    commission_earned: float                   # = SUM(rate_details.commission_earned)
+
+
+class CommissionSellerBlock(BaseModel):
+    id_seller: int
+    seller_name: str                           # users.first_name + ' ' + last_name
+    total_collected: float                     # suma collected_amount de sus renglones
+    total_commission: float                    # suma commission_earned de sus renglones
+    details: List[CommissionDetailRow]
+
+
+class CommissionSummary(BaseModel):
+    total_collected_base: float                # Σ bruto de renglones ATRIBUIBLES (nombre HSpec)
+    total_net_base: float                      # Σ commission_base (aditivo, gobernanza D-1)
+    total_commissions_calculated: float        # Σ earned (invariante BR-48)
+    total_unattributed_collected: float = 0.0  # Σ bruto no-atribuible (BR-44)
+    unattributed_count: int = 0
+
+
+class CommissionMeta(BaseModel):
+    business_period: Optional[str] = None      # "2026-09" si la ventana deriva de periodo; else None
+    period_source: str                         # "period_param" | "explicit_dates" (D-5)
+    tax_rate_used: float                       # valor efectivo de TAX_RATE al resolver (D-1)
+    filters: dict                              # eco de los 5 query params efectivos (BR-52)
+    warnings: List[str] = []
+
+
+class CommissionResponse(BaseModel):
+    period: dict                               # {"from": iso, "to": iso} ventana EFECTIVA (HSpec literal)
+    summary: CommissionSummary
+    commissions_by_seller: List[CommissionSellerBlock]
+    meta: CommissionMeta

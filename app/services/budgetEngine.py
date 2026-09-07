@@ -33,6 +33,11 @@ from app.models import (
     InvoiceDetail as InvoiceDetailModel,
     Reference as ReferenceModel,
     Brand as BrandModel,
+    Order as OrderModel,
+    CustomerTrip as CustomerTripModel,
+    Customer as CustomerModel,
+    User as UserModel,
+    Line as LineModel,
 )
 from app.models.budget import (
     CostCenter as CostCenterModel,
@@ -46,6 +51,7 @@ from app.models.budget import (
     AccountPayable as AccountPayableModel,
     PayableLedger as PayableLedgerModel,
     LineCostRate as LineCostRateModel,
+    CommissionRate as CommissionRateModel,
 )
 
 
@@ -1061,6 +1067,346 @@ class BudgetEngine:
                     "outflow_source": outflow_source,
                     "overdue_as": overdue_as,
                     "cutoff_date": cutoff_date.isoformat() if cutoff_date is not None else None,
+                },
+                "warnings": warnings,
+            },
+        }
+
+    # ──────────────────────────────────────────────
+    # Pilar 3 — Commission Engine (spec backend.02_11)
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _business_period(period: str) -> tuple:
+        """'2026-09' -> (date(2026, 8, 26), date(2026, 9, 25)). Bordes inclusivos.
+        Enero deriva del diciembre del ano anterior. Valida formato YYYY-MM
+        (E-CM-3 422 si no parsea; el endpoint regex-valida primero)."""
+        y, m = int(period[:4]), int(period[5:7])
+        end = date(y, m, 25)
+        py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
+        return date(py, pm, 26), end
+
+    def get_commissions(
+        self,
+        date_from: date,
+        date_to: date,
+        id_seller: Optional[int] = None,           # filtro post-atribucion (HSpec §4)
+        id_line: Optional[int] = None,             # corte por linea con prorrata (A-5/D-7)
+        business_period: Optional[str] = None,     # etiqueta "YYYY-MM" para eco (D-5)
+    ) -> Dict[str, Any]:
+        """Build the cash-basis commission settlement (Pilar 3).
+
+        Pure read-only aggregation layer (BR-49): no add/flush/commit/delete
+        anywhere in this method. Queries Q1-Q5 per spec §5.3; assembly per
+        §5.4: attribution chain D-2 (BR-43, first hit stops, never
+        id_seller_origin, never users.active BR-51), net base D-1 (BR-42),
+        proration D-7 (BR-46, LEFT OUTER JOINs => no lost weight), rate
+        resolution BR-45 (line first, global fallback, lowest id wins,
+        none => 0.0 + grouped warning never an HTTP error), rounding BR-48
+        (2 dec PER TRAMO, sums over already-rounded values) and determinism
+        BR-52. Post-attribution filters (BR-54): id_seller prunes after the
+        unattributed disclosure (BR-44, always global), id_line prunes tramos
+        and excludes rows without participation with a counted warning.
+        """
+        tax_factor = 1.0 + TAX_RATE                 # D-1
+        warnings: List[str] = []
+
+        # ── Q1: recaudos crudos de la ventana (BR-41; fila = renglon) ──────
+        cash_rows = (self.db.query(
+                PaymentLedgerModel.id_payment_ledger,
+                PaymentLedgerModel.receipt_number,
+                PaymentLedgerModel.payment_date,
+                PaymentLedgerModel.payment_amount,
+                PaymentLedgerModel.id_invoice,
+                PaymentLedgerModel.id_customer)
+             .filter(PaymentLedgerModel.transaction_nature == "CASH",
+                     PaymentLedgerModel.cash_flow == "in",   # jamas 'out' ni NULL (BR-41)
+                     PaymentLedgerModel.payment_date >= date_from,
+                     PaymentLedgerModel.payment_date <= date_to)
+             .order_by(PaymentLedgerModel.payment_date,
+                       PaymentLedgerModel.id_payment_ledger)  # determinismo BR-52
+             .all())
+
+        # ── Q2: cadena factura->pedido->trip en lote (D-2 pasos 1-2). LEFT
+        #        JOIN: factura sin pedido conserva su numero y la cadena rota
+        #        cae al paso 3/4 (§5.3: "segunda consulta ligera o LEFT JOIN") ─
+        inv_ids = sorted({r.id_invoice for r in cash_rows if r.id_invoice})
+        invoice_chain: Dict[int, tuple] = {}   # id -> (invoice_number, id_seller, id_customer_trip)
+        if inv_ids:
+            rows = (self.db.query(
+                        InvoiceModel.id_invoice, InvoiceModel.invoice_number,
+                        OrderModel.id_seller, OrderModel.id_customer_trip)
+                    .outerjoin(OrderModel, InvoiceModel.id_order == OrderModel.id_order)
+                    .filter(InvoiceModel.id_invoice.in_(inv_ids)).all())
+            invoice_chain = {r.id_invoice: (r.invoice_number, r.id_seller, r.id_customer_trip)
+                             for r in rows}
+
+        # ── Q3: customers.id_seller para trips y clientes del ledger (lote) ─
+        trip_ids = {c[2] for c in invoice_chain.values() if c[2] is not None}
+        trip_customer: Dict[int, int] = {}
+        if trip_ids:
+            trip_customer = dict(self.db.query(
+                CustomerTripModel.id_customer_trip, CustomerTripModel.id_customer)
+                .filter(CustomerTripModel.id_customer_trip.in_(trip_ids),
+                        CustomerTripModel.id_customer.isnot(None)).all())
+        cust_ids = set(trip_customer.values()) | {
+            r.id_customer for r in cash_rows if r.id_customer}
+        customer_seller: Dict[int, int] = {}
+        if cust_ids:
+            customer_seller = dict(self.db.query(
+                CustomerModel.id_customer, CustomerModel.id_seller)
+                .filter(CustomerModel.id_customer.in_(cust_ids),
+                        CustomerModel.id_seller.isnot(None)).all())
+
+        # ── Q4: detalles con linea por factura (D-7; mapeo identico a
+        #        get_pnl reference->brand->line). LEFT OUTER JOINs: el tramo
+        #        sin referencia/linea mapeada conserva id_line=NULL y cae al
+        #        balde "sin linea" (tasa global) SIN peso perdido (BR-46) ────
+        q4_map: Dict[int, List[tuple]] = {}   # id_invoice -> [(id_line, line_name, weight)]
+        if inv_ids:
+            detail_rows = (self.db.query(
+                    InvoiceDetailModel.id_invoice,
+                    LineModel.id_line, LineModel.line_name,
+                    func.coalesce(func.sum(InvoiceDetailModel.value_without_tax), 0.0))
+                 .join(InvoiceModel, InvoiceDetailModel.id_invoice == InvoiceModel.id_invoice)
+                 .outerjoin(ReferenceModel,
+                            InvoiceDetailModel.id_reference == ReferenceModel.id_reference)
+                 .outerjoin(BrandModel, ReferenceModel.id_brand == BrandModel.id_brand)
+                 .outerjoin(LineModel, BrandModel.id_line == LineModel.id_line)
+                 .filter(InvoiceDetailModel.id_invoice.in_(inv_ids))
+                 .group_by(InvoiceDetailModel.id_invoice, LineModel.id_line,
+                           LineModel.line_name)
+                 .all())
+            for d in detail_rows:
+                q4_map.setdefault(d.id_invoice, []).append(
+                    (d.id_line, d.line_name, float(d[3])))
+        for buckets in q4_map.values():
+            # orden determinista de tramos (BR-52): lineas por id, luego el
+            # balde sin-linea; los pesos suman el total de la factura
+            buckets.sort(key=lambda b: (1 if b[0] is None else 0,
+                                        b[0] if b[0] is not None else 0))
+
+        # ── Q5: tasas activas (maestro: carga total; BR-45 resuelve contra
+        #        payment_date; menor id_commission_rate gana el desempate) ────
+        rates = (self.db.query(CommissionRateModel)
+                 .filter(CommissionRateModel.is_active.is_(True))
+                 .order_by(CommissionRateModel.id_commission_rate)
+                 .all())
+        line_groups: Dict[int, List[Any]] = {}
+        global_group: List[Any] = []
+        for r in rates:
+            if r.id_line is None:
+                global_group.append(r)
+            else:
+                line_groups.setdefault(r.id_line, []).append(r)
+
+        # divulgaciones agrupadas (ordenes fijas al final, §6.1.3)
+        missing_groups: Dict[tuple, list] = {}   # (line_id, name) -> tramo count
+        tie_groups: Dict[tuple, list] = {}       # (group, ids) -> [n, chosen, min, max, name]
+
+        def _bucket_label(line_id: Optional[int], line_name: Optional[str]) -> str:
+            if line_id is None:
+                return "the global (no-line) bucket"
+            name = f" {line_name}" if line_name else ""
+            return f"line{name} (id {line_id})"
+
+        def _sort_key(line_id: Optional[int]) -> tuple:
+            return (1 if line_id is None else 0, line_id if line_id is not None else 0)
+
+        def _rate_for(bucket_line: Optional[int], bucket_name: Optional[str],
+                      pay_date: date):
+            """BR-45: tasa de la linea del tramo primero, luego global
+            (id_line IS NULL). Entre vigentes multiples del mismo grupo gana
+            el menor id (Q5 ya viene ordenado) + desempate divulgado."""
+            for gid in ([bucket_line, None] if bucket_line is not None else [None]):
+                group = global_group if gid is None else line_groups.get(gid, [])
+                covering = [r for r in group if r.date_from <= pay_date <= r.date_to]
+                if covering:
+                    if len(covering) > 1:
+                        key = _sort_key(gid) + (
+                            tuple(r.id_commission_rate for r in covering),)
+                        rec = tie_groups.setdefault(
+                            key, [0, covering[0].id_commission_rate,
+                                  pay_date, pay_date, gid,
+                                  bucket_name if gid == bucket_line else None])
+                        rec[0] += 1
+                        rec[2] = min(rec[2], pay_date)
+                        rec[3] = max(rec[3], pay_date)
+                    return covering[0]
+            return None
+
+        # ── Ensamblado §5.4: atribucion -> base neta -> prorrata -> tasas ───
+        unattributed_gross = 0.0
+        unattributed_count = 0
+        cut_count = 0
+        seller_rows: Dict[int, List[Dict[str, Any]]] = {}
+
+        for r in cash_rows:                            # Q1 ya ordenada
+            gross = abs(float(r.payment_amount))       # D-6: SIEMPRE positivo
+            net_base = gross / tax_factor              # D-1 (precision completa)
+
+            # BR-43: cadena D-2 con parada al primer hit (users.active NO
+            # filtra: deuda de pago persiste, BR-51)
+            seller: Optional[int] = None
+            chain = invoice_chain.get(r.id_invoice) if r.id_invoice else None
+            if chain is not None:
+                if chain[1] is not None:                   # paso 1: orders.id_seller
+                    seller = chain[1]
+                elif chain[2] is not None:                 # paso 2: trip -> customer
+                    cust = trip_customer.get(chain[2])
+                    if cust is not None:
+                        seller = customer_seller.get(cust)
+            if seller is None and r.id_customer is not None:   # paso 3: ledger id_customer
+                seller = customer_seller.get(r.id_customer)
+            if seller is None:                                 # paso 4: BR-44 divulgada
+                unattributed_gross += gross
+                unattributed_count += 1
+                continue
+
+            # BR-46: prorrata de la base neta; factura sin detalles o sin
+            # cadena => renglon completo al balde sin-linea
+            buckets = q4_map.get(r.id_invoice) if r.id_invoice else None
+            total_weight = sum(b[2] for b in buckets) if buckets else 0.0
+            if buckets and total_weight > 0:
+                shares = [(line, name, net_base * weight / total_weight)
+                          for line, name, weight in buckets]
+            else:
+                shares = [(None, None, net_base)]
+
+            if id_line is not None:                    # BR-54: corte post-prorrata
+                shares = [s for s in shares if s[0] == id_line]
+                if not shares:
+                    cut_count += 1
+                    continue
+            row_net = sum(s[2] for s in shares)
+            # eco del bruto proporcional al corte (AC-9: L1 de CMK9 => 7.140.000)
+            row_collected = round(row_net * tax_factor, 2)
+
+            traces: List[Dict[str, Any]] = []
+            earned_row = 0.0
+            for line_id, line_name, share_net in shares:
+                rate = _rate_for(line_id, line_name, r.payment_date)
+                if rate is None:
+                    pct = 0.0                          # A-11: nunca HTTP error
+                    mkey = _sort_key(line_id) + (line_name,)
+                    g = missing_groups.setdefault(mkey, [line_id, line_name, 0])
+                    g[2] += 1
+                else:
+                    pct = float(rate.commission_pct)
+                earned_line = round(share_net * pct / 100, 2)   # BR-48: round POR TRAMO
+                earned_row += earned_line
+                traces.append({
+                    "id_commission_rate": rate.id_commission_rate if rate else None,
+                    "id_line": line_id,
+                    "line_name": line_name,
+                    "commission_pct": pct,
+                    "base_net": round(share_net, 2),
+                    "commission_earned": earned_line,
+                })
+            earned_row = round(earned_row, 2)          # Σ tramos redondos
+
+            # BR-47: tasa unica si un tramo; si no, blend efectivo conciliable
+            if len(traces) == 1:
+                applied = traces[0]["commission_pct"]
+            else:
+                applied = (round(earned_row / row_net * 100, 2) if row_net > 0 else 0.0)
+
+            if id_seller is not None and seller != id_seller:   # post-filtro (BR-54)
+                continue
+            seller_rows.setdefault(seller, []).append({
+                "id_payment_ledger": r.id_payment_ledger,
+                "receipt_number": r.receipt_number,
+                "payment_date": r.payment_date,
+                "invoice_number": chain[0] if chain else None,
+                "collected_amount": row_collected,
+                "commission_base": round(row_net, 2),
+                "commission_rate_applied": applied,
+                "rate_details": traces,
+                "commission_earned": earned_row,
+            })
+
+        # ── Nombres de vendedor: users solo aporta FIRST + LAST (D-2) ──────
+        seller_names: Dict[int, str] = {}
+        if seller_rows:
+            name_rows = (self.db.query(
+                UserModel.id_user, UserModel.first_name, UserModel.last_name)
+                .filter(UserModel.id_user.in_(set(seller_rows))).all())
+            seller_names = {n.id_user: f"{n.first_name} {n.last_name}"
+                            for n in name_rows}
+
+        # ── Bloques por vendedor (id_seller ASC, BR-52) + totales BR-48 ────
+        total_collected_base = 0.0
+        total_net_base = 0.0
+        total_commissions = 0.0
+        blocks: List[Dict[str, Any]] = []
+        for sid in sorted(seller_rows):
+            rows = seller_rows[sid]
+            block_collected = round(sum(r["collected_amount"] for r in rows), 2)
+            block_net = round(sum(r["commission_base"] for r in rows), 2)
+            block_commission = round(sum(r["commission_earned"] for r in rows), 2)
+            total_collected_base = round(total_collected_base + block_collected, 2)
+            total_net_base = round(total_net_base + block_net, 2)
+            total_commissions = round(total_commissions + block_commission, 2)
+            blocks.append({
+                "id_seller": sid,
+                "seller_name": seller_names.get(sid, ""),
+                "total_collected": block_collected,
+                "total_commission": block_commission,
+                "details": rows,
+            })
+
+        # ── Warnings en orden fijo §6.1.3: no-atribuibles -> tasas faltantes
+        #        (agrupadas) -> exclusiones del corte id_line -> desempates ──
+        if unattributed_count:
+            warnings.append(
+                f"{unattributed_count} unattributed collection(s) totaling "
+                f"{round(unattributed_gross, 2):.2f} excluded from the settlement"
+            )
+        for mkey in sorted(missing_groups):
+            line_id, line_name, n_tramos = missing_groups[mkey]
+            warnings.append(
+                f"No active commission rate for {_bucket_label(line_id, line_name)}; "
+                f"{n_tramos} tramo(s) settled at 0.00"
+            )
+        if id_line is not None and cut_count:
+            warnings.append(
+                f"{cut_count} collected row(s) had no participation in line "
+                f"{id_line} and were excluded from the settlement"
+            )
+        for tkey in sorted(tie_groups):
+            n_tramos, chosen, d_min, d_max, gid, gname = tie_groups[tkey]
+            warnings.append(
+                f"Multiple active commission rates for {_bucket_label(gid, gname)} "
+                f"overlap at payment dates {d_min.isoformat()}.."
+                f"{d_max.isoformat()}; using the lowest id_commission_rate="
+                f"{chosen} ({n_tramos} tramo(s) affected)"
+            )
+
+        return {
+            "period": {"from": date_from.isoformat(), "to": date_to.isoformat()},
+            "summary": {
+                "total_collected_base": total_collected_base,
+                "total_net_base": total_net_base,
+                "total_commissions_calculated": total_commissions,
+                "total_unattributed_collected": round(unattributed_gross, 2),
+                "unattributed_count": unattributed_count,
+            },
+            "commissions_by_seller": blocks,
+            "meta": {
+                "business_period": business_period,
+                "period_source": "period_param" if business_period is not None
+                                 else "explicit_dates",
+                "tax_rate_used": TAX_RATE,
+                "filters": {
+                    "period": business_period,
+                    # eco de los 5 params efectivos (BR-52): con period las
+                    # fechas derivadas no se ecoan (llegaron null al endpoint)
+                    "date_from": None if business_period is not None
+                                 else date_from.isoformat(),
+                    "date_to": None if business_period is not None
+                               else date_to.isoformat(),
+                    "id_seller": id_seller,
+                    "id_line": id_line,
                 },
                 "warnings": warnings,
             },

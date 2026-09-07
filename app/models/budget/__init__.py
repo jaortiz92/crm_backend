@@ -9,3 +9,4 @@ from .budgetScenario import BudgetScenario
 from .accountPayable import AccountPayable
 from .payableLedger import PayableLedger
 from .lineCostRate import LineCostRate
+from .commissionRate import CommissionRate

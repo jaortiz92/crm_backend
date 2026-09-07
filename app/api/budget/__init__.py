@@ -17,6 +17,7 @@ from .budgetScenario import router as budget_scenario_router
 from .accountPayable import router as account_payable_router
 from .payableLedger import router as payable_ledger_router
 from .lineCostRate import router as line_cost_rate_router
+from .commissionRate import router as commission_rate_router
 from .upload import router as upload_router
 from .analytics import router as analytics_router
 
@@ -56,6 +57,11 @@ budget.include_router(
     line_cost_rate_router,
     prefix="/line-cost-rate",
     tags=["Line Cost Rates"],
+)
+budget.include_router(
+    commission_rate_router,
+    prefix="/commission-rates",
+    tags=["Commission Rates"],
 )
 budget.include_router(upload_router, prefix="/upload", tags=["Budget Uploads"])
 budget.include_router(analytics_router, prefix="/analytics", tags=["Budget Analytics"])
