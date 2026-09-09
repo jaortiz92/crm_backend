@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, s
 from sqlalchemy.orm import Session
 
 import app.crud as crud
-from app.schemas import User, BudgetCreate, BudgetLineCreate
+from app.schemas import User, BudgetCreate, BudgetLineCreate, UploadStatusResponse
 from app import get_db
 from app.core.auth import get_current_user
 from app.api.utils import Exceptions
@@ -526,3 +526,12 @@ async def upload_budget_plan_expense(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing expense budget plan: {str(e)}",
         )
+
+
+@router.get("/status", response_model=UploadStatusResponse)
+def get_upload_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ultima fecha de carga ETL por dataset (null si nunca se cargo)."""
+    return crud.get_upload_status(db)
