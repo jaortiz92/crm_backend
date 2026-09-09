@@ -17,7 +17,7 @@ class DepartmentBase(BaseModel):
     )
     id_zone: Optional[int] = Field(
         None,
-        gt=0,
+        ge=0,
         description='FK to zone'
     )
 

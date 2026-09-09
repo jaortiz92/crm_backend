@@ -23,7 +23,7 @@ class ZoneCreate(ZoneBase):
 class Zone(ZoneBase):
     id_zone: int = Field(
         ...,
-        gt=0
+        ge=0
     )
 
     class Config:
