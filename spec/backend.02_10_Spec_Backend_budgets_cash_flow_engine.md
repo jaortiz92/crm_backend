@@ -223,7 +223,7 @@ slice_lo = max(date_from, cutoff)      # piso de anclas proyectadas (BR-26/27)
 warnings: List[str] = []
 ```
 
-**Q0 — Resolver presupuesto**: idéntico a `get_pnl` (D-7 reutiliza 02_09 D-3): `id_budget` explícito manda (escenario ⇒ warning `"Comparing against scenario budget"`, literal compartido); default `budget_year == year(date_to) ∧ active ∧ ¬is_scenario`, menor `id_budget`, warning `"More than one active..."` si aplica; **sin presupuesto aplicable ⇒ warning `"No active non-scenario budget for {year}"` (literal compartido) y las salidas de Q5 valen 0.0** (no null: en liquidez la ausencia de plan es cero real, D-7).
+**Q0 — Resolver presupuesto**: idéntico a `get_pnl` (D-7 reutiliza 02_09 D-3): `id_budget` explícito manda (escenario ⇒ warning `"Comparing against scenario budget"`, literal compartido); default `budget_year == year(date_to) ∧ active ∧ ¬is_scenario`, menor `id_budget`, warning `"More than one active..."` si aplica; **sin presupuesto aplicable ⇒ warning `"No active non-scenario budget for {year}"` (literal compartido) y las salidas de Q5 valen 0.0** (no null: en liquidez la ausencia de plan es cero real, D-7). *Errata (2026-09-10, Enmienda A-01 de 02_12 §6): por simetría con `get_pnl` se quitaron el predicado `¬is_scenario` y el componente "non-scenario" de los literales ⇒ `"No active budget for {year}"` / `"More than one active budget for ..."`; `"Comparing against scenario budget"` permanece; texto histórico sin reescribir.*
 
 ### 5.4 Queries exactas (SQLAlchemy legacy `db.query`, estilo del proyecto)
 
@@ -454,7 +454,7 @@ Trazas del golden: sept `in` = 2.000.000 real + 8.000.000 AR(due 09-23); sept `o
 | `outflow_source=ap` (sin presupuesto) | 17.000.000 | 1.500.000 | solape no aplica |
 | `overdue_as=first_bucket` | 14.000.000 (agosto absorbe −1.5M) | 1.500.000 | solape sept |
 | `overdue_as=exclude` | 15.500.000 | 1.500.000 (excluido) | exclusion + solape |
-| sin presupuesto active (D-7) | 17.000.000 | 1.500.000 | "No active non-scenario budget for 2026" (solape desaparece: no hay filas Q5) |
+| sin presupuesto active (D-7) | 17.000.000 | 1.500.000 | "No active non-scenario budget for 2026" (solape desaparece: no hay filas Q5) — *Errata A-01 (02_12 §6): literal actual `"No active budget for 2026"`* |
 
 ### 6.1.3 Diccionario de `meta`
 
@@ -566,7 +566,7 @@ Ventana golden: `date_from=2026-08-16`, `date_to=2026-10-15`.
 | **AC-9** (D-3/BR-24) | Con `cutoff_date=2026-09-15` y `granularity=daily`: bucket `2026-09-14` ⇒ `actual`, `2026-09-15` ⇒ `projected`; con la ventana mensual, agosto (end 08-31 < 09-15) ⇒ `actual`. |
 | **AC-10** (BR-33/34) | Counts de serie sobre la ventana: `daily` ⇒ 61 puntos; `weekly` ⇒ 10 buckets, primer label `2026-08-10` (< date_from, BR-34); `monthly` ⇒ 3. Todos los buckets presentes aunque ceros (cero-fill). |
 | **AC-11** (BR-35) | En TODAS las respuestas capturadas (batería completa): `ending == starting + Σ net` y la secuencia `accumulated_balance` es prefijo continuo desde `starting`. |
-| **AC-12** (D-7) | Archivar el presupuesto CFK ⇒ 200, salidas de presupuesto 0.0 (agosto/sept sin Q5: sept outflows −6.000.000 = 0.5+1.5+4.0), `budget_source` null, warning `"No active non-scenario budget for 2026"`, y **sin** warning de solape; restaurar. Con `id_budget=clon` escenario ⇒ warning `"Comparing against scenario budget"` (literales compartidos con 02_09 verifican consistencia). |
+| **AC-12** (D-7) | Archivar el presupuesto CFK ⇒ 200, salidas de presupuesto 0.0 (agosto/sept sin Q5: sept outflows −6.000.000 = 0.5+1.5+4.0), `budget_source` null, warning `"No active non-scenario budget for 2026"`, y **sin** warning de solape; restaurar. Con `id_budget=clon` escenario ⇒ warning `"Comparing against scenario budget"` (literales compartidos con 02_09 verifican consistencia). *Errata (2026-09-10, Enmienda A-01 de 02_12): el primer literal pasó a `"No active budget for 2026"`; `"Comparing against scenario budget"` inalterado; histórico sin reescribir.* |
 | **AC-13** (BR-32) | Conteos idénticos antes/después de 5 llamadas en `payment_ledger`, `accounts_receivable`, `accounts_payable`, `payable_ledger`, `budget_lines`, `budgets`. |
 | **AC-14** (regresión) | `cash-flow-projection?budget_year=2026` byte-a-byte igual antes/después de toda la batería; stubs `budget-vs-actual`/`tracking` intactos; y el smoke de 02_09 (`test_pnl_engine_smoke.py`) sigue 208/208 (get_pnl no tocado). |
 | **AC-15** (errores) | E-CF-1 400 con literal exacto; E-CF-3 422 con `granularity=quarterly`, `outflow_source=mixed`, `overdue_as=clamp` (mal escrito), `cutoff_date` inválida; E-CF-2 404 `id_budget=999999`; E-CF-4 401/403 sin token. |

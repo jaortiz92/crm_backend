@@ -20,6 +20,7 @@ from .lineCostRate import router as line_cost_rate_router
 from .commissionRate import router as commission_rate_router
 from .upload import router as upload_router
 from .analytics import router as analytics_router
+from .planning import router as planning_router
 
 budget = APIRouter(prefix="/budget")
 
@@ -65,3 +66,8 @@ budget.include_router(
 )
 budget.include_router(upload_router, prefix="/upload", tags=["Budget Uploads"])
 budget.include_router(analytics_router, prefix="/analytics", tags=["Budget Analytics"])
+budget.include_router(
+    planning_router,
+    prefix="/planning",
+    tags=["Budget Planning"],
+)

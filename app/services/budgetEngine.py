@@ -80,7 +80,11 @@ class BudgetEngine:
         Returns a list of monthly projections with:
         - month: int
         - expected_inflows: float (cash inflows with tax)
-        - expected_outflows: float (fixed expenses + variable expenses + accounts payable)
+        - expected_outflows: float (fixed expenses + variable expenses + accounts
+          payable). Variable sales = rate x budgeted income of the line's
+          accrual month (budget_date); variable receivables = rate x (AR due
+          + budgeted income) of the line's accrual month. Both income bases
+          are NET (see note below).
         - net_cash_flow: float
         - cumulative_cash_flow: float
 
@@ -95,6 +99,11 @@ class BudgetEngine:
         inflows_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
         outflows_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
         net_income_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
+        # B1 (Enmienda E-02 a backend.02_02 §6): accrual base for
+        # variable_sales = budgeted income ONLY. The accounts-receivable
+        # component belongs to expected collections (recaudo), never to the
+        # sales/billing base.
+        income_budget_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
 
         ar_rows = (
             self.db.query(
@@ -146,6 +155,7 @@ class BudgetEngine:
         income_rows = income_query.group_by("budget_month").all()
         for row in income_rows:
             net_income_by_month[int(row.budget_month)] += float(row[1])
+            income_budget_by_month[int(row.budget_month)] += float(row[1])
 
         for month in range(1, 13):
             inflows_by_month[month] = net_income_by_month[month] * (1 + TAX_RATE)
@@ -178,14 +188,17 @@ class BudgetEngine:
             if (month, row.id_cost_center) not in ap_keys:
                 outflows_by_month[month] += float(row[2])
 
+        # B1+B2 (Enmienda E-02 a backend.02_02 §6): variable expenses accrue
+        # on the MONTH OF THE LINE (budget_date), never on the expense's
+        # payment month, and never on their own projected_amount (which
+        # ingestion forces to 0 by AC-UP-1). variable_sales accrues on the
+        # budgeted-income base; variable_receivables on the expected-cash
+        # base (AR due this month + budgeted income, 02_02 §6). Iterating
+        # per row keeps same-rate/same-month lines independent.
         variable_sales_query = (
             self.db.query(
-                func.coalesce(
-                    extract("month", BudgetLineModel.payment_date),
-                    extract("month", BudgetLineModel.budget_date),
-                ).label("payment_month"),
+                extract("month", BudgetLineModel.budget_date).label("accrual_month"),
                 BudgetLineModel.variable_rate,
-                func.coalesce(func.sum(BudgetLineModel.projected_amount), 0),
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
             .filter(
@@ -197,19 +210,16 @@ class BudgetEngine:
         if id_budget is not None:
             variable_sales_query = variable_sales_query.filter(BudgetLineModel.id_budget == id_budget)
 
-        variable_sales_rows = variable_sales_query.group_by("payment_month", BudgetLineModel.variable_rate).all()
-        for row in variable_sales_rows:
-            month = int(row.payment_month)
+        for row in variable_sales_query.all():
+            if row.accrual_month is None:
+                continue
+            month = int(row.accrual_month)
             rate = float(row.variable_rate) if row.variable_rate else 0.0
-            variable_cost = float(row[2]) * rate
-            outflows_by_month[month] += variable_cost
+            outflows_by_month[month] += income_budget_by_month[month] * rate
 
         variable_receivables_query = (
             self.db.query(
-                func.coalesce(
-                    extract("month", BudgetLineModel.payment_date),
-                    extract("month", BudgetLineModel.budget_date),
-                ).label("payment_month"),
+                extract("month", BudgetLineModel.budget_date).label("accrual_month"),
                 BudgetLineModel.variable_rate,
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
@@ -222,12 +232,16 @@ class BudgetEngine:
         if id_budget is not None:
             variable_receivables_query = variable_receivables_query.filter(BudgetLineModel.id_budget == id_budget)
 
-        variable_receivables_rows = variable_receivables_query.all()
-        for row in variable_receivables_rows:
-            month = int(row.payment_month)
+        # B2 (Enmienda E-02): accrues on the line's budget_date month (not
+        # payment_date); base stays the composed expected-cash figure
+        # (AR due this month + budgeted income, 02_02 §6). Per-row iteration:
+        # two lines with the same rate/month apply the base twice.
+        for row in variable_receivables_query.all():
+            if row.accrual_month is None:
+                continue
+            month = int(row.accrual_month)
             rate = float(row.variable_rate) if row.variable_rate else 0.0
-            variable_cost = net_income_by_month[month] * rate
-            outflows_by_month[month] += variable_cost
+            outflows_by_month[month] += net_income_by_month[month] * rate
 
         result = []
         cumulative = 0.0
@@ -311,22 +325,27 @@ class BudgetEngine:
             budget_row = self.db.query(BudgetModel).filter(
                 BudgetModel.id_budget == id_budget).first()
         else:
+            # BR-TGT-03 (spec 02_12 §6): the active target of the year may
+            # now be a scenario; the is_scenario predicate was removed.
+            # With 0 active budgets the resolution and warnings are
+            # unchanged (AC-REG-02). Multi-active is impossible via
+            # set-target (BR-TGT-01); if historical data still had it, the
+            # lowest id_budget + the tie-break warning below keep working.
             candidates = (self.db.query(BudgetModel)
                           .filter(BudgetModel.budget_year == date_to.year,
-                                  BudgetModel.status == "active",
-                                  BudgetModel.is_scenario.is_(False))
+                                  BudgetModel.status == "active")
                           .order_by(BudgetModel.id_budget).all())
             if candidates:
                 budget_row = candidates[0]
                 if len(candidates) > 1:
                     warnings.append(
-                        "More than one active non-scenario budget for "
+                        "More than one active budget for "
                         f"{date_to.year}; using the lowest id_budget "
                         f"({budget_row.id_budget})"
                     )
             else:
                 warnings.append(
-                    f"No active non-scenario budget for {date_to.year}"
+                    f"No active budget for {date_to.year}"
                 )
 
         if budget_row is not None and id_budget is not None and budget_row.is_scenario:
@@ -847,22 +866,28 @@ class BudgetEngine:
             budget_row = self.db.query(BudgetModel).filter(
                 BudgetModel.id_budget == id_budget).first()
         else:
+            # BR-TGT-03 / Enmienda A-01 (spec 02_12 §6): symmetric with
+            # get_pnl above — the active target of the year may now be a
+            # scenario; the is_scenario predicate was removed. With 0
+            # active budgets the resolution and warnings keep the same
+            # semantics (AC-REG-02 v1.1); multi-active stays impossible
+            # via set-target (BR-TGT-01), and the tie-break below keeps
+            # working for historical dirty data.
             candidates = (self.db.query(BudgetModel)
                           .filter(BudgetModel.budget_year == date_to.year,
-                                  BudgetModel.status == "active",
-                                  BudgetModel.is_scenario.is_(False))
+                                  BudgetModel.status == "active")
                           .order_by(BudgetModel.id_budget).all())
             if candidates:
                 budget_row = candidates[0]
                 if len(candidates) > 1:
                     warnings.append(
-                        "More than one active non-scenario budget for "
+                        "More than one active budget for "
                         f"{date_to.year}; using the lowest id_budget "
                         f"({budget_row.id_budget})"
                     )
             else:
                 warnings.append(
-                    f"No active non-scenario budget for {date_to.year}"
+                    f"No active budget for {date_to.year}"
                 )
 
         if budget_row is not None and id_budget is not None and budget_row.is_scenario:

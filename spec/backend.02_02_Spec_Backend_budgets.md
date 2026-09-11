@@ -129,20 +129,24 @@ El método `project_cash_flow()` en `app/services/budgetEngine.py` debe seguir e
     *   Sumar `accounts_receivable.balance` por mes (recaudo esperado bruto).
     *   Sumar `budget_lines.projected_amount` donde `line_type == 'income'` (ingresos netos).
     *   Para cash flow: `Efectivo_Entrante = (Σ ingresos netos) * (1 + TAX_RATE)`
+    *   **(E-02)** Mantener además un acumulador paralelo `income_budget_by_month` con **SOLO** las líneas `income` de presupuesto (sin cuentas por cobrar): es la base devengada de `variable_sales`. El componente AR pertenece exclusivamente al recaudo esperado, nunca a la base de ventas/facturación.
 
 2.  **Procesamiento de Gastos Fijos:**
     *   Sumar `projected_amount` donde `behavior_type == 'fixed'` y `line_type == 'expense'`.
 
-3.  **Procesamiento Dinámico (Variable Costs):**
+3.  **Procesamiento Dinámico (Variable Costs) — (E-02):**
+    *   El gasto variable se causa en el **mes de la línea variable** (`month(budget_date)`), **nunca** en el `payment_month` del gasto, y **nunca** sobre su propio `projected_amount` (que la ingesta fuerza a 0 por AC-UP-1, ver `02_12`). Se itera **por fila** (sin `group_by`): dos líneas con la misma tasa en el mismo mes aplican la base dos veces, de forma independiente.
     *   **`variable_sales`:**
         ```
-        base_ventas = Σ budget_lines.projected_amount (line_type == 'income')
-        gasto_variable = variable_rate * base_ventas
+        m = month(budget_date de la línea variable)
+        base_ventas = Σ budget_lines.projected_amount (line_type == 'income') del mes m   # SOLO ingreso presupuestado (NETO, sin AR)
+        gasto_variable[m] += variable_rate * base_ventas
         ```
     *   **`variable_receivables`:**
         ```
-        base_recaudo = Σ accounts_receivable.balance + Σ budget_lines.projected_amount (income)
-        gasto_variable = variable_rate * base_recaudo
+        m = month(budget_date de la línea variable)   # índice = mes de causación de la línea
+        base_recaudo = Σ accounts_receivable.balance (due_date vence en mes m) + Σ budget_lines.projected_amount (income) del mes m
+        gasto_variable[m] += variable_rate * base_recaudo
         ```
 
 4.  **Asignación al Vuelo:**
@@ -173,3 +177,28 @@ from app.core.constants import TAX_RATE
 ### Clonación de Escenarios
 *   El método `clone_budget_for_scenario()` debe copiar los nuevos campos (`behavior_type`, `variable_rate`).
 *   Actualmente es TODO en `budgetEngine.py`.
+
+---
+
+## 8. Enmiendas
+
+### E-02 (2026-09-11) — Corrección B1+B2: base e índice de causación de los gastos variables en `project_cash_flow()`
+
+**Contexto (regla aprobada por negocio como "Opción A"):** la implementación original de §6 tenía dos defectos confirmados en vivo (presupuesto dev `id_budget=87`, año 2027):
+
+1.  **(B1) La rama `variable_sales` siempre aportaba 0.** El código calculaba `Σ projected_amount × rate` sobre las **propias líneas de gasto variable**, pero la convención de ingesta **AC-UP-1** (`backend.02_12`, `app/services/budgetPlanningIngestion.py` ~L190-191) fuerza `projected_amount = 0` en toda línea variable. Resultado: `Σ 0 × rate = 0` siempre. La base correcta según §5.2.A/§6 es el **ingreso presupuestado** del mes, no el monto de la línea de gasto.
+2.  **(B2) Indexación equivocada.** Ambas ramas variables imputaban el gasto al `payment_month` de la línea de **gasto** (`COALESCE(payment_date, budget_date)`), cuando §6 define la base sobre los **ingresos del mes de causación** de la línea (`month(budget_date)`).
+
+**Regla vigente en `app/services/budgetEngine.py::project_cash_flow`:**
+
+| Comportamiento | Base (NETA) | Mes de imputación |
+|---|---|---|
+| `variable_sales` | `income_budget_by_month[m]` = Σ `projected_amount` de líneas `income` del mes `m` — **solo ingreso presupuestado, sin AR** | `m = month(budget_date)` de la línea variable |
+| `variable_receivables` | `net_income_by_month[m]` = Σ `accounts_receivable.balance` con `due_date` en `m` + Σ ingreso presupuestado del mes `m` | `m = month(budget_date)` de la línea variable |
+
+*   Iteración **por fila** sin `group_by`: cada línea aplica su tasa a la base completa de su mes; dos líneas con misma tasa/mismo mes aportan cada una `rate × base` (independientes).
+*   Los gastos `fixed`, las cuentas por pagar y el cálculo de `expected_inflows` **no cambian** (la base de inflows ya era AR + ingreso presupuestado).
+
+**(a) Bug corregido:** `variable_sales` deja de leer su propio `projected_amount` (=0 por AC-UP-1) y lee la base de ingresos. **(b) Reindexación:** `payment_month` → mes de causación (`budget_date`) en ambas ramas. **(c) Divergencia intencionada con el frontend:** el pivote estimado de `crm_frontend/src/components/budget/planning/ExecutivePivotTable.vue` (spec `frontend.03_03` §8.2) replica la "Opción A" usando **SOLO el ingreso presupuestado** del mes para ambos comportamientos; coincide con el backend en `variable_sales` y difiere en `variable_receivables` cuando `AR ≠ 0` (el backend además suma el AR que vence en el mes). **Se acepta**: el pivote es una estimación client-side del plan; la cifra oficial de liquidez es la del motor. **(d) AC-UP-1 NO cambia:** la ingesta de planeación sigue forzando `projected_amount = 0` en líneas variables; el arreglo es 100 % del motor de cálculo, sin migración de datos ni cambios a los contratos de subida.
+
+**Verificación en vivo (dev, 2026-09-11):** presupuesto `id_budget=87`, año 2027 (income ene 100.000.000 / feb 250.000.000; `variable_sales` ene tasas 0,01+0,02; `variable_receivables` feb tasa 0,08 ×2; AR=0): `expected_outflows` ene 8.000.000 (5M fijos + 3M variables) · feb 54.000.000 (14M fijos + 40M variables) · mar 6.000.000; `expected_inflows` ene 119.000.000 inalterado.

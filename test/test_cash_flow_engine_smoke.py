@@ -123,7 +123,7 @@ TOL = 1e-6
 E_CF_1_DETAIL = "date_from must be on or before date_to"
 RELATIVE_WARNING = ("starting_balance is ledger-relative: set initial_balance "
                     "for the true bank position")
-NO_BUDGET_WARNING = "No active non-scenario budget for 2026"
+NO_BUDGET_WARNING = "No active budget for 2026"   # A-01 (02_12 §6): literal normalizado
 SCENARIO_WARNING = "Comparing against scenario budget"
 
 # ══════════════════════════════════════════════════════════════

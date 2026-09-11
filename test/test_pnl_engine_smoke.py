@@ -824,7 +824,7 @@ def ac06_no_budget(cur):
                and feq(st["operating_profit"]["actual"], 40000.0))
             ck("AC-6 budget_source null", data["meta"]["budget_source"] is None)
             ck("AC-6 warning literal", data["meta"]["warnings"] ==
-               ["No active non-scenario budget for 2026"], f"got={data['meta']['warnings']}")
+               ["No active budget for 2026"], f"got={data['meta']['warnings']}")   # A-01 (02_12 §6)
             ck("AC-6 trace == []", data["meta"]["cogs_budget_trace"] == [])
     finally:
         sql_exec(cur, "UPDATE budgets SET status = 'active' WHERE id_budget = %s", (state.BUD,))
@@ -946,7 +946,7 @@ def ac11_zero_margin(cur):
        and st["operating_profit"]["margin_pct"] is None)
     ck("AC-11 budgets null (no hay presupuesto 2027) + warning",
        all(st[k]["budget"] is None for k in st)
-       and "No active non-scenario budget for 2027" in data["meta"]["warnings"],
+        and "No active budget for 2027" in data["meta"]["warnings"],
        f"warnings={data['meta']['warnings']}")
 
 
