@@ -42,6 +42,11 @@ class Budget(BudgetBase):
     id_budget: int = Field(..., gt=0)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # BE-S6-CARRYOVER §3.1: additive read-only surface of the new column
+    # (defaults to False so pre-column dicts keep validating). BudgetBase /
+    # BudgetCreate intentionally do NOT carry it: creation never sets it and
+    # the ONLY writer is PUT /budget/planning/{id_budget}/carryover.
+    include_carryover: bool = False
 
     class Config:
         from_attributes = True

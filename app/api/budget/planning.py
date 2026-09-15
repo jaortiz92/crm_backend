@@ -1,7 +1,7 @@
 """
 Budget Planning API Endpoints (BE-S4-BUDGET-PLANNING)
 
-Sub-router mounted at /budget/planning (spec backend.02_12 §5). Six
+Sub-router mounted at /budget/planning (spec backend.02_12 §5). Eleven
 endpoints, all JWT-protected (NFR-4):
 
 - POST /upload               two-file all-or-nothing SIIGO ingestion (§5.1)
@@ -11,9 +11,30 @@ endpoints, all JWT-protected (NFR-4):
 - GET  /{id}/detail          BudgetFull wrapper + parent name for the grid (§5.5)
 - PUT  /{id}/set-target      designate THE one active target of the year;
                              restricted to Gerente / Administrador (§5.6)
+- POST /{id}/line            create a planning budget line (BE-S4D §3.1);
+                              exactly ONE row, answer = BudgetLine
+                              (BE-S7 §2 rolled the BE-S5 installment
+                              expansion back)
+- PUT  /line/{id}            edit the structural fields of a line (§3.2)
+- DELETE /line/{id}          physically delete a line (§3.3)
+- GET  /{id}/carryover       prior-year balances pending in year N (BE-S6
+                              §5.1) PLUS the derived COGS payment
+                              installments of BE-S7 §4 (origin "cogs")
+- PUT  /{id}/carryover       toggle include_carryover; 200 with the full
+                              PlanningDetail for the FE cache (BE-S6 §5.2)
 
-Zero new tables/columns: scenarios are rows of `budgets` (is_scenario,
-parent_budget_id) and cells are rows of `budget_lines`.
+BE-S4/BE-S4D added no tables/columns: scenarios are rows of `budgets`
+(is_scenario, parent_budget_id) and cells are rows of `budget_lines`.
+BE-S5-PAYABLE-TERMS (backend.02_15) expanded expense cells into installment
+rows; BE-S7-COGS-PAYFLOW (backend.02_17 §2, D-S7-6) FULLY ROLLED that back
+— expenses are paid whole again and the `line_payable_terms` catalog now
+describes how the SUPPLIER of a Line's COGS is paid (consumed by the §4
+carryover derivation and FE-S7, never materialized). BE-S6-CARRYOVER DOES
+add one column: budgets.include_carryover (§3.1) — existing databases need
+the manual ALTER documented in backend.02_16 §3.2 (also in note.md) before
+deploying, since Base.metadata.create_all never alters an existing table.
+The carry-in is pure READ-DERIVATION: it never writes budget_lines
+(BR-CO-04/05 / D-S7-2/3).
 """
 
 from io import BytesIO
@@ -30,7 +51,9 @@ from app.api.utils import Exceptions
 from app.core.auth import get_current_user
 from app.schemas import (
     Budget, BudgetCreate, BudgetLine, BudgetLineCreate, User,
-    PlanningCellUpdate, PlanningCloneRequest, PlanningDetail,
+    PlanningCarryoverFlag, PlanningCarryoverResult,
+    PlanningCarryoverSource, PlanningCellUpdate, PlanningCloneRequest,
+    PlanningDetail, PlanningLineCreate, PlanningLineUpdate,
     PlanningScenarioRow, PlanningSetTargetResult, PlanningUploadResult,
 )
 from app.services.budgetPlanningIngestion import (
@@ -129,6 +152,10 @@ async def planning_upload(
             etl = BudgetTemplates(gastos_bytes)
             etl.process_budget_plan_expense()
             expense_records = etl.dataframe_to_records()
+            # BE-S7-COGS-PAYFLOW §2: no expansion flag anymore — the
+            # builder emits ONE expense row with the file's payment_date,
+            # identical to the legacy POST /budget/upload/budget-plan-
+            # expense call-site (upload.py:416 never passed one either).
             expense_lines, missing_exp = build_expense_line_records(
                 db, expense_records, new_budget.id_budget,
                 budget_year=budget_year,
@@ -272,6 +299,116 @@ def planning_update_cell(
         )
 
 
+@router.post("/{id_budget}/line", response_model=BudgetLine,
+             status_code=status.HTTP_201_CREATED)
+def planning_create_line(
+    id_budget: int,
+    payload: PlanningLineCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create ONE planning line (BE-S4D §3.1) without re-ingesting Excel.
+
+    JWT-only (D-7, same policy as upload/clone/cell). Validations live in
+    crud.create_planning_line (BR-LINE-01/02/04/05: 404 on unknown budget
+    or FKs with the §3.4 details, 400 on budget_date year mismatch, no
+    status lock); variable lines get projected_amount FORCED to 0
+    server-side (BR-LINE-03) and schema/format errors are 422 via
+    PlanningLineCreate. Response: the full persisted BudgetLine (NFR-L-2).
+
+    BE-S7-COGS-PAYFLOW §2 rollback: the BE-S5 §7 expansion of eligible
+    fixed-expense payloads is RETIRED — this endpoint again persists
+    EXACTLY ONE row honoring the payload's payment_date and answers a
+    pure BudgetLine (PlanningLineCreateResult / expanded_siblings deleted;
+    the FE's ``?? []`` read of the removed key is benign until FE-S7
+    drops it). line_payable_terms now feeds only the derived COGS flow
+    (backend.02_17 §3/§4), never manual line creation."""
+    try:
+        return crud.create_planning_line(db, id_budget, payload)
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating planning line: {str(e)}",
+        )
+
+
+@router.put("/line/{id_budget_line}", response_model=BudgetLine)
+def planning_update_line(
+    id_budget_line: int,
+    payload: PlanningLineUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edit the structural fields of ONE line (BE-S4D §3.2): cost center,
+    dates, collection, amount (fixed lines), rate (variable lines) and
+    description. Partial contract: omitted = keep.
+
+    line_type/behavior_type are NOT editable (BR-LINE-06: absent from the
+    schema, silently extra-ignored; change = create + delete, D-2). The
+    behavior guards raise 400 (BR-LINE-07), budget_date year 400
+    (BR-LINE-08) and FKs/budget 404 inside crud.update_planning_line;
+    missing line -> 404 with the BE-S4D §3.4 detail ("BudgetLine {id}
+    not found", kept in the API layer per the Optional->None CRUD
+    convention of update_budget_line_cell). No status lock
+    (BR-LINE-05). PUT /cell stays untouched for the quick double-click
+    amount edit (D-8 / NFR-L-5)."""
+    try:
+        db_line = crud.update_planning_line(db, id_budget_line, payload)
+        if db_line is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"BudgetLine {id_budget_line} not found",
+            )
+        return db_line
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating planning line: {str(e)}",
+        )
+
+
+@router.delete("/line/{id_budget_line}")
+def planning_delete_line(
+    id_budget_line: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Physically delete ONE line (BE-S4D §3.3, D-2: no soft flag/paper
+    trash in v1). No cascades (no incoming FKs on budget_lines, spec §2)
+    and no status lock (BR-LINE-05: works on draft/active/closed).
+    Missing line -> 404 with the §3.4 detail (same Optional->None CRUD
+    convention as planning_update_line). Response: the deleted id
+    (NFR-L-3)."""
+    try:
+        db_line = crud.delete_planning_line(db, id_budget_line)
+        if db_line is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"BudgetLine {id_budget_line} not found",
+            )
+        return {"deleted_id": id_budget_line}
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting planning line: {str(e)}",
+        )
+
+
 @router.get("/", response_model=List[PlanningScenarioRow])
 def planning_list(
     budget_year: Optional[int] = Query(
@@ -307,6 +444,123 @@ def planning_detail(
     detail = PlanningDetail.model_validate(db_budget)
     detail.parent_budget_name = parent_budget_name
     return detail
+
+
+@router.get("/{id_budget}/carryover", response_model=PlanningCarryoverResult)
+def planning_get_carryover(
+    id_budget: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Prior-year carry-in for the scenario's cash flow (BE-S6 §5.1,
+    extended by BE-S7 §4 BR-CO-09..11).
+
+    Pure READ-DERIVATION (BR-CO-04/05 / D-S7-2): zero writes, zero
+    snapshots — every request recomputes from the live N−1 scenario, so
+    editing/deleting that source is reflected on the next read. Flow:
+
+    1. Scenario existence FIRST (404 with the verbatim CRUD detail
+       "Budget {id} not found", BR-CO-07 — also when the flag is OFF, §5.1).
+    2. BR-CO-01 short-circuit: flag OFF -> {enabled:false, source:null,
+       lines:[], unavailable_reason:null} with ZERO extra SQL (only the
+       mandatory scenario read above). The BE-S7 §4 derivation NEVER runs
+       here (AC-S7-BE-8).
+    3. BR-CO-02 source pick (ACTIVE > CLOSED > DRAFT, updated_at DESC,
+       id_budget DESC) + crud.build_carryover_payload_lines: the material
+       fixed lines of the source whose effective date
+       coalesce(payment_date, budget_date) falls in year N (BR-CO-03,
+       origin "line", 1 SQL query) MERGED with the derived COGS payment
+       installments from the source's fixed income lines (BR-CO-09,
+       origin "cogs" — cost pool mirror of budgetEngine.get_pnl resolved at
+       each month-end × line_payable_terms; D-S7-4 single 100 % row when
+       the Line has no terms), in the BR-CO-10 order (effective date ASC,
+       line before cogs, id null-safe). Query economy BR-CO-11: a constant
+       handful of queries per request regardless of row counts.
+    4. No candidate -> legal 200 {enabled:true, source:null, lines:[],
+       unavailable_reason:"no_source"} (BR-CO-08: toggling ON never
+       validates a source).
+
+    Both income AND expense carry over as material rows; derived rows are
+    always expense (a payment to the supplier). The FE-S6/FE-S7 pivots and
+    labels them (BR-CO-06: the scenario's OWN out-of-year rows are NOT
+    this endpoint's business)."""
+    db_budget = crud.get_budget_by_id(db, id_budget)
+    if db_budget is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Budget {id_budget} not found",
+        )
+
+    # BR-CO-01: pure opt-in — disabled answers without touching the engine.
+    if not db_budget.include_carryover:
+        return PlanningCarryoverResult(
+            enabled=False, source=None, lines=[], unavailable_reason=None,
+        )
+
+    source = crud.get_carryover_source_budget(
+        db, db_budget.budget_year - 1, id_budget,
+    )
+    if source is None:
+        # BR-CO-02: enabled but nothing to carry from (AC-S6-BE-4 is 200).
+        return PlanningCarryoverResult(
+            enabled=True, source=None, lines=[],
+            unavailable_reason="no_source",
+        )
+
+    lines = crud.build_carryover_payload_lines(
+        db, source.id_budget, source.budget_year, db_budget.budget_year,
+    )
+    return PlanningCarryoverResult(
+        enabled=True,
+        source=PlanningCarryoverSource.model_validate(source),
+        lines=lines,
+        unavailable_reason=None,
+    )
+
+
+@router.put("/{id_budget}/carryover", response_model=PlanningDetail)
+def planning_set_carryover(
+    id_budget: int,
+    payload: PlanningCarryoverFlag,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Toggle include_carryover for the scenario (BE-S6 §5.2).
+
+    Updates ONLY the column — no year/source validation ever (BR-CO-08:
+    ON without a source is a legal state FE labels with the "no_source"
+    notice). Idempotent: re-sending the current value still 200s with no
+    side effects (the ORM emits no UPDATE for a net-zero change). Response:
+    the SAME PlanningDetail schema the GET detail endpoint returns, already
+    carrying the new include_carryover — the FE-S6 refreshes its
+    currentScenario cache with it (same pattern as the line PUTs).
+    Missing scenario -> 404 "Budget {id} not found" (BR-CO-07); invalid
+    body -> 422 via PlanningCarryoverFlag (AC-S6-BE-8)."""
+    try:
+        updated = crud.set_planning_carryover_flag(
+            db, id_budget, payload.include_carryover,
+        )
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Budget {id_budget} not found",
+            )
+
+        result = crud.get_budget_with_parent_name(db, id_budget)
+        db_budget, parent_budget_name = result
+        detail = PlanningDetail.model_validate(db_budget)
+        detail.parent_budget_name = parent_budget_name
+        return detail
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error setting carryover flag: {str(e)}",
+        )
 
 
 @router.put("/{id_budget}/set-target",

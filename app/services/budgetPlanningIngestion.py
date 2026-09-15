@@ -24,7 +24,20 @@ Preserved semantics (identical to the previous inline code):
   line split ONE Excel row into N budget lines with staggered
   ``payment_date = budget_date + payment_days`` and
   ``projected_amount * payment_pct``. A single rule with 0 days keeps the
-  row as one line with ``payment_date = budget_date``.
+  row as one line with ``payment_date = budget_date``. (UNTOUCHED by
+  BE-S7: the stakeholder confirmed collection installments stay.)
+- BE-S5-PAYABLE-TERMS expense expansion (BR-TERM-02..04/07/09, the
+  ``expand_payable_terms`` opt-in flag and the shared
+  ``expand_expense_line`` helper) was FULLY ROLLED BACK by
+  BE-S7-COGS-PAYFLOW (backend.02_17 §2, D-S7-6): a fixed expense is paid
+  WHOLE again — ONE row, ``payment_date`` straight from the record. Both
+  callers (planning upload and legacy upload.py:416) are therefore
+  byte-identical to each other and to the pre-S5 output again
+  (AC-REG-01 / AC-S7-BE-2). The ``line_payable_terms`` catalog REMAINS
+  alive, re-semantized (D-S7-1) as the terms with which WE PAY the
+  supplier the COGS of a Line: consumed only by the server-side carryover
+  derivation (backend.02_17 §4) and the FE-S7 live Vista Flujo — never
+  materialized into ``budget_lines`` here.
 - Expense: ``behavior_type`` comes from the ETL; non-fixed rows carry the
   rate in ``variable_rate`` and ``projected_amount = 0`` (legacy conditional
   logic in budgetTemplates.py:1480-1485, re-applied here for safety).
@@ -162,6 +175,13 @@ def build_expense_line_records(
     order as the loop previously inlined in upload.py (§428-528). Raises
     ``BudgetYearMismatchError`` (BR-ING-06) only when ``budget_year`` is
     provided and some row falls outside it.
+
+    BE-S7-COGS-PAYFLOW §2 rollback: the BE-S5 ``expand_payable_terms``
+    opt-in parameter and the installment expansion through
+    ``line_payable_terms`` are RETIRED — a fixed expense stays ONE row
+    with the ``payment_date`` of the record as-is (BR-TERM-02..04/07/09
+    superseded). Planning and legacy outputs are identical again; no
+    caller passes any expansion flag.
     """
     missing_cost_centers: List[str] = []
     budget_lines_data: List[Dict[str, Any]] = []

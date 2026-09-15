@@ -59,6 +59,7 @@ from .budget import (
     PayableLedger, PayableLedgerCreate,
     BudgetVsActual, CashFlowProjection, BudgetTrackingSummary,
     LineCostRate, LineCostRateCreate, LineCostRateUpdate,
+    LinePayableTerm, LinePayableTermCreate,
     CommissionRate, CommissionRateBase, CommissionRateCreate, CommissionRateUpdate,
     PnLResponse, PnLMeta, PnLStatement, PnLComparison,
     PnLProfit, PnLOpex, OpexBreakdownItem, CogsBudgetTraceItem,
@@ -68,4 +69,7 @@ from .budget import (
     DatasetUploadStatus, UploadStatusResponse,
     PlanningUploadResult, PlanningCloneRequest, PlanningCellUpdate,
     PlanningScenarioRow, PlanningSetTargetResult, PlanningDetail,
+    PlanningLineCreate, PlanningLineUpdate,
+    PlanningCarryoverFlag, PlanningCarryoverSource, PlanningCarryoverLine,
+    PlanningCarryoverResult,
 )
