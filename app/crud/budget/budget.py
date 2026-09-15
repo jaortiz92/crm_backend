@@ -4,9 +4,12 @@ Budget CRUD Operations
 
 from typing import List, Optional
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.budget import Budget as BudgetModel
+from app.models.budget import BudgetLine as BudgetLineModel
+from app.models.budget import BudgetScenario as BudgetScenarioModel
 from app.schemas.budget import BudgetCreate
 
 
@@ -61,12 +64,45 @@ def update_budget(
 
 
 def delete_budget(db: Session, id_budget: int) -> bool:
-    """Delete a budget by ID."""
+    """Delete a DRAFT budget by ID (backend.02_14, safe physical delete).
+
+    Missing row -> False (the API layer keeps its 404 convention).
+    BR-DEL-01: any status other than 'draft' raises 400 with no mutation
+    (active = the year's live target, closed = was a target; neither is
+    deletable). BR-DEL-02: own rows referencing the budget (budget_lines,
+    budget_scenarios, legacy NOT NULL FKs) are bulk-deleted first.
+    BR-DEL-03: guest clones survive, orphaned via parent_budget_id = NULL.
+    BR-DEL-04: exactly ONE commit at the end (T-05); any failure before it
+    leaves the transaction rollback-able (no partial delete)."""
     db_budget = db.query(BudgetModel).filter(
         BudgetModel.id_budget == id_budget
     ).first()
-    if db_budget:
-        db.delete(db_budget)
-        db.commit()
-        return True
-    return False
+    if db_budget is None:
+        return False
+
+    # BR-DEL-01: server-side eligibility re-validated at delete time
+    # (resolves the GET->DELETE window, BR-DEL-05 last-write-wins).
+    if db_budget.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only draft budgets can be deleted",
+        )
+
+    # BR-DEL-02: physical cascade over the budget's own rows.
+    db.query(BudgetLineModel).filter(
+        BudgetLineModel.id_budget == id_budget
+    ).delete(synchronize_session=False)
+    db.query(BudgetScenarioModel).filter(
+        BudgetScenarioModel.id_budget == id_budget
+    ).delete(synchronize_session=False)
+
+    # BR-DEL-03: detach clones cloned from this draft (D-4).
+    db.query(BudgetModel).filter(
+        BudgetModel.parent_budget_id == id_budget
+    ).update({"parent_budget_id": None}, synchronize_session=False)
+
+    db.delete(db_budget)
+
+    # BR-DEL-04: the only commit of the whole operation.
+    db.commit()
+    return True

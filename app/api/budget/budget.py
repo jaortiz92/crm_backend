@@ -6,7 +6,7 @@ Root-level budget endpoints (no additional sub-prefix).
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.schemas import User
@@ -101,8 +101,31 @@ def delete_budget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete a budget by ID."""
-    success = crud.delete_budget(db, id_budget)
-    if not success:
-        Exceptions.register_not_found("Budget", id_budget)
-    return {"message": "Budget deleted successfully"}
+    """Physically delete a DRAFT budget (backend.02_14, safe delete).
+
+    BR-DEL-01: only status == 'draft' is deletable; active/closed answer
+    400 "Only draft budgets can be deleted" (raised inside the CRUD,
+    re-raised verbatim — never mapped to 404) with the row untouched.
+    BR-DEL-02: the budget's own budget_lines and budget_scenarios are
+    deleted too; BR-DEL-03: guest clones survive with
+    parent_budget_id = NULL (D-4). All of it runs in ONE transaction with
+    a single commit (BR-DEL-04 / T-05): any failure rolls back and leaves
+    no partial delete. Status is re-validated server-side at delete time
+    (BR-DEL-05, last-write-wins). Missing id -> 404 (existing
+    Exceptions.register_not_found convention). 200 shape is backward
+    compatible."""
+    try:
+        success = crud.delete_budget(db, id_budget)
+        if not success:
+            Exceptions.register_not_found("Budget", id_budget)
+        return {"message": "Budget deleted successfully"}
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting budget: {str(e)}",
+        )
