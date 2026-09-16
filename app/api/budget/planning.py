@@ -4,7 +4,9 @@ Budget Planning API Endpoints (BE-S4-BUDGET-PLANNING)
 Sub-router mounted at /budget/planning (spec backend.02_12 §5). Eleven
 endpoints, all JWT-protected (NFR-4):
 
-- POST /upload               two-file all-or-nothing SIIGO ingestion (§5.1)
+- POST /upload               up-to-three-file all-or-nothing SIIGO
+                             ingestion (§5.1; file_compras optional since
+                             BE-S8 backend.02_18 §5.3)
 - POST /clone                scenario copy with % modifier over amounts (§5.2)
 - PUT  /cell/{id}            single grid-cell edit (projected_amount) (§5.3)
 - GET  /                     dashboard listing aggregated in SQL (§5.4)
@@ -60,6 +62,7 @@ from app.services.budgetPlanningIngestion import (
     BudgetYearMismatchError,
     build_expense_line_records,
     build_income_line_records,
+    build_purchase_line_records,
 )
 from app.utils.templates import BudgetTemplates
 
@@ -99,23 +102,41 @@ async def planning_upload(
     id_department: Optional[int] = Form(None),
     file_ingresos: UploadFile = File(...),
     file_gastos: Optional[UploadFile] = File(None),
+    file_compras: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create the Base scenario from the two official SIIGO request files
-    (§5.1). ONE transaction for Budget + both files' lines (BR-ING-01):
+    """Create the Base scenario from the official SIIGO request files
+    (§5.1). ONE transaction for Budget + ALL files' lines (BR-ING-01):
     any failure — unknown cost center, year mismatch, duplicate name —
     rolls everything back (no budget row survives).
 
-    Formats are the already-supported long SIIGO layouts processed by
-    BudgetTemplates.process_budget_plan_income/expense (ASM-10): the file
+    Income/expense are the already-supported long SIIGO layouts processed
+    by BudgetTemplates.process_budget_plan_income/expense (ASM-10): the
     header must be in row 8 and income rows expand through
     line_payment_rules exactly like the legacy uploads (BR-ING-05,
     shared builder in app/services/budgetPlanningIngestion.py).
-    """
+
+    BE-S8-BUDGET-PURCHASES §5.3 adds the OPTIONAL third file
+    ``file_compras`` — since AMENDMENT A-01 (backend.02_18 §10.1) the
+    REAL SIIGO layout delivered by the stakeholder ("Formato Solicitud
+    Presupuesto Importaciones": first sheet read by POSITION, headers on
+    Excel ROW 8 via skiprows=7, mandatory Temporada column; the second
+    sheet "Tablas" is ignored): one Excel row == one purchase
+    budget_line with NO installment expansion, the season resolved with
+    income parity (unknown/empty Temporada -> id_collection NULL, never
+    blocking), resolved cost centers missing IN THIS FILE aggregating
+    into the SAME missing_cost_centers rejection list (BR-ING-03), the
+    import date validated by ``_check_row_year`` (BR-ING-06). Everything
+    joins the SAME ``create_budget_lines_bulk`` single commit (T-05 /
+    all-or-nothing). ``lines_purchase`` / ``total_purchase`` stay 0 when
+    the third file is absent (NFR-BE8-3 backward compatible)."""
     ingresos_bytes = BytesIO(await file_ingresos.read())
     gastos_bytes = (
         BytesIO(await file_gastos.read()) if file_gastos is not None else None
+    )
+    compras_bytes = (
+        BytesIO(await file_compras.read()) if file_compras is not None else None
     )
 
     try:
@@ -162,6 +183,22 @@ async def planning_upload(
             )
             missing_cost_centers = missing_cost_centers + missing_exp
 
+        # Phase C — purchases (BE-S8 §5.3, optional third file: an
+        # income+expense-only scenario stays valid). ONE Excel row = ONE
+        # purchase line (no installment expansion); missing CECOs join the
+        # SINGLE rejection list below; import-date year mismatch raises
+        # BudgetYearMismatchError (total rollback, BR-ING-06).
+        purchase_lines: List[dict] = []
+        if compras_bytes is not None:
+            etl = BudgetTemplates(compras_bytes)
+            etl.process_budget_plan_purchase()
+            purchase_records = etl.dataframe_to_records()
+            purchase_lines, missing_pur = build_purchase_line_records(
+                db, purchase_records, new_budget.id_budget,
+                budget_year=budget_year,
+            )
+            missing_cost_centers = missing_cost_centers + missing_pur
+
         # BR-ING-03: reject with the full list; nothing is persisted.
         if missing_cost_centers:
             raise HTTPException(
@@ -172,10 +209,10 @@ async def planning_upload(
                 },
             )
 
-        all_lines = income_lines + expense_lines
+        all_lines = income_lines + expense_lines + purchase_lines
         if all_lines:
             lines_to_create = [BudgetLineCreate(**data) for data in all_lines]
-            # ONLY commit of the operation: budget + both files' lines.
+            # ONLY commit of the operation: budget + ALL files' lines.
             crud.create_budget_lines_bulk(db, lines_to_create)
         else:
             db.commit()
@@ -196,6 +233,13 @@ async def planning_upload(
             ),
             # Extra lines produced by payment-rule expansion (§5.1).
             payment_rules_expansions=len(income_lines) - len(income_records),
+            # BE-S8 §5.2 (additive): purchases never expand, so
+            # lines_purchase == the processed Excel rows; both stay 0
+            # when file_compras was absent.
+            lines_purchase=len(purchase_lines),
+            total_purchase=sum(
+                float(line["projected_amount"]) for line in purchase_lines
+            ) if purchase_lines else 0.0,
         )
 
     except HTTPException:

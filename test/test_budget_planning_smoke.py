@@ -374,10 +374,17 @@ def t04_ac_up_1():
     state.base_id = body["id_budget"]
     state.created_budgets.append(state.base_id)
 
-    ck("AC-UP-1 201 con payload PlanningUploadResult", set(body) == {
+    # BE-S8-BUDGET-PURCHASES §5.2: PlanningUploadResult gains the additive
+    # default-valued keys lines_purchase / total_purchase (0 when the
+    # optional third file was not sent). Superset + defaults instead of
+    # the old closed-set equality (same evolution as include_carryover
+    # in BE-S6 NFR-S6-BE-2).
+    ck("AC-UP-1 201 con payload PlanningUploadResult", {
         "id_budget", "scenario_name", "budget_year", "lines_income",
         "lines_expense", "total_income", "total_expense_fixed",
-        "payment_rules_expansions"}, f"keys={sorted(body)}")
+        "payment_rules_expansions"} <= set(body)
+        and body.get("lines_purchase") == 0
+        and body.get("total_purchase") == 0.0, f"keys={sorted(body)}")
     ck("AC-UP-1 lines_expense = filas Excel de gastos",
        body["lines_expense"] == exp_rows,
        f"{body['lines_expense']} vs {exp_rows}")

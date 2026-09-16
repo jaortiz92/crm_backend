@@ -14,6 +14,11 @@ installment expansion: ``PlanningLineCreateResult`` (with
 §4 of the same spec extends ``PlanningCarryoverLine`` with ``origin``
 ("line" material | "cogs" derived COGS installment) and makes
 ``id_budget_line`` nullable (derived rows are never persisted).
+BE-S8-BUDGET-PURCHASES (backend.02_18 §5.2) widens ``origin`` with
+"purchase" (derived supplier installment of a purchase row of the
+source), adds the default-valued ``lines_purchase`` / ``total_purchase``
+keys to ``PlanningUploadResult`` (optional third upload file) and lets
+``PlanningLineCreate.line_type`` accept "purchase" (guards in the CRUD).
 """
 
 import math
@@ -27,7 +32,12 @@ from .budgetLine import BehaviorTypeEnum, LineTypeEnum
 
 
 class PlanningUploadResult(BaseModel):
-    """Response 201 for POST /budget/planning/upload (spec §5.1)."""
+    """Response 201 for POST /budget/planning/upload (spec §5.1).
+
+    BE-S8-BUDGET-PURCHASES §5.2: additive defaults-only keys for the
+    optional third file — ``lines_purchase`` / ``total_purchase`` stay at
+    0 when no ``file_compras`` was sent, so the payload shape remains
+    compatible for old clients (they simply ignore the new keys)."""
 
     id_budget: int
     scenario_name: str
@@ -42,6 +52,12 @@ class PlanningUploadResult(BaseModel):
     # Extra lines produced by line_payment_rules expansion:
     # lines_income - processed_excel_income_rows (BR-ING-05).
     payment_rules_expansions: int
+    # BE-S8 §5.2: one Excel purchase row == one budget_line (no
+    # installment expansion, ever); count over the created PURCHASE rows.
+    lines_purchase: int = 0
+    # Sum of projected_amount over purchase budget_lines created (COP
+    # net of the imported merchandise). 0.0 when file_compras was absent.
+    total_purchase: float = 0.0
 
 
 class PlanningCloneRequest(BaseModel):
@@ -102,7 +118,11 @@ class PlanningLineCreate(BaseModel):
 
     id_cost_center: int = Field(..., gt=0, description="FK to cost center")
     line_type: LineTypeEnum = Field(
-        ..., description="Line type: income, expense (set by the editor section)"
+        ..., description="Line type: income, expense, purchase (purchase "
+                         "guards BR-PUR-02/03 apply server-side in "
+                         "crud.create_planning_line: fixed + no variable "
+                         "rate; a season/id_collection IS allowed on "
+                         "purchases per A-01 §10.2)"
     )
     budget_date: date = Field(
         ..., description="Date when the income/expense occurs (P&L); "
@@ -114,7 +134,8 @@ class PlanningLineCreate(BaseModel):
                     "to budget_date (unchanged). No year restriction (R-2).",
     )
     id_collection: Optional[int] = Field(
-        None, gt=0, description="FK to collection"
+        None, gt=0, description="FK to collection (season). Allowed on "
+                                "purchase lines too (A-01 §10.2)"
     )
     projected_amount: float = Field(
         0, ge=0,
@@ -174,7 +195,11 @@ class PlanningLineUpdate(BaseModel):
     payment_date: Optional[date] = Field(
         None, description="Cash date (no year restriction)"
     )
-    id_collection: Optional[int] = Field(None, gt=0, description="FK to collection")
+    id_collection: Optional[int] = Field(
+        None, gt=0,
+        description="FK to collection (season; valid on purchases per "
+                    "A-01 §10.2)",
+    )
     projected_amount: Optional[float] = Field(
         None, ge=0, description="Only on fixed lines (BR-LINE-07: 400 on variable)"
     )
@@ -290,6 +315,15 @@ class PlanningCarryoverLine(BaseModel):
       budget_date, D-S7-5), payment_date = anchor + term offset — or the
       anchor itself at 100 % when the Line has no payable terms (D-S7-4) —
       and description = "Costo de venta (arrastre)".
+    - "purchase": BE-S8-BUDGET-PURCHASES §5.2 (BR-PUR-05) installment
+      DERIVED server-side per request from a PURCHASE row of the source
+      (never persisted): same shape as "cogs" (id_budget_line = null,
+      line_type = "expense", budget_date = the import date, payment_date =
+      import date + term offset, single 100 % row without terms, D-S7-4)
+      but amount = projected_amount × payment_pct (NO cogs_pct) and
+      description = "Pago a proveedor (arrastre)". Emitted only for
+      purchasing CECOs of the source (single-source rule D-4: their "cogs"
+      derivation is suppressed so the supplier is never double-counted).
     """
 
     id_budget_line: Optional[int] = None
@@ -299,7 +333,7 @@ class PlanningCarryoverLine(BaseModel):
     payment_date: Optional[date] = None
     projected_amount: float
     description: Optional[str] = None
-    origin: Literal["line", "cogs"] = "line"
+    origin: Literal["line", "cogs", "purchase"] = "line"
 
     class Config:
         from_attributes = True

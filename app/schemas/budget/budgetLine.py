@@ -12,8 +12,13 @@ from .costCenter import CostCenter
 
 
 class LineTypeEnum(str, enum.Enum):
+    """Mirror of app/models/budget/budgetLine.py (BE-S8 §3.1): PURCHASE is
+    the third member — imported merchandise whose supplier payments are
+    read-derived installments (payment_date stays NULL, behavior fixed).
+    Existing DBs need the manual ALTER TYPE of §3.3 before deploying."""
     INCOME = "income"
     EXPENSE = "expense"
+    PURCHASE = "purchase"
 
 
 class BehaviorTypeEnum(str, enum.Enum):
@@ -27,7 +32,9 @@ class BudgetLineBase(BaseModel):
     id_cost_center: int = Field(..., gt=0, description="FK to cost center")
     line_type: LineTypeEnum = Field(
         ...,
-        description="Line type: income, expense"
+        description="Line type: income, expense, purchase (a purchase "
+                    "optionally carries a season: id_collection is valid "
+                    "on it per backend.02_18 A-01 §10.2)"
     )
     budget_date: date = Field(..., description="Date when the income/expense occurs (P&L)")
     payment_date: Optional[date] = Field(None, description="Date when cash flows (Cash Flow)")

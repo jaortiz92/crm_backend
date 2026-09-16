@@ -9,13 +9,17 @@ Supported files:
 - LibroAuxiliarCECO.xlsx -> actual_expenses
 - EstadoCuenta306090.xlsx -> accounts_receivable (snapshot ETL, header=3)
 - Recibos.xlsx -> payment_ledger (SIIGO auxiliares: cash-flow & adjustments)
+- Plantilla Plan de Importaciones.xlsx -> purchase budget lines
+  (BE-S8 backend.02_18 §10.1, amendment A-01: the REAL SIIGO layout
+  "Formato Solicitud Presupuesto Importaciones" — first sheet, header on
+  Excel ROW 8 (skiprows=7), with the mandatory Temporada column)
 
 Uses pandas + openpyxl for data cleansing and transformation.
 """
 
 # Python
 import re
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -1485,6 +1489,216 @@ class BudgetTemplates:
         )
 
         self.df["line_type"] = "expense"
+
+        return self.df
+
+    # ──────────────────────────────────────────────
+    # Budget Plan Purchase (Formato Solicitud Presupuesto Importaciones.xlsx)
+    # BE-S8-BUDGET-PURCHASES (backend.02_18 §10.1, AMENDMENT A-01) — the
+    # REAL SIIGO layout delivered by the stakeholder REPLACES the §5.4
+    # simple own template (header row 1, "Valor", no season).
+    # ──────────────────────────────────────────────
+
+    # Real-template mandatory headers (backend.02_18 §10.1). Matched
+    # case-insensitively with outer spaces tolerated AFTER
+    # _clean_column_names() (strip + lower + spaces->'_'), i.e.
+    # "Centro de Costo" -> "centro_de_costo", etc. Temporada is mandatory
+    # as a COLUMN (its VALUE may be empty/unknown — non-blocking, income
+    # parity). Nombre del Colaborador / Fecha de Solicitud / Descripcion
+    # are tolerated optionals; the two first are IGNORED in v1 (PQ-BE-3).
+    PURCHASE_REQUIRED_COLS = [
+        "centro_de_costo", "fecha_importacion", "temporada", "monto",
+    ]
+
+    @staticmethod
+    def _parse_import_date(value: Any) -> Optional[date]:
+        """Parse one "Fecha Importacion" cell (backend.02_18 §5.4 kept by
+        §10.1): Excel datetime/Timestamp/date -> its date; a string is read
+        as dd/mm/yyyy (SIIGO-style) with an ISO/`to_datetime(dayfirst)`
+        fallback. Anything unparseable / NaT / EMPTY-CELL -> None (invalid
+        row; A-01 AC-BE8a-4). NOTE: pd.NaT IS a datetime subclass whose
+        .date() hands back NaT instead of raising, so it is short-circuited
+        FIRST — otherwise an empty date cell would leak a NaT into
+        BudgetLineCreate (pydantic 500) instead of the structured
+        invalid_rows 400 with the real Excel row number."""
+        if value is None or value is pd.NaT:
+            return None
+        if isinstance(value, float) and pd.isna(value):
+            return None
+        if isinstance(value, pd.Timestamp):
+            return None if pd.isna(value) else value.date()
+        if isinstance(value, datetime):
+            return None if pd.isna(value) else value.date()
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text or text.lower() == "nan":
+                return None
+            try:
+                return datetime.strptime(text, "%d/%m/%Y").date()
+            except ValueError:
+                parsed = pd.to_datetime(text, errors="coerce", dayfirst=True)
+                if pd.isna(parsed):
+                    return None
+                return parsed.date()
+        parsed = pd.to_datetime(value, errors="coerce")
+        return None if pd.isna(parsed) else parsed.date()
+
+    def process_budget_plan_purchase(self) -> DataFrame:
+        """Process the imports (purchase) budget-plan file with the REAL
+        SIIGO layout delivered by the stakeholder (backend.02_18 §10.1,
+        AMENDMENT A-01 — REPLACES the §5.4 simple own template).
+
+        Layout in pair with income/expense (they also read skiprows=7):
+        the data lives on the FIRST sheet read BY POSITION (sheet_name=0)
+        because the real tab is named "Requisición de Facturación" (with a
+        visible typo) — the sheet name is never matched. Rows 1-7 are the
+        SIIGO decorative block, the column headers sit on EXCEL ROW 8
+        (``skiprows=7``) and the data starts on ROW 9. The second sheet
+        "Tablas" (dropdown validation lists) is simply never read.
+
+        Real headers (cleaned): centro_de_costo, nombre_del_colaborador,
+        fecha_de_solicitud, fecha_importacion, temporada, monto,
+        descripcion. Mapping to the keys consumed by
+        ``build_purchase_line_records``:
+        - ``id_cost_center_code``: FIRST TOKEN of the Centro de Costo cell
+          (same rule as the income ETL).
+        - ``budget_date``: Fecha Importacion via ``_parse_import_date``
+          (Excel datetime or dd/mm/yyyy text). Fecha de Solicitud is a
+          DIFFERENT date (the request) — TOLERATED AND IGNORED in v1
+          along with Nombre del Colaborador (PQ-BE-3).
+        - ``projected_amount``: Monto (numeric COP >= 0).
+        - ``short_collection_name``: Temporada (strip) — EXACT income
+          parity (process_budget_plan_income l.1400-1404). An empty or
+          unknown value never blocks here: the builder resolves it via
+          ``get_collection_by_short_name`` and unknown -> id_collection
+          NULL (A-01 §10.1/§10.2).
+        - ``description``: Descripcion (optional, None-safe).
+        line_type/behavior_type are stamped as purchase/fixed for
+        readability, but the builder is the single authority: ONE Excel
+        row == ONE purchase budget_line, and payment_date NEVER exists
+        on a purchase row (installments derive at read time, §4).
+
+        Reject is all-or-nothing (T-05): totally-empty rows are silently
+        dropped, but any row with an empty/unparseable mandatory cell
+        raises a structured 400 carrying the offending Excel row numbers
+        (header=row 8 => a df index i maps to row i+9)."""
+        from fastapi import HTTPException, status as http_status
+
+        self.df = pd.read_excel(
+            self.file,
+            engine="openpyxl",
+            sheet_name=0,
+            skiprows=7,
+        )
+        self._clean_column_names()
+
+        missing_cols = [
+            col for col in self.PURCHASE_REQUIRED_COLS
+            if col not in self.df.columns
+        ]
+        if missing_cols:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Purchases file is missing mandatory columns",
+                    "missing_columns": missing_cols,
+                },
+            )
+
+        # Ignore totally empty rows (all cells blank/NaN).
+        self.df = self.df.dropna(how="all").reset_index(drop=True)
+
+        # First-token cost-center code (income ETL pattern) + optional
+        # description default so the record keys always exist.
+        self.df["id_cost_center_code"] = (
+            self.df["centro_de_costo"]
+            .astype(str)
+            .str.strip()
+            .str.split()
+            .str[0]
+        )
+        # Temporada -> short_collection_name: EXACT income parity (l.1400-
+        # 1404) — blank cells become the literal "nan"/"" strings, which
+        # never match a collection short name and resolve to NULL in the
+        # builder WITHOUT blocking the upload (A-01 §10.1).
+        self.df["short_collection_name"] = (
+            self.df["temporada"]
+            .astype(str)
+            .str.strip()
+        )
+        self.df["projected_amount"] = pd.to_numeric(
+            self.df["monto"], errors="coerce"
+        )
+        if "descripcion" in self.df.columns:
+            # Optional column: blanks normalize to None (no literal 'nan'
+            # leak into budget_lines.description).
+            self.df["description"] = [
+                None
+                if value is None or pd.isna(value)
+                or str(value).strip() in ("", "nan")
+                else str(value).strip()
+                for value in self.df["descripcion"]
+            ]
+        else:
+            self.df["description"] = None
+
+        # Row-level integrity (mandatory-cell empty / date not parseable /
+        # monto non-numeric or < 0). Temporada is deliberately NOT
+        # validated: its value may be empty/unknown (non-blocking season).
+        # Collected then rejected ALL-OR-NOTHING.
+        invalid_rows: List[Dict[str, Any]] = []
+        parsed_dates: List[Optional[date]] = []
+        for idx, row in self.df.iterrows():
+            excel_row = int(idx) + 9  # header on row 8 (A-01 §10.1)
+            code = row["id_cost_center_code"]
+            if pd.isna(code) or str(code).strip() in ("", "nan", "None"):
+                invalid_rows.append({
+                    "row": excel_row,
+                    "column": "Centro de Costo",
+                    "reason": "empty",
+                })
+            day = self._parse_import_date(row["fecha_importacion"])
+            parsed_dates.append(day)
+            if day is None:
+                invalid_rows.append({
+                    "row": excel_row,
+                    "column": "Fecha Importacion",
+                    "reason": "unparseable",
+                })
+            amount = row["projected_amount"]
+            if pd.isna(amount):
+                invalid_rows.append({
+                    "row": excel_row,
+                    "column": "Monto",
+                    "reason": "non-numeric",
+                })
+            elif float(amount) < 0:
+                invalid_rows.append({
+                    "row": excel_row,
+                    "column": "Monto",
+                    "reason": "negative",
+                })
+
+        if invalid_rows:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": (
+                        f"Purchases file has {len(invalid_rows)} invalid "
+                        f"cells (mandatory columns cannot be blank or "
+                        f"unparseable)"
+                    ),
+                    "invalid_rows": invalid_rows[:20],
+                },
+            )
+
+        # Cast the validated dates into the budget_date column (Python
+        # date objects -> the builder's _as_date passthrough).
+        self.df["budget_date"] = parsed_dates
+        self.df["line_type"] = "purchase"
+        self.df["behavior_type"] = "fixed"
 
         return self.df
 

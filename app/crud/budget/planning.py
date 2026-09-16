@@ -23,11 +23,22 @@ derivation of COGS supplier-payment installments from the source's FIXED
 income lines, read-only) and ``build_carryover_payload_lines`` (material +
 derived merged in BR-CO-10 order). The 400 guards raise
 ``fastapi.HTTPException`` inside this layer like ``crud/budget/lineCostRate.py``
-does; "line not
-found" keeps the
+does; "line not found" keeps the
 existing planning convention (return ``None`` -> the API layer raises the
 404 via ``Exceptions.register_not_found``, exactly like
-``update_budget_line_cell``).
+``update_budget_line_cell``). BE-S8-BUDGET-PURCHASES (backend.02_18 §5.1)
+adds the third line type ``purchase``: shape guards on create/update
+(BR-PUR-02..04 — 400 with a ``{reason}`` detail payload, ``payment_date``
+silently NULLed on create), the deterministic ``get_carryover_lines``
+exclusion (BR-CO-12), ``get_carryover_purchase_lines`` (BR-PUR-05:
+supplier installments read-derived from the source's purchase rows ×
+``line_payable_terms``, same §4 semantics as the COGS derivation) and the
+single-source switch of ``build_carryover_payload_lines`` (BR-PUR-06 /
+D-4: a CECO that purchases in the source NEVER gets the derived "cogs"
+rows — zero double count; merge order BR-CO-10 extended with origin rank
+{line:0, cogs:1, purchase:2}). Query economy NFR-BE8-2: +at most 2 SQL
+queries per carryover request (purchasing-CECO set + purchases×terms),
++0 derived-purchase queries when the source has no purchases.
 
 Transaction convention (T-05): write paths perform a SINGLE commit at the
 end of the operation; on failure the caller rolls back. The planning upload
@@ -36,7 +47,7 @@ legacy ``create_budget`` stays untouched for the legacy endpoints.
 """
 
 import calendar
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from datetime import date, timedelta
 
@@ -257,6 +268,31 @@ def update_budget_line_cell(
 # BE-S4D-BUDGET-LINES (backend.02_13 §4): planning line manager
 # ──────────────────────────────────────────────────────────────
 
+# BE-S8-BUDGET-PURCHASES (backend.02_18 §5.1): LITERAL messages of the
+# BR-PUR-02/03/04 guards, raised as 400 with a {"reason": ...} detail so
+# the FE-S9 classifier can key off the structured shape (additive to the
+# plain-string details of BR-LINE-04/07 which stay untouched).
+# AMENDMENT A-01 (backend.02_18 §10.2): the shape guard no longer bans
+# id_collection — a purchase MAY carry a season (temporada) like income —
+# so the literal dropped the "no collection" clause. OLD literal (pre
+# A-01): "purchase lines must be fixed with no collection and no
+# variable rate".
+PURCHASE_SHAPE_REASON = (
+    "purchase lines must be fixed with no variable rate"
+)
+PURCHASE_PAYMENT_DATE_REASON = (
+    "payment dates of a purchase derive from the line's payable terms"
+)
+
+
+def _is_purchase(line_type: Any) -> bool:
+    """True for the BE-S8 third type. Enum-safe across the str-enum
+    heritage (payload arrives as LineTypeEnum member, ORM column reads
+    back as the member too; the literal guard keeps raw strings working).
+    """
+    return line_type == LineTypeEnum.PURCHASE
+
+
 def _check_planning_line_cost_center(
     db: Session, id_cost_center: int
 ) -> None:
@@ -338,6 +374,18 @@ def create_planning_line(
     (``line_payable_terms`` now describes how the supplier of the Line's
     COGS gets paid; it is consumed by the carryover derivation below and
     by the FE-S7 live view, never materialized here).
+
+    BE-S8-BUDGET-PURCHASES §5.1-1 (BR-PUR-02/03), AMENDED by A-01 §10.2:
+    a ``line_type='purchase'`` payload must be fixed with no variable
+    rate (400 ``{"reason": ...}`` raised BEFORE the collection FK check
+    so an irrelevant-but-present id_collection never masks the shape
+    error); ``id_collection`` IS NOW VALID on a purchase — the season
+    (temporada) metadata with income parity — and simply falls through
+    to the existing existence validation (404 "Collection {id} not
+    found" when unknown); a sent ``payment_date`` is FORCED to NULL
+    in silence (BR-PUR-03, the supplier installments of a purchase are
+    read-derived, NFR-BE8-1). All other validations (budget 404, CECO
+    404, year 400, single commit) stand.
     """
     db_budget = db.query(BudgetModel).filter(
         BudgetModel.id_budget == id_budget
@@ -348,6 +396,15 @@ def create_planning_line(
             detail=f"Budget {id_budget} not found",
         )
     _check_planning_line_cost_center(db, payload.id_cost_center)
+    if _is_purchase(payload.line_type):
+        # BR-PUR-02 (A-01 §10.2): shape guard covers behavior/rate ONLY —
+        # id_collection is legal season metadata (404-checked below).
+        if (payload.behavior_type != BehaviorTypeEnum.FIXED
+                or payload.variable_rate is not None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"reason": PURCHASE_SHAPE_REASON},
+            )
     if payload.id_collection is not None:
         _check_planning_line_collection(db, payload.id_collection)
     if payload.budget_date.year != db_budget.budget_year:
@@ -363,6 +420,10 @@ def create_planning_line(
     if payload.behavior_type != BehaviorTypeEnum.FIXED:
         # BR-LINE-03: server-side invariant over whatever the body sent.
         data["projected_amount"] = 0.0
+    if _is_purchase(payload.line_type):
+        # BR-PUR-03: silent NULL — installments derive at read time from
+        # line_payable_terms anchored on budget_date (the import date).
+        data["payment_date"] = None
 
     db_line = BudgetLineModel(id_budget=id_budget, **data)
     db.add(db_line)
@@ -389,6 +450,22 @@ def update_planning_line(
     - BR-LINE-02/08: provided FKs and the new budget_date year are checked
       with the §3.4 details (404 / 400).
     - BR-LINE-05: no status lock.
+
+    BE-S8-BUDGET-PURCHASES §5.1-2 (BR-PUR-04), AMENDED by A-01 §10.2: on
+    a PERSISTED purchase row a SENT payment_date -> 400
+    {"reason": PURCHASE_PAYMENT_DATE_REASON} (the installments derive
+    from the Line's payable terms — writing a date would silently
+    desynchronize them) and a SENT variable_rate -> 400 with the
+    BR-PUR-02 shape message. A SENT id_collection is now VALID (season
+    metadata parity with income): it flows to the generic existence
+    check below -> 404 "Collection {id} not found" when unknown. "Sent"
+    is detected via model_fields_set (present-but-null counts, BR-LINE-07
+    precedent). budget_date stays editable with the year check (fixing an
+    import date), projected_amount/description/cost center with the
+    generic fixed-line rules. line_type remains immutable (BR-LINE-06:
+    absent from PlanningLineUpdate, extra=ignore — verified at the schema
+    level, not rechecked here). Guards run BEFORE the generic behavior
+    guards so a purchase never answers the "fixed lines..." wording.
     Single commit (T-05); returns the full persisted row (NFR-L-2).
     """
     db_line = db.query(BudgetLineModel).filter(
@@ -398,6 +475,20 @@ def update_planning_line(
         return None
 
     sent = payload.model_fields_set
+    if _is_purchase(db_line.line_type):
+        # BR-PUR-04: payment_date first (spec §5.1-2 order), then shape.
+        # id_collection deliberately NOT banned here (A-01 §10.2): the
+        # season is legal on purchases and 404-checked generically.
+        if "payment_date" in sent:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"reason": PURCHASE_PAYMENT_DATE_REASON},
+            )
+        if "variable_rate" in sent:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"reason": PURCHASE_SHAPE_REASON},
+            )
     is_variable = db_line.behavior_type != BehaviorTypeEnum.FIXED
     if is_variable and "projected_amount" in sent:
         raise HTTPException(
@@ -610,6 +701,13 @@ def get_carryover_lines(
     the source) and is excluded naturally. Both income AND expense rows are
     returned (collections and payments carry over).
 
+    BE-S8 §3.4-4 (BR-CO-12): ``line_type != PURCHASE`` is excluded
+    EXPLICITLY. Purchase rows are structurally un-selectable here (their
+    payment_date is always NULL and their budget_date lives in N−1), but
+    the guard removes that reliance on the invariant: a dirty-data
+    purchase anchored in N never materializes as an origin "line" row —
+    it only ever flows through the §4 installment derivation.
+
     Stable order (§5.1): effective date ASC, then id_budget_line ASC.
     """
     effective_date = func.coalesce(
@@ -620,6 +718,7 @@ def get_carryover_lines(
         .filter(
             BudgetLineModel.id_budget == id_budget_source,
             BudgetLineModel.behavior_type == BehaviorTypeEnum.FIXED,
+            BudgetLineModel.line_type != LineTypeEnum.PURCHASE,
             func.extract("year", effective_date) == budget_year_target,
         )
         .order_by(effective_date.asc(), BudgetLineModel.id_budget_line.asc())
@@ -685,10 +784,19 @@ def get_carryover_cogs_lines(
     id_budget_source: int,
     budget_year_source: int,
     budget_year_target: int,
+    purchasing_cc_ids: Optional[Set[int]] = None,
 ) -> List[Dict[str, Any]]:
     """BR-CO-09: COGS payment installments derived from the FIXED INCOME
     lines of the source scenario whose ``budget_date`` falls in the source
     year N−1.
+
+    BE-S8-BUDGET-PURCHASES §5.1-4 (BR-PUR-06 / single-source rule D-4):
+    ``purchasing_cc_ids`` — the CECOs of the SOURCE that own at least one
+    purchase row — are EXCLUDED from the income scan (SQL ``NOT IN``,
+    zero extra queries). A purchasing CECO's supplier payment derives
+    from its purchases (``get_carryover_purchase_lines``), never from
+    both sources: zero double count. Empty/None keeps the pre-BE-S8
+    behavior byte-identical (NFR-BE8-3).
 
     Per eligible income row (D-S7-5 anchor = its ``budget_date``):
     1. resolve ``pct`` = cogs of the CECO's Line at month-end(budget_date)
@@ -721,7 +829,7 @@ def get_carryover_cogs_lines(
     distinct id_lines (1 batched ``IN`` query) = exactly 2 EXTRA queries
     on top of the income fetch, independent of row counts; the
     per-month-end pool is memoed in-request."""
-    income_rows = (
+    income_query = (
         db.query(BudgetLineModel, CostCenterModel.id_line)
         .join(
             CostCenterModel,
@@ -735,9 +843,19 @@ def get_carryover_cogs_lines(
             func.extract("year", BudgetLineModel.budget_date)
             == budget_year_source,
         )
-        .order_by(BudgetLineModel.id_budget_line.asc())
-        .all()
     )
+    if purchasing_cc_ids:
+        # BR-PUR-06 / D-4: income of a purchasing CECO never derives cogs
+        # (its supplier payment comes from get_carryover_purchase_lines).
+        # sorted() keeps the IN list deterministic for SQL logging/tests.
+        income_query = income_query.filter(
+            BudgetLineModel.id_cost_center.notin_(
+                sorted(int(cc_id) for cc_id in purchasing_cc_ids)
+            )
+        )
+    income_rows = income_query.order_by(
+        BudgetLineModel.id_budget_line.asc()
+    ).all()
     if not income_rows:
         return []
 
@@ -818,16 +936,173 @@ def get_carryover_cogs_lines(
     return derived
 
 
+# ──────────────────────────────────────────────────────────────
+# BE-S8-BUDGET-PURCHASES (backend.02_18 §4/§5.1): purchase carry-in
+#
+# The supplier installments of the source's PURCHASE rows are derived
+# exactly like the COGS ones above (same D-7 term order, same D-S7-4
+# no-terms fallback, same "apply the pcts as-is" rule and raw-float math)
+# — only the base differs: the merchandise value projected_amount itself
+# instead of income × cogs_pct (there is no rate lookup and no per-month
+# pool: the purchase IS the cost). Query economy (NFR-BE8-2): the pair
+# below adds AT MOST 2 SQL round trips per carryover request — 1 for the
+# purchasing-CECO set (which also feeds the D-4 exclusion above) and 1
+# for the purchases×terms join — regardless of row counts. A source
+# without purchases pays only the set query (the join short-circuits on
+# the empty set in build_carryover_payload_lines).
+# ──────────────────────────────────────────────────────────────
+
+PURCHASE_CARRYOVER_DESCRIPTION = "Pago a proveedor (arrastre)"
+
+
+def get_purchasing_cc_ids(db: Session, id_budget_source: int) -> Set[int]:
+    """Single-source rule D-4 (BR-PUR-06): cost-center ids of the SOURCE
+    that own at least one purchase row — such a CECO's supplier payment
+    derives from its purchases, NEVER from income × cogs_pct (and vice
+    versa for non-purchasing CECOs, which keep the FE-S7 derivation).
+
+    1 query: SELECT DISTINCT id_cost_center ... line_type = PURCHASE
+    (spec §5.1-4). Feeds both the cogs-scan NOT IN exclusion and the
+    purchase-derivation short-circuit below."""
+    return {
+        id_cost_center
+        for (id_cost_center,) in db.query(
+            BudgetLineModel.id_cost_center
+        ).filter(
+            BudgetLineModel.id_budget == id_budget_source,
+            BudgetLineModel.line_type == LineTypeEnum.PURCHASE,
+        ).distinct().all()
+    }
+
+
+def get_carryover_purchase_lines(
+    db: Session, id_budget_source: int, budget_year_target: int
+) -> List[Dict[str, Any]]:
+    """BR-PUR-05: supplier-payment installments derived from the PURCHASE
+    rows of the source scenario (spec §4), kept when
+    year(installment_date) == ``budget_year_target`` (BR-CO-09 mirror —
+    the import itself belongs to N−1, a January/February installment is
+    precisely the carry-in).
+
+    Per purchase row (anchor = ``budget_date`` = import date; the row's
+    own ``payment_date`` is NULL by BR-PUR-01/03 and never consulted):
+    terms = ``line_payable_terms`` of the CECO's id_line in the D-7 order
+    (payment_days asc, id asc): WITH terms -> one installment per term,
+    date = anchor + payment_days, amount = projected_amount ×
+    payment_pct (pct applied as-is, NOT normalized — even when the pcts
+    do not sum to 1; zero cogs_pct: the merchandise value is the cost).
+    WITHOUT terms (Line without terms, or CECO without id_line) -> ONE
+    installment at 100 % on the import date (D-S7-4). Raw float, zero
+    intermediate rounding (repo convention).
+
+    ONE query (NFR-BE8-2): purchase rows LEFT JOIN cost_centers LEFT
+    JOIN line_payable_terms, fully ordered in SQL
+    (id_budget_line ASC, payment_days ASC, id_line_payable_term ASC —
+    PG puts the NULL term of a no-terms line FIRST inside its group, and
+    rows are re-grouped in Python keeping that generation order, so the
+    output is deterministic per NFR-BE8-4). Terms-less purchases with
+    multiple rows would duplicate the line tuple; the grouping collapses
+    them.
+
+    Returns ``PlanningCarryoverLine``-shaped dicts with
+    ``origin="purchase"``, ``line_type="expense"``, ``id_budget_line=None``,
+    ``budget_date`` = import date, ``payment_date`` = installment date and
+    description ``PURCHASE_CARRYOVER_DESCRIPTION`` (BR-PUR-05)."""
+    rows = (
+        db.query(
+            BudgetLineModel,
+            CostCenterModel.id_line,
+            LinePayableTermModel,
+        )
+        .outerjoin(
+            CostCenterModel,
+            BudgetLineModel.id_cost_center
+            == CostCenterModel.id_cost_center,
+        )
+        .outerjoin(
+            LinePayableTermModel,
+            LinePayableTermModel.id_line == CostCenterModel.id_line,
+        )
+        .filter(
+            BudgetLineModel.id_budget == id_budget_source,
+            BudgetLineModel.line_type == LineTypeEnum.PURCHASE,
+        )
+        .order_by(
+            BudgetLineModel.id_budget_line.asc(),
+            LinePayableTermModel.payment_days.asc(),
+            LinePayableTermModel.id_line_payable_term.asc(),
+        )
+        .all()
+    )
+
+    # Regroup the join fan-out preserving the SQL order: first appearance
+    # fixes the line order, terms stay in D-7 order inside each bucket.
+    by_line: Dict[int, Dict[str, Any]] = {}
+    order: List[int] = []
+    for budget_line, id_line, term in rows:
+        key = budget_line.id_budget_line
+        if key not in by_line:
+            by_line[key] = {
+                "line": budget_line,
+                "id_line": id_line,
+                "terms": [],
+            }
+            order.append(key)
+        if term is not None:
+            by_line[key]["terms"].append(term)
+
+    derived: List[Dict[str, Any]] = []
+    for key in order:
+        entry = by_line[key]
+        budget_line = entry["line"]
+        amount = float(budget_line.projected_amount or 0.0)
+        terms = entry["terms"] if entry["id_line"] is not None else []
+        if terms:
+            candidates = [
+                (
+                    budget_line.budget_date
+                    + timedelta(days=term.payment_days),
+                    amount * float(term.payment_pct),
+                )
+                for term in terms
+            ]
+        else:
+            # D-S7-4 mirror: no terms (or CECO without id_line) -> the
+            # full merchandise value paid on the import date itself.
+            candidates = [(budget_line.budget_date, amount)]
+
+        for payment_date, installment in candidates:
+            if payment_date.year != budget_year_target:
+                continue                        # BR-CO-09 year filter
+            derived.append({
+                "id_budget_line": None,
+                "id_cost_center": budget_line.id_cost_center,
+                "line_type": "expense",
+                "budget_date": budget_line.budget_date,
+                "payment_date": payment_date,
+                "projected_amount": installment,
+                "description": PURCHASE_CARRYOVER_DESCRIPTION,
+                "origin": "purchase",
+            })
+    return derived
+
+
 def _carryover_order_key(
     row: PlanningCarryoverLine,
 ) -> Tuple[date, int, int]:
-    """BR-CO-10 sort key: effective date coalesce(payment_date,
-    budget_date) ASC, then origin ("line" before "cogs" on ties), then the
-    id null-safe (derived rows share 0 and keep their deterministic
-    generation order — Python's sort is stable)."""
+    """BR-CO-10 sort key (BE-S8 §5.1-4 extended): effective date
+    coalesce(payment_date, budget_date) ASC, then origin rank
+    ("line" < "cogs" < "purchase" on ties), then the id null-safe
+    (derived rows share 0 and keep their deterministic generation order —
+    Python's sort is stable)."""
+    origin_rank = {
+        "line": 0,
+        "cogs": 1,
+        "purchase": 2,
+    }
     return (
         row.payment_date or row.budget_date,
-        0 if row.origin == "line" else 1,
+        origin_rank.get(row.origin, 0),
         row.id_budget_line if row.id_budget_line is not None else 0,
     )
 
@@ -839,23 +1114,39 @@ def build_carryover_payload_lines(
     budget_year_target: int,
 ) -> List[PlanningCarryoverLine]:
     """Full GET-carryover payload rows (backend.02_16 §5.1 material +
-    backend.02_17 §4 derived) in the BR-CO-10 order. Material ORM rows
-    validate with the schema default ``origin="line"`` (they carry no such
-    attribute). Called ONLY when the include_carryover flag is ON — the
-    BR-CO-01 short-circuit lives in the API layer, so the disabled path
-    keeps paying zero queries (AC-S7-BE-8)."""
+    backend.02_17 §4 derived + backend.02_18 §5.1 purchase derived) in the
+    BR-CO-10 order extended with origin rank {line:0, cogs:1, purchase:2}.
+    Material ORM rows validate with the schema default ``origin="line"``
+    (they carry no such attribute). Called ONLY when the include_carryover
+    flag is ON — the BR-CO-01 short-circuit lives in the API layer, so the
+    disabled path keeps paying zero queries (AC-S7-BE-8).
+
+    BE-S8 single-source switch (BR-PUR-06 / D-4): the purchasing-CECO set
+    of the SOURCE is computed ONCE (1 DISTINCT query) and fed BOTH to the
+    income-scan exclusion of get_carryover_cogs_lines (a purchasing CECO
+    never gets cogs-derived rows) AND as the gate for
+    get_carryover_purchase_lines (1 purchases×terms query, skipped when
+    the set is empty). A source without purchases therefore pays exactly
+    +1 cheap DISTINCT query over BE-S7 and produces byte-identical
+    payloads (NFR-BE8-3); with purchases the budget is +2 queries total
+    regardless of row counts (NFR-BE8-2)."""
     material = [
         PlanningCarryoverLine.model_validate(row)
         for row in get_carryover_lines(
             db, id_budget_source, budget_year_target
         )
     ]
-    derived = [
-        PlanningCarryoverLine(**data)
-        for data in get_carryover_cogs_lines(
-            db, id_budget_source, budget_year_source, budget_year_target,
+    purchasing_cc_ids = get_purchasing_cc_ids(db, id_budget_source)
+    derived_rows = get_carryover_cogs_lines(
+        db, id_budget_source, budget_year_source, budget_year_target,
+        purchasing_cc_ids=purchasing_cc_ids,
+    )
+    if purchasing_cc_ids:
+        # BR-PUR-05: only sources with >=1 purchasing CECO pay the join.
+        derived_rows = derived_rows + get_carryover_purchase_lines(
+            db, id_budget_source, budget_year_target,
         )
-    ]
+    derived = [PlanningCarryoverLine(**data) for data in derived_rows]
     merged = material + derived
     merged.sort(key=_carryover_order_key)
     return merged

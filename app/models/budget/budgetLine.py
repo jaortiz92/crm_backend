@@ -14,8 +14,17 @@ from app.db import Base
 
 
 class LineTypeEnum(str, enum.Enum):
+    """BE-S8-BUDGET-PURCHASES (backend.02_18 §3.1): third member PURCHASE =
+    imported-merchandise line (budget_date = import date, payment_date
+    always NULL — supplier installments are read-derived from
+    line_payable_terms, never materialized). The Postgres enum stores the
+    NAMES ('INCOME'/'EXPENSE'/'PURCHASE'), so existing databases need the
+    manual `ALTER TYPE public.linetypeenum ADD VALUE IF NOT EXISTS
+    'PURCHASE';` BEFORE deploying (see §3.3 / note.md — create_all never
+    alters an existing enum)."""
     INCOME = "income"
     EXPENSE = "expense"
+    PURCHASE = "purchase"
 
 
 class BehaviorTypeEnum(str, enum.Enum):

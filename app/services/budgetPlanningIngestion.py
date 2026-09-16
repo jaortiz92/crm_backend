@@ -11,7 +11,14 @@ Consumers:
   ``POST /budget/upload/budget-plan-expense`` (external behavior must stay
   IDENTICAL — AC-REG-01), which call WITHOUT ``budget_year``.
 - New endpoint ``POST /budget/planning/upload`` (§5.1), which also passes
-  ``budget_year`` to activate the BR-ING-06 validation.
+  ``budget_year`` to activate the BR-ING-06 validation. BE-S8-BUDGET-
+  PURCHASES (backend.02_18 §5.3) adds the OPTIONAL third file
+  ``file_compras`` via ``build_purchase_line_records`` at the bottom of
+  this module: one Excel row -> one purchase budget_line, same
+  all-or-nothing transaction, shared missing_cost_centers rejection
+  list. AMENDMENT A-01 (backend.02_18 §10.2): purchases now carry the
+  Temporada/``short_collection_name`` metadata of the real SIIGO imports
+  file, resolved with the exact income/expense NON-BLOCKING pair above.
 
 Preserved semantics (identical to the previous inline code):
 - Cost-center resolution via the FIRST TOKEN of the "Centro de Costo" cell
@@ -221,6 +228,78 @@ def build_expense_line_records(
             "description": record.get("description"),
             "behavior_type": behavior_type,
             "variable_rate": variable_rate,
+        })
+
+    if found_years:
+        raise BudgetYearMismatchError(found_years)
+
+    return budget_lines_data, missing_cost_centers
+
+
+def build_purchase_line_records(
+    db: Session,
+    records: List[Dict[str, Any]],
+    id_budget: int,
+    budget_year: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Build PURCHASE ``budget_lines`` dicts from the processed imports
+    template (BE-S8-BUDGET-PURCHASES §5.3, output of
+    ``BudgetTemplates.process_budget_plan_purchase``).
+
+    Same income/expense builder pattern, deliberately simpler:
+    - CECO resolved by the FIRST TOKEN of "Centro de Costo" through
+      ``crud.get_cost_center_by_code``; unresolved codes are APPENDED to
+      the caller's single ``missing_cost_centers`` rejection list
+      (BR-ING-03 — purchases share one rejection payload with the other
+      two files, spec §5.3).
+    - ONE Excel row == ONE purchase budget_line. NO installment
+      expansion of any kind, ever (BR-PUR-05 derives them at read time;
+      materializing them here would violate NFR-BE8-1).
+    - ``payment_date``/``variable_rate`` are forced NULL and
+      ``behavior_type`` FIXED (BR-PUR-01 row semantics). AMENDMENT A-01
+      (backend.02_18 §10.2): ``id_collection`` is now a legal season
+      metadata on purchases — resolved with the EXACT income/expense
+      parity pair (l.116-118): unknown/empty ``short_collection_name``
+      -> ``id_collection = None`` WITHOUT blocking (a purchase row never
+      expands: one Excel row stays one purchase line).
+    - ``budget_date`` = the IMPORT date and BR-ING-06 applies to it
+      (``_check_row_year`` -> ``BudgetYearMismatchError`` with the
+      aggregated ``found_years``, 400 + total rollback in the endpoint).
+
+    No commit here (T-05): the records join the same
+    ``create_budget_lines_bulk`` single transaction as income+expense
+    (all-or-nothing, R-ING-01/B)."""
+    missing_cost_centers: List[str] = []
+    budget_lines_data: List[Dict[str, Any]] = []
+    found_years: set = set()
+
+    for record in records:
+        cc_code = record.get("id_cost_center_code")
+        cc = crud.get_cost_center_by_code(db, cc_code)
+        if not cc:
+            missing_cost_centers.append(cc_code)
+            continue
+
+        # A-01 §10.2: season (Temporada) with the exact income pair —
+        # NON-BLOCKING: unknown/empty short name -> id_collection NULL.
+        coll_short = record.get("short_collection_name")
+        coll = crud.get_collection_by_short_name(db, coll_short)
+        id_collection = coll.id_collection if coll else None
+
+        # BR-ING-06 over the import date (the purchase budget_date).
+        budget_date = _as_date(record.get("budget_date"))
+        _check_row_year(budget_date, budget_year, found_years)
+
+        budget_lines_data.append({
+            "id_budget": id_budget,
+            "id_cost_center": cc.id_cost_center,
+            "line_type": "purchase",
+            "budget_date": budget_date,
+            "payment_date": None,
+            "id_collection": id_collection,
+            "projected_amount": record.get("projected_amount", 0),
+            "description": record.get("description"),
+            "behavior_type": "fixed",
         })
 
     if found_years:
