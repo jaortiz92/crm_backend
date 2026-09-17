@@ -517,9 +517,24 @@ def planning_get_carryover(
        installments from the source's fixed income lines (BR-CO-09,
        origin "cogs" — cost pool mirror of budgetEngine.get_pnl resolved at
        each month-end × line_payable_terms; D-S7-4 single 100 % row when
-       the Line has no terms), in the BR-CO-10 order (effective date ASC,
-       line before cogs, id null-safe). Query economy BR-CO-11: a constant
-       handful of queries per request regardless of row counts.
+       the Line has no terms) and with the derived supplier-payment
+       installments of the source's purchase rows (BR-PUR-05, origin
+       "purchase"). Single-source switch by LINE per rule D-4' (backend.
+       02_18 §11, Enmienda A-02 — replaced the old per-CECO D-4): every
+       source unit pays its suppliers from EXACTLY one source — the unit
+       key is line:<id_line> for a CECO belonging to a Line and cc:
+       <id_cost_center> for a lineless one, built from the purchase rows
+       of the source; an income's "cogs" derivation is silenced whenever
+       its key matches a purchasing key (a purchase booked in the
+       "Facturación" CECO switches the whole Line, zonal sellers
+       included; two lineless CECOs never switch each other), and the
+       purchases answer their own origin-"purchase" installments instead.
+       A source without purchases keeps the FE-S7 behavior intact
+       (NFR-BE8-3). Ordered by BR-CO-10 (effective date ASC, origin rank
+       line < cogs < purchase, id null-safe). Query economy BR-CO-11/
+       NFR-BE8-2: a constant handful of queries per request (+at most 2
+       for the switch: source keys + purchases×terms) regardless of row
+       counts.
     4. No candidate -> legal 200 {enabled:true, source:null, lines:[],
        unavailable_reason:"no_source"} (BR-CO-08: toggling ON never
        validates a source).

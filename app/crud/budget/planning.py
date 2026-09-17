@@ -34,10 +34,15 @@ exclusion (BR-CO-12), ``get_carryover_purchase_lines`` (BR-PUR-05:
 supplier installments read-derived from the source's purchase rows ×
 ``line_payable_terms``, same §4 semantics as the COGS derivation) and the
 single-source switch of ``build_carryover_payload_lines`` (BR-PUR-06 /
-D-4: a CECO that purchases in the source NEVER gets the derived "cogs"
-rows — zero double count; merge order BR-CO-10 extended with origin rank
+D-4, AMENDED by backend.02_18 §11 Enmienda A-02 to rule D-4': the switch
+is keyed per SOURCE UNIT — KEY(cc) = "line:<id_line>" when the CECO
+belongs to a Line, "cc:<id_cost_center>" when it has none — so a purchase
+booked in ANY CECO of the Line (typically the "Facturación" CECO) silences
+the income-derived "cogs" rows of EVERY CECO of that Line, zonal sellers
+included (zero double count), while other Lines and other lineless CECOs
+keep theirs; merge order BR-CO-10 extended with origin rank
 {line:0, cogs:1, purchase:2}). Query economy NFR-BE8-2: +at most 2 SQL
-queries per carryover request (purchasing-CECO set + purchases×terms),
+queries per carryover request (purchasing source keys + purchases×terms),
 +0 derived-purchase queries when the source has no purchases.
 
 Transaction convention (T-05): write paths perform a SINGLE commit at the
@@ -784,19 +789,27 @@ def get_carryover_cogs_lines(
     id_budget_source: int,
     budget_year_source: int,
     budget_year_target: int,
-    purchasing_cc_ids: Optional[Set[int]] = None,
+    purchasing_source_keys: Optional[Tuple[Set[int], Set[int]]] = None,
 ) -> List[Dict[str, Any]]:
     """BR-CO-09: COGS payment installments derived from the FIXED INCOME
     lines of the source scenario whose ``budget_date`` falls in the source
     year N−1.
 
-    BE-S8-BUDGET-PURCHASES §5.1-4 (BR-PUR-06 / single-source rule D-4):
-    ``purchasing_cc_ids`` — the CECOs of the SOURCE that own at least one
-    purchase row — are EXCLUDED from the income scan (SQL ``NOT IN``,
-    zero extra queries). A purchasing CECO's supplier payment derives
-    from its purchases (``get_carryover_purchase_lines``), never from
-    both sources: zero double count. Empty/None keeps the pre-BE-S8
-    behavior byte-identical (NFR-BE8-3).
+    BE-S8 §11 A-02 (BR-PUR-06 as amended by rule D-4'):
+    ``purchasing_source_keys`` is the ``(purchasing_lines,
+    purchasing_ccs)`` pair produced by ``get_purchasing_source_keys`` —
+    the SOURCE units that pay suppliers from their purchases. An income
+    row is EXCLUDED when its own key hits the set:
+    ``id_line ∈ purchasing_lines`` OR (``id_line IS NULL`` AND
+    ``id_cost_center ∈ purchasing_ccs``). A purchase anywhere in the Line
+    (the "Facturación" CECO) therefore silences the cogs derivation of
+    EVERY CECO of that Line, zonal ones included — the per-CECO D-4
+    switch never caught that and double-counted the payment (defect
+    report §11); two lineless CECOs still never switch each other (their
+    KEY cc: is per unit). The income row's ``id_line`` is ALREADY
+    resolved by the CostCenterModel join feeding the rate lookup, so the
+    exclusion is pure Python: zero extra queries. Empty/None keeps the
+    pre-BE-S8 behavior byte-identical (NFR-BE8-3).
 
     Per eligible income row (D-S7-5 anchor = its ``budget_date``):
     1. resolve ``pct`` = cogs of the CECO's Line at month-end(budget_date)
@@ -844,15 +857,9 @@ def get_carryover_cogs_lines(
             == budget_year_source,
         )
     )
-    if purchasing_cc_ids:
-        # BR-PUR-06 / D-4: income of a purchasing CECO never derives cogs
-        # (its supplier payment comes from get_carryover_purchase_lines).
-        # sorted() keeps the IN list deterministic for SQL logging/tests.
-        income_query = income_query.filter(
-            BudgetLineModel.id_cost_center.notin_(
-                sorted(int(cc_id) for cc_id in purchasing_cc_ids)
-            )
-        )
+    # NOTE (A-02/D-4'): the source-key exclusion runs in the derivation
+    # loop below — the income scan's CostCenterModel join already carries
+    # each row's id_line, so filtering here needs zero extra SQL.
     income_rows = income_query.order_by(
         BudgetLineModel.id_budget_line.asc()
     ).all()
@@ -888,7 +895,20 @@ def get_carryover_cogs_lines(
 
     pool_cache: Dict[date, Tuple[Dict[int, float], Optional[float]]] = {}
     derived: List[Dict[str, Any]] = []
+    purchasing_lines, purchasing_ccs = purchasing_source_keys or (
+        set(), set(),
+    )
     for budget_line, id_line in income_rows:
+        if (id_line in purchasing_lines) or (
+            id_line is None
+            and budget_line.id_cost_center in purchasing_ccs
+        ):
+            # D-4' (A-02): this unit already pays suppliers from its
+            # purchases (get_carryover_purchase_lines) — a line-bearing
+            # row is switched by ANY purchase of its Line, a lineless one
+            # only by its own purchases (purchasing_lines never contains
+            # None, so the first test is safe for NULL id_line).
+            continue
         month_end = _month_end(budget_line.budget_date)
         if month_end not in pool_cache:
             pool_cache[month_end] = _cogs_pct_pool_for_month(
@@ -946,33 +966,66 @@ def get_carryover_cogs_lines(
 # instead of income × cogs_pct (there is no rate lookup and no per-month
 # pool: the purchase IS the cost). Query economy (NFR-BE8-2): the pair
 # below adds AT MOST 2 SQL round trips per carryover request — 1 for the
-# purchasing-CECO set (which also feeds the D-4 exclusion above) and 1
-# for the purchases×terms join — regardless of row counts. A source
-# without purchases pays only the set query (the join short-circuits on
-# the empty set in build_carryover_payload_lines).
+# purchasing source keys (D-4', A-02; which also feed the exclusion of
+# get_carryover_cogs_lines) and 1 for the purchases×terms join —
+# regardless of row counts. A source without purchases pays only the keys
+# query (the join short-circuits on the empty pair in
+# build_carryover_payload_lines).
 # ──────────────────────────────────────────────────────────────
 
 PURCHASE_CARRYOVER_DESCRIPTION = "Pago a proveedor (arrastre)"
 
 
-def get_purchasing_cc_ids(db: Session, id_budget_source: int) -> Set[int]:
-    """Single-source rule D-4 (BR-PUR-06): cost-center ids of the SOURCE
-    that own at least one purchase row — such a CECO's supplier payment
-    derives from its purchases, NEVER from income × cogs_pct (and vice
-    versa for non-purchasing CECOs, which keep the FE-S7 derivation).
+def get_purchasing_source_keys(
+    db: Session, id_budget_source: int
+) -> Tuple[Set[int], Set[int]]:
+    """Single-source rule D-4' (backend.02_18 §11, Enmienda A-02 —
+    replaces the per-CECO ``get_purchasing_cc_ids`` of BR-PUR-06, which
+    never matched the real booking practice: purchases are registered in
+    the "Facturación {Línea}" CECO while the sales run through the zonal
+    CECOs of the SAME Line, so comparing CECO-buyer against CECO-seller
+    left both payment sources on and double-counted).
 
-    1 query: SELECT DISTINCT id_cost_center ... line_type = PURCHASE
-    (spec §5.1-4). Feeds both the cogs-scan NOT IN exclusion and the
-    purchase-derivation short-circuit below."""
-    return {
-        id_cost_center
-        for (id_cost_center,) in db.query(
+    Returns the pair ``(purchasing_lines, purchasing_ccs)`` of SOURCE
+    units that pay suppliers from their purchases:
+    KEY(cc) = "line:" + id_line when the CECO belongs to a Line (then the
+    WHOLE Line switches — every CECO sharing that id_line, zonal sellers
+    included, loses the income × cogs derivation; terms and cogs rates
+    are per-Line anyway), KEY(cc) = "cc:" + id_cost_center when it has
+    none (a lineless CECO is its own source unit: two lineless CECOs
+    never switch each other). Feeds the exact exclusion of
+    get_carryover_cogs_lines and gates get_carryover_purchase_lines; a
+    source without purchases returns (∅, ∅) and keeps the FE-S7 behavior
+    byte-identical (NFR-BE8-3).
+
+    1 query (NFR-BE8-2): purchase JOIN cost_centers -> DISTINCT
+    (id_line, id_cost_center), split in Python. +0 downstream when the
+    set is empty (the purchases×terms join short-circuits on the caller's
+    gate)."""
+    purchasing_lines: Set[int] = set()
+    purchasing_ccs: Set[int] = set()
+    for id_line, id_cost_center in (
+        db.query(
+            CostCenterModel.id_line,
+            BudgetLineModel.id_cost_center,
+        )
+        .join(
+            CostCenterModel,
             BudgetLineModel.id_cost_center
-        ).filter(
+            == CostCenterModel.id_cost_center,
+        )
+        .filter(
             BudgetLineModel.id_budget == id_budget_source,
             BudgetLineModel.line_type == LineTypeEnum.PURCHASE,
-        ).distinct().all()
-    }
+        )
+        .distinct()
+        .all()
+    ):
+        if id_line is not None:
+            purchasing_lines.add(id_line)
+        else:
+            purchasing_ccs.add(id_cost_center)
+    return purchasing_lines, purchasing_ccs
 
 
 def get_carryover_purchase_lines(
@@ -1121,28 +1174,32 @@ def build_carryover_payload_lines(
     flag is ON — the BR-CO-01 short-circuit lives in the API layer, so the
     disabled path keeps paying zero queries (AC-S7-BE-8).
 
-    BE-S8 single-source switch (BR-PUR-06 / D-4): the purchasing-CECO set
-    of the SOURCE is computed ONCE (1 DISTINCT query) and fed BOTH to the
-    income-scan exclusion of get_carryover_cogs_lines (a purchasing CECO
-    never gets cogs-derived rows) AND as the gate for
-    get_carryover_purchase_lines (1 purchases×terms query, skipped when
-    the set is empty). A source without purchases therefore pays exactly
-    +1 cheap DISTINCT query over BE-S7 and produces byte-identical
-    payloads (NFR-BE8-3); with purchases the budget is +2 queries total
-    regardless of row counts (NFR-BE8-2)."""
+    BE-S8 single-source switch, per-Línea since A-02 (BR-PUR-06 / D-4'):
+    the purchasing source keys of the SOURCE are computed ONCE (1 join-
+    DISTINCT query, same scenario that feeds every derivation) and fed
+    BOTH to the income-scan exclusion of get_carryover_cogs_lines (an
+    income switches whenever its KEY — line:<id_line>, or cc:<id_cost_
+    center> when the CECO has no Line — is one of the purchasing keys)
+    AND as the gate for get_carryover_purchase_lines (1 purchases×terms
+    query, skipped when the key pair is empty). A source without
+    purchases therefore pays exactly +1 cheap DISTINCT query over BE-S7
+    and produces byte-identical payloads (NFR-BE8-3); with purchases the
+    budget is +2 queries total regardless of row counts (NFR-BE8-2)."""
     material = [
         PlanningCarryoverLine.model_validate(row)
         for row in get_carryover_lines(
             db, id_budget_source, budget_year_target
         )
     ]
-    purchasing_cc_ids = get_purchasing_cc_ids(db, id_budget_source)
+    purchasing_lines, purchasing_ccs = get_purchasing_source_keys(
+        db, id_budget_source
+    )
     derived_rows = get_carryover_cogs_lines(
         db, id_budget_source, budget_year_source, budget_year_target,
-        purchasing_cc_ids=purchasing_cc_ids,
+        purchasing_source_keys=(purchasing_lines, purchasing_ccs),
     )
-    if purchasing_cc_ids:
-        # BR-PUR-05: only sources with >=1 purchasing CECO pay the join.
+    if purchasing_lines or purchasing_ccs:
+        # BR-PUR-05: only sources with >=1 purchase pay the join.
         derived_rows = derived_rows + get_carryover_purchase_lines(
             db, id_budget_source, budget_year_target,
         )

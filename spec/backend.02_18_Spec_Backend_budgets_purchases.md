@@ -175,3 +175,32 @@ Reemplazar `Plantillas/Plantilla Plan de Importaciones.xlsx` por una copia del f
 - **AC-BE8a-2:** `POST /{id}/line` purchase con `id_collection` válido ⇒ 201 persistida con temporada; id inexistente ⇒ 404; `variable_rate` ⇒ 400 con el literal NUEVO.
 - **AC-BE8a-3:** `PUT /line/{id}` de compra con `id_collection` ⇒ 200 y temporada cambiada; con `payment_date` ⇒ sigue 400 con el literal vigente.
 - **AC-BE8a-4:** columnas obligatorias ausentes en el xlsx ⇒ 400 `missing_columns`; fila sin fecha ⇒ 400 `invalid_rows` con `row` = fila Excel real (idx+9); regresión: los AC-BE8-1..6 siguen (actualizando el smoke donde el guard cambió de mensaje/permitió temporada).
+
+---
+
+## 11. Enmienda A-02 (2026-09-16): el switch de fuente pasa de por-CECO a **por-Línea** (D-4')
+
+**Defecto reportado:** escenario 266 (2026): compras en CECO `000001` (Facturación Kyly) y `000002` (Facturación Tinta); ingresos en CECOs de ZONA `000101/000201` (Kyly) y `000202/000302` (Tinta). Como el switch D-4 comparaba CECO-comprador contra CECO-vendedor, nunca casaba ⇒ el bloque "Pago a proveedores" mostraba las cuotas de compra (43M) **MAS** las cuotas derivadas de ingreso (47M × 60% = 28.2M) — doble cuenta del mismo pago económico. El comercio real registra la importación en el CECO "Facturación {Línea}" y vende en los CECOS zonales de ESA MISMA LÍNEA (verificado: ambos grupos comparten `id_line` 1/2; los términos y tasas también son por Línea).
+
+### 11.1 Regla D-4' (reemplaza el conjunto de aplicación de BR-PUR-06 y el switch FE)
+
+Clave de fuente de un CECO: `KEY(cc) = "line:" + cc.id_line` si el CECO tiene `id_line`; si NO tiene ⇒ `KEY(cc) = "cc:" + cc.id_cost_center` (unidad propia — dos CECOs sin línea jamás se switchan entre sí).
+
+- `K = { KEY(cc) : cc tiene ≥1 fila purchase en el escenario }`.
+- Cuota derivada por INGRESO (FE-S7 / `cogs` carryover) aplica solo a filas de ingreso con `KEY(cc) ∉ K`.
+- Cuota derivada por COMPRA aplica a toda fila purchase (fuente "purchase" / bloque FE).
+- Consecuencia: por cada Línea (o CECO sin línea) existe EXACTAMENTE una fuente de pago a proveedores. Una compra en cualquier CECO de la Línea (típico: el CECO "Facturación") apaga la derivación por ingreso de TODOS los CECOS de esa Línea (zonales incluidos). Un escenario sin compras ⇒ `K=∅` ⇒ comportamiento FE-S7 intacto (NFR-BE8-3).
+
+### 11.2 Cambios BE (carryover espejo de la regla)
+
+- `get_purchasing_cc_ids` → derivar **claves** (nombre a criterio del implementador, p. ej. `get_purchasing_source_keys`): 1 query (purchase JOIN cost_centers ⇒ `DISTINCT id_line` + `id_cost_center` para compras sin línea). NFR-BE8-2 sigue: +0/2 queries.
+- `get_carryover_cogs_lines`: el parámetro `purchasing_cc_ids` pasa a ser la estructura de claves; exclusión SQL/Python exacta: fila ingreso se excluye si (`id_line` ∈ purchasing_lines) ∨ (`id_line IS NULL ∧ id_cost_center` ∈ purchasing_ccs). El join a `CostCenterModel` ya existe (resuelve `id_line` de la tasa) — sin query extra.
+- `build_carryover_payload_lines`: usa las claves sobre la FUENTE (misma D-4', mismo escenario fuente).
+- Docstring de `planning.py` (API): redacción del switch ⇒ "por Línea (claves line:/cc:)".
+
+### 11.3 AC de la enmienda
+
+- **AC-BE8b-1:** escenario fuente con compra en CECO "Facturación X" (id_line=L) e ingreso en CECO zonal de la MISMA L: carryover del año siguiente responde SOLO origen `purchase` para ambas caras (cero `cogs` de la L); un CECO de otra Línea sin compras conserva su `cogs`.
+- **AC-BE8b-2:** compra en CECO SIN `id_line` ⇒ solo switcha filas de ingreso de ESE CECO (cc:); no toca otros CECOS sin línea.
+- **AC-BE8b-3:** escenario fuente sin compras ⇒ payload idéntico a A-01 (regresión).
+- **AC-BE8b-4 (266 end-to-end):** `GET /budget/planning/266/carryover` con flag OFF ⇒ enabled:false (sin cambio); la regla aplica al render FE (ver frontend.03_12 §7); BE: smoke purchases actualizado (44+ checks) sin romper los 43 existentes.

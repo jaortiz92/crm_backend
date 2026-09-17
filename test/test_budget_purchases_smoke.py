@@ -47,36 +47,72 @@ Cubre:
                missing_columns; celda de fecha vacia o Monto negativo ->
                400 invalid_rows con row = FILA EXCEL REAL (header fila 8
                => idx + 9, antes +2)
-    AC-BE8-5  Fuente N-1 (2096) con compra en CECO comprador (terminos
-               60/90/120 @ .34/.33/.33, importacion 15/12) + ingreso del
-               mismo CECO + ingreso de CECO NO comprador + compra "dirty"
-               anclada en N sin terminos + flag ON en N (2097): payload
-               EXACTO (orden BR-CO-10 extendido {line:0, cogs:1, purchase:2}),
-               cuotas origin "purchase" presentes, derivacion "cogs" del
-               CECO comprador AUSENTE (switch D-4), CECO no comprador
-               conserva su "cogs", la compra anclada en N jamas aparece
-               como origin "line" (BR-CO-12) y sin terminos => cuota unica
-               100 % en la fecha de importacion (D-S7-4 mirror). Escenario
-               SIN compras (2094->2095) => payload sin origin "purchase"
-               alguno (NFR-BE8-3)
-    AC-BE8-6  POST /clone escala las compras con el modifier (BR-CLN-02
-               generico) y toda copia sigue FIXED con payment_date NULL
+     AC-BE8-5  Fuente N-1 (2096) con compra en CECO comprador (terminos
+                60/90/120 @ .34/.33/.33, importacion 15/12) + ingreso del
+                mismo CECO + ingreso de CECO NO comprador + compra "dirty"
+                anclada en N sin terminos + flag ON en N (2097): payload
+                EXACTO (orden BR-CO-10 extendido {line:0, cogs:1, purchase:2}),
+                cuotas origin "purchase" presentes, derivacion "cogs" del
+                CECO comprador AUSENTE (switch D-4'), CECO no comprador
+                conserva su "cogs", la compra anclada en N jamas aparece
+                como origin "line" (BR-CO-12) y sin terminos => cuota unica
+                100 % en la fecha de importacion (D-S7-4 mirror). Escenario
+                SIN compras (2094->2095) => payload sin origin "purchase"
+                alguno (NFR-BE8-3)
+     AC-BE8b-1 Enmienda A-02 (spec §11, regla D-4': switch por LÍNEA): el
+                mismo bloque 2096->2097 replica el caso real 266 con los
+                CECOS y fechas REALES (compra 000001 25M 30/01, compra
+                000002 18M 30/05; ingresos zonales 000101/000201 de Kyly y
+                000202/000302 de Tinta anclados en dic-2096): la compra en
+                un CECO de la Línea L APAGA la derivacion cogs de TODOS los
+                CECOS de L (cero dobles en el payload EXACTO), un CECO de
+                otra Línea (100) conserva el suyo, y las compras 30/01 y
+                30/05 no generan filas en N (cuotas dentro de N-1). Se
+                anade ademas una seccion UNIT in-process (importa
+                app.crud.budget.planning contra la misma BD dev) que
+                compara get_carryover_cogs_lines SIN claves (comportamiento
+                pre-A-02: los 4 cecos zonales SI derivaban cogs = la doble
+                cuenta reportada) vs CON claves D-4' (cero)
+     AC-BE8b-2 CECO SIN id_line: compra solo en 998801 => la clave cc:
+                switcha ESE CECO y nada mas; centinela 998802 (sin compra)
+                no se ve afectado (check del set exacto de
+                get_purchasing_source_keys; a nivel payload, un ingreso sin
+                linea jamas genera cuota 2097 — ancla D-S7-4 — por lo que
+                la señal es el set de claves + payload exacto invariante)
+     AC-BE8b-3 Fuente sin compras => claves (∅,∅) => payload byte-identico
+                a A-01 (check unitario del set vacio sobre 2094 + lista
+                exacta del par centinela 2094->2095 de NFR-BE8-3)
+     NFR-BE8-2  (medido in-process con eventos SQLAlchemy de la misma
+                sesion): build_carryover_payload_lines = 5 queries sin
+                compras (BE-S7 + claves) y 6 con compras; +2 maximo sobre
+                BE-S7 independientemente del # de filas
+     AC-BE8-6  POST /clone escala las compras con el modifier (BR-CLN-02
+                generico) y NO copia behavior distinto de fixed
 
 Banco de pruebas de AC-BE8-1/2a/2/3/6: clon draft del presupuesto 69 (año
 2025) creado por API y ELIMINADO con DELETE /budget/{id} (delete-draft) al
 final, mas clon x1.2 del clon (la compra "temporada valida" de AC-BE8a-2
 se BORRA dentro del propio test: el banco queda en exactamente 2 compras
 para no mover los contadores de AC-BE8-3/6). Datos centinela de
-AC-BE8-4/a-1/a-4/5: anos 2094-2097 (sin datos historicos), uploads 2027 y
-el fixture 2026, todos prefijo de nombre "PURC " (+ CECO desechable
-'998801' sin id_line + tasas globales temporales 'SMOKE BE8 %' para que la
-derivacion COGS sea determinista en los anos centinela). Pre-clean y
+AC-BE8-4/a-1/a-4/5/b: anos 2094-2097 (sin datos historicos), uploads 2027 y
+el fixture 2026, todos prefijo de nombre "PURC " (+ CECOs desechables
+'998801'/'998802' sin id_line + tasas globales temporales 'SMOKE BE8 %'
+para que la derivacion COGS sea determinista en los anos centinela). Las
+compras/ingresos de AC-BE8b-1 usan los CECOS REALES del escenario 266
+(000001/000002, 000101/000201, 000202/000302) SOLO en modo lectura sobre
+el escenario centinela 2096 (nunca se toca el 266; su carryover esta OFF).
+La seccion unit requiere el venv del backend (sqlalchemy+deps) y exporta
+env vars sintetizadas de app.settings ANTES de importar app. Pre-clean y
 post-clean GARANTIZADOS (try/finally) con verificacion de 0 restos.
 
 Uso:
     1. docker compose -f docker-compose-dev.yaml up   (backend :8003)
     2. test/.env_test con USERNAME/PASSWORD
     3. python test/test_budget_purchases_smoke.py     (desde crm_backend/)
+       — la seccion unit t11c exige el interprete con las deps del backend
+       (venv_backend/Scripts/python.exe o equivalente: sqlalchemy, fastapi,
+       pydantic-settings, psycopg2), porque importa app.crud en el proceso
+       con env vars sintetizadas hacia la BD dev de .env_test
 """
 
 import sys
@@ -190,6 +226,9 @@ state.cc_buyer = None       # CECO con terminos 60/90/120 (line 1)
 state.cc_other = None       # CECO no comprador con terminos +30 (line 100)
 state.cc_exp = None         # CECO del gasto material (line 100)
 state.cc_null = None        # CECO desechable SIN id_line (sin terminos)
+state.cc_null2 = None       # 2o CECO SIN id_line: centinela b-2 SIN compra
+state.cc266 = {}            # codigos reales del 266 (code -> id) AC-BE8b-1
+state.lines266 = {}         # codigos del 266 -> id_line (verificacion setup)
 state.coll_real = None      # id_collection de "KAV26" (catalogo dev)
 state.coll_alt = None       # id_collection alterno para el PUT (temporada)
 state.rate_ids = []         # tasas globales temporales 2094/2096
@@ -399,11 +438,12 @@ def sweep():
             f"(SELECT id_budget FROM budgets WHERE budget_name LIKE '{MARK}%')")
     run_sql(f"DELETE FROM budgets WHERE budget_year IN ({years})")
     run_sql(f"DELETE FROM budgets WHERE budget_name LIKE '{MARK}%'")
-    # CECO desechable sin id_line (code fijo, idempotente)
+    # CECOs desechables sin id_line (codes fijos, idempotente)
     run_sql("DELETE FROM budget_lines WHERE id_cost_center IN "
             "(SELECT id_cost_center FROM cost_centers "
-            " WHERE cost_center_code='998801')")
-    run_sql("DELETE FROM cost_centers WHERE cost_center_code='998801'")
+            " WHERE cost_center_code IN ('998801','998802'))")
+    run_sql("DELETE FROM cost_centers WHERE cost_center_code IN "
+            "('998801','998802')")
     # tasas globales temporales de la derivacion COGS centinela
     run_sql("DELETE FROM line_cost_rates WHERE rate_name LIKE 'SMOKE BE8%'")
 
@@ -428,7 +468,8 @@ def postclean():
             "UNION SELECT id_budget FROM budgets WHERE budget_name LIKE "
             f"'{MARK}%')"))
         rest_cc = int(sql_scalar(
-            "SELECT count(*) FROM cost_centers WHERE cost_center_code='998801'"))
+            "SELECT count(*) FROM cost_centers WHERE cost_center_code IN "
+            "('998801','998802')"))
         rest_r = int(sql_scalar(
             "SELECT count(*) FROM line_cost_rates WHERE rate_name LIKE "
             "'SMOKE BE8%'"))
@@ -478,6 +519,11 @@ def t02_clone_bench():
         "JOIN line_payable_terms t ON t.id_line = cc.id_line "
         f"WHERE t.payment_days = 30 AND t.payment_pct = 1 "
         f"AND cc.id_cost_center <> {state.cc_buyer} "
+        # A-02: el control "otra Linea" debe estar OBLIGATORIAMENTE en una
+        # Linea DISTINTA a la del comprador (por-CECO ambas cosas casaban
+        # aqui; con el switch por-Linea un mismo id_line romperia t11).
+        f"AND cc.id_line <> (SELECT id_line FROM cost_centers "
+        f"WHERE id_cost_center = {state.cc_buyer}) "
         "ORDER BY cc.id_cost_center LIMIT 1"))
     state.cc_exp = state.cc_other
     state.cc_null = int(sql_scalar(
@@ -486,6 +532,16 @@ def t02_clone_bench():
         "((SELECT max(id_cost_center) + 1 FROM cost_centers), '998801', "
         "'SMOKE BE8 no-line', true, "
         "'BE-S8 smoke: CECO sin id_line (cuota unica D-S7-4)') "
+        "RETURNING id_cost_center"))
+    # AC-BE8b-2: SEGUNDO CECO sin id_line, centinela que NO tiene compra —
+    # la clave cc: del comprador debe switchar solo a si mismo (998801),
+    # nunca al 998802 (dos CECOs sin linea jamas se switchan entre si).
+    state.cc_null2 = int(sql_scalar(
+        "INSERT INTO cost_centers (id_cost_center, cost_center_code, "
+        "cost_center_name, is_active, description) VALUES "
+        "((SELECT max(id_cost_center) + 1 FROM cost_centers), '998802', "
+        "'SMOKE BE8 no-line 2', true, "
+        "'BE-S8 A-02 smoke: 2o CECO sin id_line (control cc: exacto)') "
         "RETURNING id_cost_center"))
     # NB: id explicito — la secuencia cost_centers_id_cost_center_seq de la
     # dev esta desincronizada (seed historico con ids fijos; last_value=1),
@@ -499,15 +555,46 @@ def t02_clone_bench():
     state.coll_alt = int(sql_scalar(
         "SELECT min(id_collection) FROM collections "
         f"WHERE short_collection_name <> 'KAV26' AND id_collection > 0"))
-    return ck("Setup: CECOs de fixture (comprador con >=2 terminos, "
-              "no-comprador, sin-line) + temporadas KAV26/alterna",
-              bool(state.cc_buyer) and bool(state.cc_other)
-              and bool(state.cc_null) and bool(state.coll_real)
-              and bool(state.coll_alt)
-              and state.coll_real != state.coll_alt,
-              f"buyer={state.cc_buyer} other={state.cc_other} "
-              f"null={state.cc_null} coll={state.coll_real}/"
-              f"{state.coll_alt}")
+    ck("Setup: CECOs de fixture (comprador con >=2 terminos, "
+       "no-comprador en OTRA Linea, 2 sin-line) + temporadas KAV26/alterna",
+       bool(state.cc_buyer) and bool(state.cc_other)
+       and bool(state.cc_null) and bool(state.cc_null2)
+       and bool(state.coll_real) and bool(state.coll_alt)
+       and state.coll_real != state.coll_alt,
+       f"buyer={state.cc_buyer} other={state.cc_other} "
+       f"null={state.cc_null}/{state.cc_null2} coll={state.coll_real}/"
+       f"{state.coll_alt}")
+    # ── AC-BE8b-1 (A-02, spec §11): los CECOS REALES del defecto 266.
+    # El comercio compra en "Facturación {Línea}" (000001 Kyly / 000002
+    # Tinta) y vende en los CECOS ZONALES de ESA MISMA Línea (000101/
+    # 000201 Kyly, 000202/000302 Tinta) — el switch por-CECO nunca casaba
+    # (comprador != vendedor) y pagaba doble. Se usan SOLO en lectura: la
+    # semilla va al escenario centinela 2096, el 266 real no se toca.
+    for code in ("000001", "000002", "000101", "000201", "000202", "000302"):
+        row = run_sql(
+            "SELECT id_cost_center, id_line FROM cost_centers "
+            f"WHERE cost_center_code = '{code}'", fetch=True)
+        if not row or row[0][1] is None:
+            return ck("Setup: los 6 CECOS reales del 266 existen y tienen "
+                      "id_line", False, f"problema con codigo {code}")
+        state.cc266[code] = int(row[0][0])
+        state.lines266[code] = int(row[0][1])
+    state.line_buyer = int(sql_scalar(
+        f"SELECT id_line FROM cost_centers WHERE id_cost_center="
+        f"{state.cc_buyer}"))
+    state.line_other = int(sql_scalar(
+        f"SELECT id_line FROM cost_centers WHERE id_cost_center="
+        f"{state.cc_other}"))
+    kyly, tinta = state.lines266["000001"], state.lines266["000002"]
+    return ck("Setup AC-BE8b-1: identidad de Lineas del 266 (zonal Kyly == "
+              "Linea de 000001, zonal Tinta == Linea de 000002, Kyly != "
+              "Tinta, Linea control fuera de ambas)",
+              state.lines266["000101"] == state.lines266["000201"] == kyly
+              and state.lines266["000202"] == state.lines266["000302"]
+              == tinta and kyly != tinta
+              and state.line_other not in (kyly, tinta),
+              f"cc={state.cc266} lines={state.lines266} "
+              f"buyer_line={state.line_buyer} other_line={state.line_other}")
 
 
 def _post_line(body, budget=None):
@@ -880,14 +967,16 @@ def t09_ac_be8_4_rejections():
 def t09b_ac_be8a1_real_fixture():
     """AC-BE8a-1 (HTTP end-to-end): subir el FIXTURE REAL del stakeholder
     ('Formato Solicitud Presupuesto Importaciones.xlsx': hoja 1 leida por
-    posicion con header en FILA 8 + hoja 'Tablas' ignorada, una fila de
-    ejemplo 000001/01-08-2026/KAV26/100.000.000) como file_compras de un
-    escenario 2026 RECIEN CREADO (los ingresos del SIIGO 2026 de test/data;
-    sin gastos). 201 + lines_purchase/total_purchase + la compra con
-    id_collection = KAV26 (si KAV26 NO existiera en el catalogo la subida
-    TAMBIEN daria 201 con temporada NULL — caso no-bloqueante cubierto en
-    t08), budget_date = fecha de IMPORTACION (01/08) no de solicitud (20/08)
-    y payment_date NULL. Limpieza via delete-draft en t13 (+sweep)."""
+    posicion con header en FILA 8 + hoja 'Tablas' ignorada). El stakeholder
+    actualizo el archivo a la forma del caso real 266: DOS filas
+    (000001 30/01/2026 50M y 000002 30/05/2026 20M, ambas Temporada
+    KAV26). Como file_compras de un escenario 2026 RECIEN CREADO (los
+    ingresos del SIIGO 2026 de test/data; sin gastos). 201 +
+    lines_purchase/total_purchase + las compras con id_collection = KAV26
+    (si KAV26 NO existiera en el catalogo la subida TAMBIEN daria 201 con
+    temporada NULL — caso no-bloqueante cubierto en t08), budget_date =
+    fechas de IMPORTACION (no la fecha de solicitud 20/08) y payment_date
+    NULL. Limpieza via delete-draft en t13 (+sweep)."""
     files = {
         "file_ingresos": (INCOME_2026_EXCEL.name, INCOME_2026_EXCEL.open("rb"),
                           XLSX_MIME),
@@ -904,10 +993,10 @@ def t09b_ac_be8a1_real_fixture():
                   (r.text[:200] if r is not None else "error"))
     body = r.json()
     state.upload_ids.append(body["id_budget"])
-    ck("AC-BE8a-1 201 del fixture real: lines_purchase=1 y total_purchase="
-       "100.000.000 (una fila = una compra, cero expansion)",
-       body["lines_purchase"] == 1
-       and abs(body["total_purchase"] - 100_000_000.0) < 0.01
+    ck("AC-BE8a-1 201 del fixture real: lines_purchase=2 y total_purchase="
+       "70.000.000 (una fila = una compra, cero expansion)",
+       body["lines_purchase"] == 2
+       and abs(body["total_purchase"] - 70_000_000.0) < 0.01
        and body["lines_income"] > 0
        and body["lines_expense"] == 0,
        f"{ {k: body[k] for k in ('lines_income', 'lines_expense', 'lines_purchase', 'total_purchase')} }")
@@ -918,16 +1007,19 @@ def t09b_ac_be8a1_real_fixture():
         "ORDER BY id_budget_line", fetch=True) or []
     coll_expected = str(state.coll_real)
     ok_persist = (
-        len(rows) == 1
-        and rows[0][0] == "PURCHASE"
-        and rows[0][1] == f"{FIX_YEAR}-08-01"   # fecha de IMPORTACION
-        and rows[0][2] is None                  # payment_date SIEMPRE NULL
-        and str(rows[0][3]) == coll_expected    # KAV26 -> id_collection
-        and abs(float(rows[0][4]) - 100_000_000.0) < 0.01
-        and rows[0][5] is None)                 # Descripcion vacia -> None
-    return ck("AC-BE8a-1 compra persistida: PURCHASE + budget_date="
-              "2026-08-01 (import., no solicitud) + payment NULL + "
-              f"id_collection={coll_expected} (Temporada KAV26 resuelta)",
+        len(rows) == 2
+        and all(r_[0] == "PURCHASE" for r_ in rows)
+        and rows[0][1] == "2026-01-30"            # importacion fila 1
+        and abs(float(rows[0][4]) - 50_000_000.0) < 0.01
+        and rows[1][1] == "2026-05-30"            # importacion fila 2
+        and abs(float(rows[1][4]) - 20_000_000.0) < 0.01
+        and all(r_[2] is None for r_ in rows)     # payment_date SIEMPRE NULL
+        and all(str(r_[3]) == coll_expected for r_ in rows)  # KAV26 -> id
+        and all(r_[5] is None for r_ in rows))    # Descripcion vacia -> None
+    return ck("AC-BE8a-1 compras persistidas: PURCHASE + budget_date="
+              "2026-01-30/2026-05-30 (import., no solicitud 20/08) + "
+              "payment NULL + id_collection={} (Temporada KAV26 resuelta "
+              "en ambas filas)".format(coll_expected),
               ok_persist, f"rows={rows}")
 
 
@@ -939,10 +1031,15 @@ def t10_seed_carryover():
     """Fixture SQL: tasas globales temporales (cogs_pct=50) para que la
     derivacion COGS sea determinista en 2094/2096; escenario fuente 2096
     con compra del CECO comprador (terminos leidos del catalogo), compra
-    'dirty' anclada en 2097 sin terminos (BR-CO-12), ingreso del comprador
-    (su derivacion cogs DEBE desaparecer por D-4), ingreso no-comprador
-    (cogs intacto) y gasto material con pago en 2097; fuente gemela 2094
-    SIN compras; targets 2097/2095 con flag ON via API."""
+    'dirty' anclada en 2097 sin terminos (BR-CO-12), ingreso del mismo
+    CECO comprador (su derivacion cogs DEBE desaparecer por D-4/D-4'),
+    ingreso de CECO en OTRA Linea (cogs intacto) y gasto material con
+    pago en 2097; MAS el bloque A-02 (AC-BE8b-1/2): replica del defecto
+    266 con los CECOS reales — compras en los "Facturacion" 000001/000002
+    y en el sin-linea 998801, ingresos en los zonales de LA MISMA Linea
+    (000101/000201 Kyly, 000202/000302 Tinta) y en el sin-linea
+    centinela 998802; fuente gemela 2094 SIN compras (AC-BE8b-3);
+    targets 2097/2095 con flag ON via API."""
     for y in (SRC_YEAR, NOSRC_YEAR):
         rr = api("POST", "/budget/line-cost-rate/", json={
             "id_line": None, "rate_name": f"SMOKE BE8 {y}",
@@ -983,6 +1080,47 @@ def t10_seed_carryover():
                 "2096-12-15", 10_000_000, "BE8 ingreso no-comprador")
     insert_line(state.src_id, state.cc_exp, "EXPENSE", "2096-12-20",
                 "2097-02-13", 1_000_000, "BE8 gasto material en N")
+    # ── AC-BE8b-1 (Enmienda A-02): replica el caso 266 con los CECOS,
+    # montos y dias REALES del defecto, anclados al par centinela
+    # 2096->2097. Las compras entran en los CECOS "Facturacion {Linea}"
+    # (000001/000002) y los ingresos en los ZONALES de la MISMA Linea
+    # (000101/000201 Kyly; 000202/000302 Tinta). Las fechas reales de
+    # importacion (30/01 y 30/05) + terminos (+60/90/120 y +90) siguen
+    # cayendo dentro de N-1: los 25M/18M APORTAN CERO filas 2097 y solo
+    # ejercen de LLAVE sobre sus Lineas. Con el switch viejo por-CECO,
+    # los cuatro ingresos zonales anclados en diciembre SI derivaban
+    # cuotas cogs en 2097 (la doble cuenta reportada); bajo D-4' deben
+    # estar TODOS ausentes — el payload exacto de t11, que no los
+    # incluye, es el centinela.
+    insert_line(state.src_id, state.cc266["000001"], "PURCHASE",
+                "2096-01-30", None, 25_000_000, "BE8b-1 266 Fact. Kyly")
+    insert_line(state.src_id, state.cc266["000002"], "PURCHASE",
+                "2096-05-30", None, 18_000_000, "BE8b-1 266 Fact. Tinta")
+    insert_line(state.src_id, state.cc266["000101"], "INCOME", "2096-12-05",
+                "2096-12-15", 4_000_000, "BE8b-1 266 zona Costa Kyly")
+    insert_line(state.src_id, state.cc266["000201"], "INCOME", "2096-12-10",
+                "2096-12-20", 6_000_000, "BE8b-1 266 zona Antioquia Kyly")
+    insert_line(state.src_id, state.cc266["000202"], "INCOME", "2096-12-10",
+                "2096-12-20", 3_000_000, "BE8b-1 266 zona Antioquia Tinta")
+    insert_line(state.src_id, state.cc266["000302"], "INCOME", "2096-12-15",
+                "2096-12-25", 5_000_000, "BE8b-1 266 zona Tolima Tinta")
+    # ── AC-BE8b-2: CECOS SIN id_line. El cc_null tiene compra (la "dirty"
+    # de arriba) e ingreso propio; cc_null2 es el centinela SIN compra.
+    # Un ingreso sin Linea jamas genera cuota 2097 (D-S7-4: pago unico en
+    # su propia ancla N-1), asi que la senal del cc: exacto vive en el set
+    # de claves (check unitario t11c) y en que el payload exacto NO cambia.
+    insert_line(state.src_id, state.cc_null, "INCOME", "2096-12-08",
+                "2096-12-18", 4_000_000, "BE8b-2 ingreso cc: comprador")
+    insert_line(state.src_id, state.cc_null2, "INCOME", "2096-12-09",
+                "2096-12-19", 2_000_000, "BE8b-2 ingreso cc: sin compra")
+    # terminos de la Linea Tinta (266): espejo de la doble cuenta unitaria
+    state.tinta_terms = run_sql(
+        "SELECT t.payment_days, t.payment_pct FROM line_payable_terms t "
+        "JOIN cost_centers cc ON cc.id_line=t.id_line "
+        f"WHERE cc.id_cost_center={state.cc266['000002']} "
+        "ORDER BY t.payment_days, t.id_line_payable_term", fetch=True) or []
+    if not state.tinta_terms:
+        return ck("Setup: la Linea Tinta del 266 tiene terminos", False)
     # fuente 2094 SIN compras (regresion NFR-BE8-3)
     insert_line(state.nosrc_id, state.cc_other, "INCOME", "2094-12-05",
                 "2094-12-15", 10_000_000, "BE8 ingreso sin compras")
@@ -994,9 +1132,11 @@ def t10_seed_carryover():
         if rf is None or rf.status_code != 200:
             return ck(f"Setup: flag ON en {tgt} -> 200", False,
                       (rf.text[:100] if rf is not None else "error"))
-    return ck("Fixture arrastre: tasas 2094/2096 + fuente con 2 compras + "
-              "ingresos + flag ON", True,
-              f"buyer_terms={state.buyer_terms} other_terms={state.other_terms}")
+    return ck("Fixture arrastre: tasas 2094/2096 + fuente con 4 compras "
+              "(266-equivalentes) + ingresos misma/otra Linea + bloque "
+              "sin-linea + flag ON", True,
+              f"buyer_terms={state.buyer_terms} other_terms={state.other_terms} "
+              f"tinta_terms={state.tinta_terms}")
 
 
 def _expected_carryover():
@@ -1035,8 +1175,9 @@ def t11_ac_be8_5_carryover():
        "orden fecha/origin/id", ok_list,
        f"got={payload_tuples(payload)} exp={expected}")
     origins = {(l["origin"], l["id_cost_center"]) for l in payload["lines"]}
-    ck("AC-BE8-5 switch D-4: el CECO comprador NO tiene ninguna fila 'cogs' "
-       "(su pago se deriva de la compra) y si de 'purchase'",
+    ck("AC-BE8-5 switch D-4/D-4': el CECO comprador NO tiene ninguna fila "
+       "'cogs' (su pago se deriva de la compra) y si de 'purchase' — con "
+       "compra e ingreso en el MISMO CECO ambas reglas coinciden",
        all(o != "cogs" for o, cc in origins if cc == state.cc_buyer)
        and ("purchase", state.cc_buyer) in origins)
     ck("AC-BE8-5/BR-CO-12: la compra anclada en N aparece SOLO como "
@@ -1057,9 +1198,188 @@ def t11_ac_be8_5_carryover():
     return True
 
 
+def t11b_ac_be8b_payload():
+    """AC-BE8b-1/2 cara PAYLOAD sobre el target 2097 (la lista EXACTA de
+    t11 es el centinela global de cero dobles; aqui se etiquetan las
+    caras individuales de la regla D-4' sobre el bloque 266-equivalente
+    sembrado en t10)."""
+    payload = carry_payload(state.tgt_id)
+    if payload is None or not payload.get("enabled"):
+        return ck("AC-BE8b GET carryover 2097 habilitado", False,
+                  str(payload)[:120])
+    cogs_ccs = {l["id_cost_center"] for l in payload["lines"]
+                if l["origin"] == "cogs"}
+    pur_ccs = {l["id_cost_center"] for l in payload["lines"]
+               if l["origin"] == "purchase"}
+    zonal = {state.cc266[c] for c in ("000101", "000201", "000202", "000302")}
+    buyer_ccos = {state.cc266["000001"], state.cc266["000002"]}
+    ck("AC-BE8b-1: compras en 000001/000002 switchan TODA la Linea — los "
+       "ingresos ZONALES de esa misma Linea (000101/000201/000202/000302) "
+       "PERDIERON su fila 'cogs' (cero doble cuenta 266)",
+       cogs_ccs.isdisjoint(zonal | buyer_ccos | {state.cc_buyer}),
+       f"cogs_ccs={sorted(cogs_ccs)} zonal={sorted(zonal)}")
+    ck("AC-BE8b-1 (inverso): un CECO de OTRA Linea sin compras (control "
+       f"linea {state.line_other}) CONSERVA su 'cogs' intacto",
+       state.cc_other in cogs_ccs, f"cogs_ccs={sorted(cogs_ccs)}")
+    ck("AC-BE8b-1/BR-CO-09 (fechas reales 30/01 y 30/05): las compras "
+       "25M/18M cuyas cuotas caen todas dentro de N-1 NO aportan ninguna "
+       "fila origin 'purchase' a N — solo ejercen su llave de Linea",
+       pur_ccs.isdisjoint(buyer_ccos), f"pur_ccs={sorted(pur_ccs)}")
+    ck("AC-BE8b-2 (payload): la compra sin Linea switcha SOLO su cc: — ni "
+       "998801 (ingreso propio con compra) ni el centinela 998802 (sin "
+       "compra) muestran 'cogs' (un ingreso sin Linea jamas arrastra: "
+       "cuota unica en su ancla N-1), y la compra dirty de 998801 sigue "
+       "presente como 'purchase' unica de su cc:",
+       cogs_ccs.isdisjoint({state.cc_null, state.cc_null2})
+       and ("purchase", state.cc_null) in
+       {(l["origin"], l["id_cost_center"]) for l in payload["lines"]},
+       f"cogs_ccs={sorted(cogs_ccs)} pur={sorted(pur_ccs)}")
+    return True
+
+
+def _unit_planning():
+    """Importa el MISMO codigo del backend (modulo montado en el contenedor
+    dev :8003) dentro de este proceso para checks unitarios de la Enmienda
+    A-02, con sesion SQLAlchemy propia contra la BD dev de .env_test. Los
+    env vars de app/settings.py se sintetizan ANTES del import (sin .env en
+    el host); `import app.api` va primero porque es el orden que rompe el
+    ciclo core.auth <-> app.api.utils en el arranque real (importar
+    app.crud directamente lo dispararia)."""
+    import os
+    root = str(TEST_DIR.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    for key, val in {
+        "ENV": "test",
+        "POSTGRES_USER": PG_USER, "POSTGRES_PASSWORD": PG_PASSWORD,
+        "POSTGRES_DB": PG_DB, "POSTGRES_HOST": PG_HOST,
+        "POSTGRES_PORT": str(PG_PORT),
+        "SECRET_KEY": "smoke-unit", "ALGORITHM": "HS256",
+        "ACCESS_TOKEN_EXPIRE_MINUTES": "60",
+        "BACKEND_CORS_ORIGINS": "*", "USERNAME": "smoke",
+        "CLIENT_ID": "smoke", "CLIENT_SECRET": "smoke",
+        "TENANT_ID": "smoke", "FRONTEND_URL": "http://127.0.0.1:5173",
+    }.items():
+        os.environ[key] = val
+    import app.api  # noqa: F401 — pre-warm para romper el import circular
+    from app.crud.budget import planning
+    from app.db import SessionLocal, engine
+    return planning, SessionLocal, engine
+
+
+def t11c_unit_a02():
+    """AC-BE8b-2/3 + NFR-BE8-2 MEDIDO, in-process sobre la misma BD dev con
+    el fixture vivo de t10:
+
+    * el par de claves D-4' de get_purchasing_source_keys es EXACTO (las
+      Lineas de todas las compras + solo el CECO sin Linea comprador en
+      cc:; el centinela sin compra 998802 jamas entra) — esta es la senal
+      discriminante del switch cc:, que a nivel payload es invisible por
+      construccion (un ingreso sin Linea nunca deriva cuota en N: D-S7-4
+      ancla en N-1);
+    * la derivacion SIN claves (comportamiento pre-A-02) si produce las
+      cuotas cogs de los zonales Kyly/Tinta en 2097 (la doble cuenta del
+      reporte) y CON las claves D-4' desaparecen todas, mientras la Linea
+      control conserva las suyas;
+    * el conteo real de SELECTs por carryover completo: 6 con compras /
+      5 sin ellas (BE-S7 = 4 ⇒ +2/+1, NFR-BE8-2 intacto), constante
+      frente a los 12 filas sembradas en t10."""
+    try:
+        planning, SessionLocal, engine = _unit_planning()
+    except Exception as e:
+        return ck("Unit A-02: import app.crud.budget.planning in-process",
+                  False, f"{type(e).__name__}: {str(e)[:130]}")
+    ck("Unit A-02: import app.crud.budget.planning in-process (mismo "
+       "modulo que sirve :8003 via volumen montado)", True)
+    db = SessionLocal()
+    try:
+        lines, ccs = planning.get_purchasing_source_keys(db, state.src_id)
+        exp_lines = {state.lines266["000001"], state.lines266["000002"],
+                     state.line_buyer}
+        ck("AC-BE8b-2 unit: claves de la fuente 2096 == (lines "
+           "{Kyly,Tinta,buyer}, cc {998801}) — una compra sin Linea NUNCA "
+           "contamina el set de lines y 998802 (sin compra) no aparece",
+           lines == exp_lines and ccs == {state.cc_null},
+           f"lines={sorted(lines)} ccs={sorted(ccs)}")
+        empty = planning.get_purchasing_source_keys(db, state.nosrc_id)
+        ck("AC-BE8b-3 unit (centinela): fuente SIN compras => K=(∅,∅) => "
+           "scan FE-S7/A-01 intacto (exclusion inerte)",
+           empty == (set(), set()), f"k={empty}")
+        zonal = {state.cc266[c] for c in ("000101", "000201", "000202",
+                                          "000302")}
+        legacy = planning.get_carryover_cogs_lines(
+            db, state.src_id, SRC_YEAR, TGT_YEAR)
+        legacy_ccs = {r["id_cost_center"] for r in legacy}
+        switched = planning.get_carryover_cogs_lines(
+            db, state.src_id, SRC_YEAR, TGT_YEAR,
+            purchasing_source_keys=(lines, ccs))
+        switched_ccs = {r["id_cost_center"] for r in switched}
+        ck(f"AC-BE8b-1 unit (doble cuenta del reporte): SIN claves los 4 "
+           f"CECOS zonales ({sorted(zonal)}) SI derivan cuotas cogs 2097 "
+           f"({len(legacy)} filas), y el comprador de su propia Linea "
+           "tambien",
+           zonal <= legacy_ccs and state.cc_buyer in legacy_ccs,
+           f"legacy={len(legacy)} ccs={sorted(legacy_ccs)}")
+        ck("AC-BE8b-1 unit (switch D-4'): CON las claves de la fuente "
+           "cero filas cogs en las Lineas compradoras — el payload "
+           "resultante es SOLO el cogs del control (misma señal que la "
+           "lista exacta HTTP de t11)",
+           switched_ccs == {state.cc_other} and len(switched) < len(legacy),
+           f"switched={len(switched)} ccs={sorted(switched_ccs)}")
+        only_tinta = planning.get_carryover_cogs_lines(
+            db, state.src_id, SRC_YEAR, TGT_YEAR, purchasing_source_keys=(
+                {state.lines266["000002"]}, set()))
+        only_tinta_ccs = {r["id_cost_center"] for r in only_tinta}
+        ck("AC-BE8b-2 unit (predicado, rama line:): pasar SOLO la llave "
+           "Tinta switcha los zonales de Tinta y deja intactos Kyly "
+           "(comprador aparte), el del buyer y el control",
+           only_tinta_ccs == {state.cc_buyer, state.cc266["000101"],
+                              state.cc266["000201"], state.cc_other},
+           f"ccs={sorted(only_tinta_ccs)}")
+        # NFR-BE8-2 medido con eventos del engine (solo SELECTs):
+        from sqlalchemy import event
+        counter = {"n": 0}
+
+        def _count(conn, cursor, statement, parameters, context,
+                   executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                counter["n"] += 1
+
+        event.listen(engine, "before_cursor_execute", _count)
+        try:
+            counter["n"] = 0
+            built_src = planning.build_carryover_payload_lines(
+                db, state.src_id, SRC_YEAR, TGT_YEAR)
+            n_src = counter["n"]
+            counter["n"] = 0
+            planning.build_carryover_payload_lines(
+                db, state.nosrc_id, NOSRC_YEAR, NOTGT_YEAR)
+            n_nosrc = counter["n"]
+        finally:
+            event.remove(engine, "before_cursor_execute", _count)
+        ck("NFR-BE8-2 (medido por eventos SQLAlchemy, misma fuente con "
+           "12 filas): carryover completo = 6 SELECT con compras / 5 sin "
+           "compras (BE-S7 pagaba 4 ⇒ +2/+1 constantes)",
+           n_src == 6 and n_nosrc == 5, f"con={n_src} sin={n_nosrc}")
+        http_payload = carry_payload(state.tgt_id) or {}
+        ck("Paridad unit-vs-HTTP: build_carryover_payload_lines in-process "
+           "coincide con la respuesta de la API (mismo codigo, cero "
+           "deriva)",
+           [(l["id_cost_center"], l["origin"], l["projected_amount"])
+            for l in http_payload.get("lines", [])]
+           == [(l.id_cost_center, l.origin, l.projected_amount)
+               for l in built_src],
+           f"http={len(http_payload.get('lines', []))} unit={len(built_src)}")
+    finally:
+        db.close()
+    return True
+
+
 def t12_nfr_be8_3_no_purchase():
-    """NFR-BE8-3: fuente SIN compras => payload sin origin 'purchase' y
-    material+cogs exactos (equivalencia con el contrato pre-BE-S8)."""
+    """NFR-BE8-3 / AC-BE8b-3: fuente SIN compras => payload sin origin
+    'purchase' y material+cogs EXACTOS — con A-02 las claves quedan
+    (∅,∅) (check unitario en t11c) y el contrato es byte-identico al de
+    A-01."""
     payload = carry_payload(state.notgt_id)
     if payload is None:
         return ck("NFR-BE8-3 carryover 2095 legible", False)
@@ -1073,8 +1393,9 @@ def t12_nfr_be8_3_no_purchase():
     expected.sort(key=lambda t: (t[0], {"line": 0, "cogs": 1}[t[1]]))
     ok = close_tuples(got, expected) and all(
         l["origin"] != "purchase" for l in payload["lines"])
-    return ck("NFR-BE8-3 escenario sin compras: payload == line+cogs de "
-              "siempre, cero 'purchase'", ok, f"got={got} exp={expected}")
+    return ck("NFR-BE8-3/AC-BE8b-3 escenario sin compras: payload == "
+              "line+cogs de siempre (identico a A-01), cero 'purchase'",
+              ok, f"got={got} exp={expected}")
 
 
 def t13_cleanup_bench_and_report():
@@ -1112,7 +1433,8 @@ def main():
     print("=" * 64)
     print(f"Base URL : {BASE_URL}")
     print(f"Banco: clon draft del presupuesto 69 | centinelas: "
-          f"{SRC_YEAR}->{TGT_YEAR}, {NOSRC_YEAR}->{NOTGT_YEAR}, upload {UP_YEAR}")
+          f"{SRC_YEAR}->{TGT_YEAR} (+bloque A-02/266), "
+          f"{NOSRC_YEAR}->{NOTGT_YEAR}, upload {UP_YEAR}")
     print()
 
     print("-- login + pre-clean (idempotencia) --")
@@ -1137,6 +1459,8 @@ def main():
         t09b_ac_be8a1_real_fixture,
         t10_seed_carryover,
         t11_ac_be8_5_carryover,
+        t11b_ac_be8b_payload,
+        t11c_unit_a02,
         t12_nfr_be8_3_no_purchase,
         t13_cleanup_bench_and_report,
     ]
