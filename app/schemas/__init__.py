@@ -60,6 +60,8 @@ from .budget import (
     BudgetVsActual, CashFlowProjection, BudgetTrackingSummary,
     LineCostRate, LineCostRateCreate, LineCostRateUpdate,
     LinePayableTerm, LinePayableTermCreate,
+    LineInternmentRate, LineInternmentRateCreate,
+    LineInternmentTerm, LineInternmentTermCreate,
     CommissionRate, CommissionRateBase, CommissionRateCreate, CommissionRateUpdate,
     PnLResponse, PnLMeta, PnLStatement, PnLComparison,
     PnLProfit, PnLOpex, OpexBreakdownItem, CogsBudgetTraceItem,

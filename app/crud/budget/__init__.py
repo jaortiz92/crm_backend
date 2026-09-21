@@ -10,6 +10,8 @@ from .accountPayable import *
 from .payableLedger import *
 from .lineCostRate import *
 from .linePayableTerm import *
+from .lineInternmentRate import *
+from .lineInternmentTerm import *
 from .commissionRate import *
 from .uploadStatus import *
 from .planning import *

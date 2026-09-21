@@ -84,8 +84,8 @@ Cubre:
                 exacta del par centinela 2094->2095 de NFR-BE8-3)
      NFR-BE8-2  (medido in-process con eventos SQLAlchemy de la misma
                 sesion): build_carryover_payload_lines = 5 queries sin
-                compras (BE-S7 + claves) y 6 con compras; +2 maximo sobre
-                BE-S7 independientemente del # de filas
+                compras (BE-S7 + claves) y 6 con compras; BE-S9 lo sube a 8;
+                +4 maximo sobre BE-S7, sin compras sigue en 5, constante
      AC-BE8-6  POST /clone escala las compras con el modifier (BR-CLN-02
                 generico) y NO copia behavior distinto de fixed
 
@@ -1281,8 +1281,8 @@ def t11c_unit_a02():
       cuotas cogs de los zonales Kyly/Tinta en 2097 (la doble cuenta del
       reporte) y CON las claves D-4' desaparecen todas, mientras la Linea
       control conserva las suyas;
-    * el conteo real de SELECTs por carryover completo: 6 con compras /
-      5 sin ellas (BE-S7 = 4 ⇒ +2/+1, NFR-BE8-2 intacto), constante
+    * el conteo real de SELECTs por carryover completo: 8 con compras /
+      5 sin ellas (BE-S8 = 6; BE-S9 +2 batch constantes), constante
       frente a los 12 filas sembradas en t10."""
     try:
         planning, SessionLocal, engine = _unit_planning()
@@ -1358,9 +1358,9 @@ def t11c_unit_a02():
         finally:
             event.remove(engine, "before_cursor_execute", _count)
         ck("NFR-BE8-2 (medido por eventos SQLAlchemy, misma fuente con "
-           "12 filas): carryover completo = 6 SELECT con compras / 5 sin "
-           "compras (BE-S7 pagaba 4 ⇒ +2/+1 constantes)",
-           n_src == 6 and n_nosrc == 5, f"con={n_src} sin={n_nosrc}")
+           "12 filas): carryover completo = 8 SELECT con compras / 5 sin "
+           "compras (BE-S8 pagaba 6; BE-S9 +2 batch NFR-BE9-2)",
+           n_src == 8 and n_nosrc == 5, f"con={n_src} sin={n_nosrc}")
         http_payload = carry_payload(state.tgt_id) or {}
         ck("Paridad unit-vs-HTTP: build_carryover_payload_lines in-process "
            "coincide con la respuesta de la API (mismo codigo, cero "

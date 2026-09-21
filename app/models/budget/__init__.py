@@ -10,4 +10,6 @@ from .accountPayable import AccountPayable
 from .payableLedger import PayableLedger
 from .lineCostRate import LineCostRate
 from .linePayableTerm import LinePayableTerm
+from .lineInternmentRate import LineInternmentRate
+from .lineInternmentTerm import LineInternmentTerm
 from .commissionRate import CommissionRate

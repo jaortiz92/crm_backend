@@ -22,6 +22,12 @@ from .accountPayable import (
 from .payableLedger import PayableLedger, PayableLedgerCreate
 from .lineCostRate import LineCostRate, LineCostRateCreate, LineCostRateUpdate
 from .linePayableTerm import LinePayableTerm, LinePayableTermCreate
+from .lineInternmentRate import (
+    LineInternmentRate, LineInternmentRateCreate,
+)
+from .lineInternmentTerm import (
+    LineInternmentTerm, LineInternmentTermCreate,
+)
 from .commissionRate import (
     CommissionRate, CommissionRateBase, CommissionRateCreate, CommissionRateUpdate,
 )

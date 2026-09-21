@@ -39,5 +39,7 @@ from .budget import (
     AccountPayable, PayableLedger,
     LineCostRate,
     LinePayableTerm,
+    LineInternmentRate,
+    LineInternmentTerm,
     CommissionRate,
 )

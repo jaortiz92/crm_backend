@@ -320,10 +320,26 @@ class PlanningCarryoverLine(BaseModel):
       (never persisted): same shape as "cogs" (id_budget_line = null,
       line_type = "expense", budget_date = the import date, payment_date =
       import date + term offset, single 100 % row without terms, D-S7-4)
-      but amount = projected_amount × payment_pct (NO cogs_pct) and
-      description = "Pago a proveedor (arrastre)". Emitted only for
-      purchasing CECOs of the source (single-source rule D-4: their "cogs"
-      derivation is suppressed so the supplier is never double-counted).
+      but amount = costo_prov × payment_pct (NO cogs_pct) and description
+      = "Pago a proveedor (arrastre)". Emitted only for purchasing CECOs
+      of the source (single-source rule D-4: their "cogs" derivation is
+      suppressed so the supplier is never double-counted). BE-S9 §4
+      RE-SEMANTIZED the base: projected_amount is the TOTAL cost and
+      costo_prov = projected_amount / (1 + internment_pct) is only the
+      SUPPLIER component (D-S9-1), so these rows sum to the split part,
+      not to the whole merchandise value.
+    - "internment": BE-S9-INTERNMENT-SPLIT §4 installment of the
+      IMPORTATION/NATIONALIZATION component of the SAME purchase rows
+      (never persisted): identical shape (line_type = "expense",
+      budget_date = the import date anchor shared with the supplier
+      stream, A-3, payment_date = anchor + term offset or the anchor
+      itself at 100 % when the Line has a rate but no internment terms,
+      BR-INT-04) but amount = costo_int × payment_pct with
+      costo_int = projected_amount − costo_prov, description =
+      "Pago de internación (arrastre)" and ZERO rows whenever the Line
+      has no internment rate (pct = 0 ⇒ single-stream payload,
+      byte-identical to BE-S8, BR-INT-05/NFR-BE9-3). The pcts of both
+      catalogs apply as-is, never normalized (A-9).
     """
 
     id_budget_line: Optional[int] = None
@@ -333,7 +349,7 @@ class PlanningCarryoverLine(BaseModel):
     payment_date: Optional[date] = None
     projected_amount: float
     description: Optional[str] = None
-    origin: Literal["line", "cogs", "purchase"] = "line"
+    origin: Literal["line", "cogs", "purchase", "internment"] = "line"
 
     class Config:
         from_attributes = True

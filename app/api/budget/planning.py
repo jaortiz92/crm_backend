@@ -519,7 +519,11 @@ def planning_get_carryover(
        each month-end × line_payable_terms; D-S7-4 single 100 % row when
        the Line has no terms) and with the derived supplier-payment
        installments of the source's purchase rows (BR-PUR-05, origin
-       "purchase"). Single-source switch by LINE per rule D-4' (backend.
+       "purchase") and with their derived INTERNMENT installments when
+       the Line has an internment rate — the §4 split re-semantizes the
+       purchase base into supplier + internment components (BE-S9,
+       origin "internment", zero rows without rate: NFR-BE9-3).
+       Single-source switch by LINE per rule D-4' (backend.
        02_18 §11, Enmienda A-02 — replaced the old per-CECO D-4): every
        source unit pays its suppliers from EXACTLY one source — the unit
        key is line:<id_line> for a CECO belonging to a Line and cc:
@@ -531,10 +535,12 @@ def planning_get_carryover(
        purchases answer their own origin-"purchase" installments instead.
        A source without purchases keeps the FE-S7 behavior intact
        (NFR-BE8-3). Ordered by BR-CO-10 (effective date ASC, origin rank
-       line < cogs < purchase, id null-safe). Query economy BR-CO-11/
-       NFR-BE8-2: a constant handful of queries per request (+at most 2
-       for the switch: source keys + purchases×terms) regardless of row
-       counts.
+       line < cogs < purchase < internment — BE-S9 §5.4-3, id null-safe).
+       Query economy BR-CO-11/NFR-BE8-2: a constant handful of queries
+       per request (+at most 2 for the switch: source keys +
+       purchases×terms, +at most 2 more for the §4 split catalogs —
+       skipped when no purchase resolves to a Line, NFR-BE9-2) regardless
+       of row counts.
     4. No candidate -> legal 200 {enabled:true, source:null, lines:[],
        unavailable_reason:"no_source"} (BR-CO-08: toggling ON never
        validates a source).

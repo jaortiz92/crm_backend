@@ -44,6 +44,16 @@ keep theirs; merge order BR-CO-10 extended with origin rank
 {line:0, cogs:1, purchase:2}). Query economy NFR-BE8-2: +at most 2 SQL
 queries per carryover request (purchasing source keys + purchases×terms),
 +0 derived-purchase queries when the source has no purchases.
+BE-S9-INTERNMENT-SPLIT (backend.02_19 §5.4) re-semantizes the base of
+that purchase stream: projected_amount IS THE TOTAL COST, split per §4
+through ``line_internment_rates`` into a supplier component (the origin
+"purchase" rows above, mechanics untouched) and an internment component
+paid by ``line_internment_terms`` as NEW origin="internment" rows (rank
+extended to {line:0, cogs:1, purchase:2, internment:3}, merge
+byte-identical while no rate is configured — NFR-BE9-3). +at most 2
+batch queries per request, skipped entirely when no purchase resolves to
+a Line (NFR-BE9-2). Line rows themselves are untouched (BR-PUR-01..04,
+payment_date still NULL).
 
 Transaction convention (T-05): write paths perform a SINGLE commit at the
 end of the operation; on failure the caller rolls back. The planning upload
@@ -65,6 +75,8 @@ from app.models.budget import BudgetLine as BudgetLineModel
 from app.models.budget import CostCenter as CostCenterModel
 from app.models.budget import LineCostRate as LineCostRateModel
 from app.models.budget import LinePayableTerm as LinePayableTermModel
+from app.models.budget import LineInternmentRate as LineInternmentRateModel
+from app.models.budget import LineInternmentTerm as LineInternmentTermModel
 from app.models.budget.budgetLine import BehaviorTypeEnum, LineTypeEnum
 from app.models.collection import Collection as CollectionModel
 from app.schemas.budget import (
@@ -389,7 +401,9 @@ def create_planning_line(
     to the existing existence validation (404 "Collection {id} not
     found" when unknown); a sent ``payment_date`` is FORCED to NULL
     in silence (BR-PUR-03, the supplier installments of a purchase are
-    read-derived, NFR-BE8-1). All other validations (budget 404, CECO
+    read-derived, NFR-BE8-1); BE-S9 §4: that read-derivation now splits
+    projected_amount into the supplier and internment streams (§4) — the
+    row itself is untouched. All other validations (budget 404, CECO
     404, year 400, single commit) stand.
     """
     db_budget = db.query(BudgetModel).filter(
@@ -460,7 +474,9 @@ def update_planning_line(
     a PERSISTED purchase row a SENT payment_date -> 400
     {"reason": PURCHASE_PAYMENT_DATE_REASON} (the installments derive
     from the Line's payable terms — writing a date would silently
-    desynchronize them) and a SENT variable_rate -> 400 with the
+    desynchronize them; BE-S9 §4: the same read-derivation splits the
+    amount into the supplier and internment streams, row untouched) and
+    a SENT variable_rate -> 400 with the
     BR-PUR-02 shape message. A SENT id_collection is now VALID (season
     metadata parity with income): it flows to the generic existence
     check below -> 404 "Collection {id} not found" when unknown. "Sent"
@@ -961,19 +977,31 @@ def get_carryover_cogs_lines(
 #
 # The supplier installments of the source's PURCHASE rows are derived
 # exactly like the COGS ones above (same D-7 term order, same D-S7-4
-# no-terms fallback, same "apply the pcts as-is" rule and raw-float math)
-# — only the base differs: the merchandise value projected_amount itself
-# instead of income × cogs_pct (there is no rate lookup and no per-month
-# pool: the purchase IS the cost). Query economy (NFR-BE8-2): the pair
-# below adds AT MOST 2 SQL round trips per carryover request — 1 for the
-# purchasing source keys (D-4', A-02; which also feed the exclusion of
+# no-terms fallback, same "apply the pcts as-is" rule and raw-float math).
+# BE-S9-INTERNMENT-SPLIT (backend.02_19 §4) RE-SEMANTIZED the base: the
+# merchandise value projected_amount is the TOTAL cost and splits into a
+# supplier component (total / (1 + internment_pct), paid through
+# line_payable_terms — origin "purchase") and an internment component
+# (total − supplier, paid through line_internment_terms — origin
+# "internment", NEW stream); a Line without rate ⇒ pct = 0 ⇒ the supplier
+# component IS the total and the payload is byte-identical to BE-S8
+# (NFR-BE9-3). There is still no cogs_pct rate lookup: the purchase IS
+# the cost. Query economy (NFR-BE8-2/NFR-BE9-2): the pair below adds
+# AT MOST 2 SQL round trips per carryover request — 1 for the purchasing
+# source keys (D-4', A-02; which also feed the exclusion of
 # get_carryover_cogs_lines) and 1 for the purchases×terms join —
-# regardless of row counts. A source without purchases pays only the keys
-# query (the join short-circuits on the empty pair in
+# regardless of row counts; get_carryover_purchase_lines itself pays at
+# most 3 (join + 2 split-catalog batches, batches skipped when no
+# purchase resolves to a Line). A source without purchases pays only the
+# keys query (the join short-circuits on the empty pair in
 # build_carryover_payload_lines).
 # ──────────────────────────────────────────────────────────────
 
 PURCHASE_CARRYOVER_DESCRIPTION = "Pago a proveedor (arrastre)"
+
+# BE-S9 (backend.02_19 §5.4-2): description of the internment stream
+# rows derived alongside the supplier ones (AC-BE9-3 literal).
+INTERNMENT_CARRYOVER_DESCRIPTION = "Pago de internación (arrastre)"
 
 
 def get_purchasing_source_keys(
@@ -1031,36 +1059,64 @@ def get_purchasing_source_keys(
 def get_carryover_purchase_lines(
     db: Session, id_budget_source: int, budget_year_target: int
 ) -> List[Dict[str, Any]]:
-    """BR-PUR-05: supplier-payment installments derived from the PURCHASE
-    rows of the source scenario (spec §4), kept when
-    year(installment_date) == ``budget_year_target`` (BR-CO-09 mirror —
-    the import itself belongs to N−1, a January/February installment is
+    """BR-PUR-05 (extended by BE-S9 BR-INT-06): the TWO payment streams
+    derived from the PURCHASE rows of the source scenario (spec §4), kept
+    installment by installment when year(installment_date) ==
+    ``budget_year_target`` (BR-CO-09 mirror applied to BOTH streams — the
+    import itself belongs to N−1, a January/February installment is
     precisely the carry-in).
 
-    Per purchase row (anchor = ``budget_date`` = import date; the row's
-    own ``payment_date`` is NULL by BR-PUR-01/03 and never consulted):
-    terms = ``line_payable_terms`` of the CECO's id_line in the D-7 order
-    (payment_days asc, id asc): WITH terms -> one installment per term,
-    date = anchor + payment_days, amount = projected_amount ×
-    payment_pct (pct applied as-is, NOT normalized — even when the pcts
-    do not sum to 1; zero cogs_pct: the merchandise value is the cost).
-    WITHOUT terms (Line without terms, or CECO without id_line) -> ONE
-    installment at 100 % on the import date (D-S7-4). Raw float, zero
-    intermediate rounding (repo convention).
+    projected_amount IS THE TOTAL COST (supplier invoice + internment,
+    A-1'), split per §4 with the Line's ``line_internment_rates`` pct
+    (no row / no Line ⇒ 0, A-5):
 
-    ONE query (NFR-BE8-2): purchase rows LEFT JOIN cost_centers LEFT
-    JOIN line_payable_terms, fully ordered in SQL
+        costo_prov = total / (1 + pct)     # supplier component (D-S9-1)
+        costo_int  = total − costo_prov    # internment component
+
+    Per purchase row (anchor = ``budget_date`` = import date, the SAME
+    anchor for both streams, A-3; the row's own ``payment_date`` is NULL
+    by BR-PUR-01/03 and never consulted):
+
+    * SUPPLIER stream (origin "purchase", PURCHASE_CARRYOVER_DESCRIPTION,
+      mechanics untouched by BE-S9 — only the BASE changed): terms =
+      ``line_payable_terms`` of the CECO's id_line in the D-7 order
+      (payment_days asc, id asc) -> one installment per term, date =
+      anchor + payment_days, amount = costo_prov × payment_pct (pct
+      applied as-is, NOT normalized — even when the pcts do not sum to
+      1; zero cogs_pct: the merchandise value is the cost). WITHOUT terms
+      (Line without terms, or CECO without id_line) -> ONE installment at
+      100 % of costo_prov on the import date (D-S7-4, new base). pct = 0
+      ⇒ costo_prov == total bit-for-bit ⇒ byte-identical to the pre-BE-S9
+      amounts (NFR-BE9-3/AC-BE9-4).
+    * INTERNMENT stream (origin "internment",
+      INTERNMENT_CARRYOVER_DESCRIPTION): emitted ONLY when pct > 0 AND
+      costo_int > 0 — pct = 0 ⇒ ZERO rows (BR-INT-05/A-5). CON términos =
+      ``line_internment_terms`` of the id_line in the D-7 order -> one
+      installment per term, date = anchor + payment_days, amount =
+      costo_int × payment_pct. SIN términos -> ONE installment at 100 %
+      of costo_int on the import date (BR-INT-04, D-S7-4 mirror). Raw
+      float, zero intermediate rounding (repo convention). Within a row
+      the supplier stream is generated BEFORE the internment one
+      (NFR-BE9-4 determinism).
+
+    Queries (NFR-BE8-2/NFR-BE9-2): ONE main query — purchase rows LEFT
+    JOIN cost_centers LEFT JOIN line_payable_terms, fully ordered in SQL
     (id_budget_line ASC, payment_days ASC, id_line_payable_term ASC —
     PG puts the NULL term of a no-terms line FIRST inside its group, and
     rows are re-grouped in Python keeping that generation order, so the
     output is deterministic per NFR-BE8-4). Terms-less purchases with
     multiple rows would duplicate the line tuple; the grouping collapses
-    them.
+    them. Then AT MOST 2 batch queries after the regrouping: the rates
+    {id_line: pct} and the internment terms grouped by id_line, both IN
+    over the DISTINCT id_lines resolved from the purchase rows; BOTH are
+    skipped entirely when that set is empty, preserving the pre-BE-S9
+    query cost when nothing can be configured.
 
     Returns ``PlanningCarryoverLine``-shaped dicts with
-    ``origin="purchase"``, ``line_type="expense"``, ``id_budget_line=None``,
-    ``budget_date`` = import date, ``payment_date`` = installment date and
-    description ``PURCHASE_CARRYOVER_DESCRIPTION`` (BR-PUR-05)."""
+    ``origin="purchase"``/``"internment"``, ``line_type="expense"``,
+    ``id_budget_line=None``, ``budget_date`` = import date,
+    ``payment_date`` = installment date and the stream description
+    (BR-PUR-05 / backend.02_19 §4)."""
     rows = (
         db.query(
             BudgetLineModel,
@@ -1104,25 +1160,68 @@ def get_carryover_purchase_lines(
         if term is not None:
             by_line[key]["terms"].append(term)
 
+    # BE-S9 (BR-INT-06/NFR-BE9-2): the split catalogs of the Lines that
+    # actually appear in the purchases — at most 2 batch queries, both
+    # skipped ENTIRELY when no purchase resolves to a Line (an empty set
+    # means pct = 0 for every row, so the §4 derivation needs nothing
+    # and the pre-BE-S9 query cost stands).
+    id_lines = sorted({
+        entry["id_line"] for entry in by_line.values()
+        if entry["id_line"] is not None
+    })
+    rates: Dict[int, float] = {}
+    int_terms_by_line: Dict[int, List[LineInternmentTermModel]] = {}
+    if id_lines:
+        rates = {
+            rate.id_line: float(rate.internment_pct)
+            for rate in db.query(LineInternmentRateModel).filter(
+                LineInternmentRateModel.id_line.in_(id_lines)
+            ).order_by(
+                LineInternmentRateModel.id_line,
+            ).all()
+        }
+        int_terms_by_line = {id_line: [] for id_line in id_lines}
+        for term in (
+            db.query(LineInternmentTermModel)
+            .filter(LineInternmentTermModel.id_line.in_(id_lines))
+            .order_by(
+                LineInternmentTermModel.id_line,
+                LineInternmentTermModel.payment_days,
+                LineInternmentTermModel.id_line_internment_term,
+            )
+            .all()
+        ):
+            int_terms_by_line[term.id_line].append(term)
+
     derived: List[Dict[str, Any]] = []
     for key in order:
         entry = by_line[key]
         budget_line = entry["line"]
-        amount = float(budget_line.projected_amount or 0.0)
-        terms = entry["terms"] if entry["id_line"] is not None else []
+        id_line = entry["id_line"]
+        total = float(budget_line.projected_amount or 0.0)
+        # §4 split (D-S9-1): pct = internment rate of the CECO's Line,
+        # 0 when the CECO has no Line or the Line has no rate row (A-5).
+        # total / 1.0 is exact in binary float, so pct = 0 keeps the
+        # pre-BE-S9 supplier amounts bit-for-bit (NFR-BE9-3).
+        pct = rates.get(id_line, 0.0) if id_line is not None else 0.0
+        costo_prov = total / (1.0 + pct)
+        costo_int = total - costo_prov                            # BR-INT-01
+
+        terms = entry["terms"] if id_line is not None else []
         if terms:
             candidates = [
                 (
                     budget_line.budget_date
                     + timedelta(days=term.payment_days),
-                    amount * float(term.payment_pct),
+                    costo_prov * float(term.payment_pct),
                 )
                 for term in terms
             ]
         else:
-            # D-S7-4 mirror: no terms (or CECO without id_line) -> the
-            # full merchandise value paid on the import date itself.
-            candidates = [(budget_line.budget_date, amount)]
+            # D-S7-4 mirror (BE-S9 new base): no terms (or CECO without
+            # id_line) -> the full SUPPLIER component paid on the import
+            # date itself (== the whole total while pct = 0).
+            candidates = [(budget_line.budget_date, costo_prov)]
 
         for payment_date, installment in candidates:
             if payment_date.year != budget_year_target:
@@ -1137,21 +1236,62 @@ def get_carryover_purchase_lines(
                 "description": PURCHASE_CARRYOVER_DESCRIPTION,
                 "origin": "purchase",
             })
+
+        # BE-S9 §4 internment stream — generated AFTER the supplier rows
+        # of the same purchase (NFR-BE9-4) and ONLY when the rate really
+        # splits something: pct = 0 -> zero rows (BR-INT-05/A-5); the
+        # costo_int > 0 guard keeps zero-value (or dirty negative)
+        # purchases from emitting phantom 0-amount internment rows.
+        if pct > 0 and costo_int > 0:
+            int_terms = (
+                int_terms_by_line.get(id_line)
+                if id_line is not None else None
+            )
+            if int_terms:
+                int_candidates = [
+                    (
+                        budget_line.budget_date
+                        + timedelta(days=term.payment_days),
+                        costo_int * float(term.payment_pct),
+                    )
+                    for term in int_terms
+                ]
+            else:
+                # BR-INT-04 (D-S7-4 mirror): rate configured but the
+                # Line has no internment terms -> ONE 100 % row of
+                # costo_int paid on the import date itself.
+                int_candidates = [(budget_line.budget_date, costo_int)]
+            for payment_date, installment in int_candidates:
+                if payment_date.year != budget_year_target:
+                    continue                    # BR-CO-09 year filter
+                derived.append({
+                    "id_budget_line": None,
+                    "id_cost_center": budget_line.id_cost_center,
+                    "line_type": "expense",
+                    "budget_date": budget_line.budget_date,
+                    "payment_date": payment_date,
+                    "projected_amount": installment,
+                    "description": INTERNMENT_CARRYOVER_DESCRIPTION,
+                    "origin": "internment",
+                })
     return derived
 
 
 def _carryover_order_key(
     row: PlanningCarryoverLine,
 ) -> Tuple[date, int, int]:
-    """BR-CO-10 sort key (BE-S8 §5.1-4 extended): effective date
-    coalesce(payment_date, budget_date) ASC, then origin rank
-    ("line" < "cogs" < "purchase" on ties), then the id null-safe
-    (derived rows share 0 and keep their deterministic generation order —
-    Python's sort is stable)."""
+    """BR-CO-10 sort key (BE-S8 §5.1-4 extended, BE-S9 §5.4-3 rank
+    extension): effective date coalesce(payment_date, budget_date) ASC,
+    then origin rank ("line" < "cogs" < "purchase" < "internment" on
+    ties — a supplier installment and the internment installment of the
+    same §4 split sharing an effective date answer purchase first,
+    AC-BE9-6), then the id null-safe (derived rows share 0 and keep
+    their deterministic generation order — Python's sort is stable)."""
     origin_rank = {
         "line": 0,
         "cogs": 1,
         "purchase": 2,
+        "internment": 3,
     }
     return (
         row.payment_date or row.budget_date,
@@ -1167,8 +1307,9 @@ def build_carryover_payload_lines(
     budget_year_target: int,
 ) -> List[PlanningCarryoverLine]:
     """Full GET-carryover payload rows (backend.02_16 §5.1 material +
-    backend.02_17 §4 derived + backend.02_18 §5.1 purchase derived) in the
-    BR-CO-10 order extended with origin rank {line:0, cogs:1, purchase:2}.
+    backend.02_17 §4 derived + backend.02_18/02_19 §5.4 purchase and
+    internment derived) in the BR-CO-10 order extended with origin rank
+    {line:0, cogs:1, purchase:2, internment:3} (BE-S9 §5.4-3).
     Material ORM rows validate with the schema default ``origin="line"``
     (they carry no such attribute). Called ONLY when the include_carryover
     flag is ON — the BR-CO-01 short-circuit lives in the API layer, so the
@@ -1181,10 +1322,11 @@ def build_carryover_payload_lines(
     income switches whenever its KEY — line:<id_line>, or cc:<id_cost_
     center> when the CECO has no Line — is one of the purchasing keys)
     AND as the gate for get_carryover_purchase_lines (1 purchases×terms
-    query, skipped when the key pair is empty). A source without
+    query + max 2 BE-S9 catalog batch queries, skipped when the key pair is empty). A source without
     purchases therefore pays exactly +1 cheap DISTINCT query over BE-S7
     and produces byte-identical payloads (NFR-BE8-3); with purchases the
-    budget is +2 queries total regardless of row counts (NFR-BE8-2)."""
+    budget is +4 queries total regardless of row counts (NFR-BE8-2 plus the
+     ≤2 constant BE-S9 catalog batches of NFR-BE9-2)."""
     material = [
         PlanningCarryoverLine.model_validate(row)
         for row in get_carryover_lines(
