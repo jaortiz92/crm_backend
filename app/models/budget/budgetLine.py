@@ -7,7 +7,7 @@ Each line represents a projected income or expense for a given date.
 
 import enum
 
-from sqlalchemy import Column, Date, Enum, ForeignKey, Float, Integer, Text
+from sqlalchemy import Boolean, Column, Date, Enum, ForeignKey, Float, Integer, Text
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -51,6 +51,15 @@ class BudgetLine(Base):
     description = Column(Text)
     behavior_type = Column(Enum(BehaviorTypeEnum), nullable=False, server_default="fixed")
     variable_rate = Column(Float, nullable=True)
+    # BE-S10-IVA (spec backend.02_20 §3.1): the ONLY materialized IVA datum.
+    # NULL ≡ True is a RULE OF THE DERIVATION (D-S10-3: legacy files /
+    # empty cells are "con IVA"), NOT a DB default — no backfill, no
+    # server_default, so existing databases only need the manual ALTER of
+    # §10 (BE-S6 include_carryover pattern; create_all never alters an
+    # existing table). Meaningful for EXPENSE only: INCOME always taxed —
+    # the flag persists but the derivation ignores it (D-S10-5) — and
+    # PURCHASE always taxed on both streams (§3.1).
+    has_iva = Column(Boolean, nullable=True)
 
     budget = relationship("Budget", back_populates="budget_lines")
     cost_center = relationship("CostCenter", back_populates="budget_lines")

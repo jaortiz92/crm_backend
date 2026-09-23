@@ -444,6 +444,16 @@ def create_planning_line(
         # line_payable_terms anchored on budget_date (the import date).
         data["payment_date"] = None
 
+    # BE-S10-IVA (backend.02_20 §5.4 / AC-BE10-2): the ONLY materialized
+    # IVA datum. Omitted/None on create persists as True (D-S10-3's
+    # "sin flag = con IVA" rule applied at write time for the line
+    # manager). Sent values persist as-is on EVERY line_type — an
+    # INCOME/PURCHASE flag is stored but the derivation ignores it
+    # (D-S10-5/§3.1). The ETL upload paths do NOT flow through this
+    # formula: they build BudgetLineCreate dicts where an absent cell
+    # stays None and the §4 derivation reads NULL ≡ True there too.
+    data["has_iva"] = payload.has_iva if payload.has_iva is not None else True
+
     db_line = BudgetLineModel(id_budget=id_budget, **data)
     db.add(db_line)
     db.commit()
@@ -529,6 +539,10 @@ def update_planning_line(
         )
 
     merged = payload.model_dump(exclude_none=True)
+    # BE-S10-IVA §5.4: has_iva follows the SAME standard partial contract
+    # — omitted OR null keeps the stored flag (exclude_none), an explicit
+    # false/true flips it (AC-BE10-2). NO special handling needed here:
+    # False is not None, so {"has_iva": false} survives the merge.
     if "id_cost_center" in merged:
         _check_planning_line_cost_center(db, merged["id_cost_center"])
     if "id_collection" in merged:

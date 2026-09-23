@@ -21,6 +21,8 @@ from .linePayableTerm import router as line_payable_term_router
 from .lineInternmentRate import router as line_internment_rate_router
 from .lineInternmentTerm import router as line_internment_term_router
 from .commissionRate import router as commission_rate_router
+from .ivaPeriod import router as iva_period_router
+from .ivaSettlement import router as iva_settlement_router
 from .upload import router as upload_router
 from .analytics import router as analytics_router
 from .planning import router as planning_router
@@ -81,6 +83,19 @@ budget.include_router(
     commission_rate_router,
     prefix="/commission-rates",
     tags=["Commission Rates"],
+)
+# BE-S10-IVA (spec backend.02_20 §5.9): catalogo de calendario y
+# liquidacion. app/main.py NO cambia — el agregador `budget` ya estaba
+# montado (pattern line-internment-rate, tags=["budget"]).
+budget.include_router(
+    iva_period_router,
+    prefix="/iva-period",
+    tags=["budget"],
+)
+budget.include_router(
+    iva_settlement_router,
+    prefix="/iva",
+    tags=["budget"],
 )
 budget.include_router(upload_router, prefix="/upload", tags=["Budget Uploads"])
 budget.include_router(analytics_router, prefix="/analytics", tags=["Budget Analytics"])

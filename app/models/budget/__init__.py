@@ -13,3 +13,4 @@ from .linePayableTerm import LinePayableTerm
 from .lineInternmentRate import LineInternmentRate
 from .lineInternmentTerm import LineInternmentTerm
 from .commissionRate import CommissionRate
+from .ivaPeriod import IvaPeriod

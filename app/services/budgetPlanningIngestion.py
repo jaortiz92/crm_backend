@@ -228,6 +228,14 @@ def build_expense_line_records(
             "description": record.get("description"),
             "behavior_type": behavior_type,
             "variable_rate": variable_rate,
+            # BE-S10-IVA (backend.02_20 §5.5): the ETL-mapped "Con IVA"
+            # flag (True/False/None — None when the column is absent or
+            # the cell is empty/unmapped, which the derivation reads as
+            # CON IVA per D-S10-3). Legacy files without the column keep
+            # the byte-identical upload (AC-REG-01): they simply persist
+            # NULL here, exactly like income/purchase rows never carry
+            # the key (those builders are untouched, §5.5).
+            "has_iva": record.get("has_iva"),
         })
 
     if found_years:

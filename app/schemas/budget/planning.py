@@ -151,6 +151,17 @@ class PlanningLineCreate(BaseModel):
         None, ge=0, le=1, validate_default=True,
         description="Variable rate (0-1). Required when behavior_type is not 'fixed'",
     )
+    # BE-S10-IVA (spec backend.02_20 §5.2): the editable per-line "Con IVA"
+    # flag (D-S10-4, line manager). CREATE contract: omitted/None => the
+    # CRUD persists True (§5.4 — same formula for every line_type; on
+    # INCOME/PURCHASE the derivation simply ignores the stored value,
+    # D-S10-5/§3.1).
+    has_iva: Optional[bool] = Field(
+        None,
+        description="Con IVA (expense semantics). Omitted on create => "
+                    "True; explicit false opts the line out of the "
+                    "deductible derivation (§4.3).",
+    )
 
     @field_validator("projected_amount")
     @classmethod
@@ -207,6 +218,14 @@ class PlanningLineUpdate(BaseModel):
     variable_rate: Optional[float] = Field(
         None, ge=0, le=1,
         description="Only on variable lines (BR-LINE-07: 400 on fixed)",
+    )
+    # BE-S10-IVA (spec backend.02_20 §5.2): partial contract — omitted or
+    # null KEEPS the stored flag (the CRUD merges with exclude_none, §5.4);
+    # an explicit true/false flips the "Con IVA" of the line (AC-BE10-2).
+    has_iva: Optional[bool] = Field(
+        None,
+        description="Con IVA flag. Omitted/null = keep current value "
+                    "(standard partial); true/false = set it.",
     )
 
     @field_validator("projected_amount")

@@ -1421,6 +1421,45 @@ class BudgetTemplates:
     # Budget Plan Expense (Formato Solicitud Presupuesto Gastos.xlsx)
     # ──────────────────────────────────────────────
 
+    # BE-S10-IVA (backend.02_20 §5.6): tolerant value table for the REAL
+    # SIIGO "Con IVA" column (row 8, col 11 — today ignored by the ETL).
+    # Cell is stripped+lowered before the lookup; anything unmapped
+    # (NaN/empty/stray text) degrades to None, which the derivation
+    # reads as CON IVA per D-S10-3 — absence is never an error and never
+    # blocks the upload (AC-REG-01 keeps files WITHOUT the column valid).
+    IVA_FLAG_TRUE = {"si", "sí", "yes", "y", "x", "1", "true", "verdadero"}
+    IVA_FLAG_FALSE = {"no", "not", "n", "false", "0", "falso"}
+
+    @staticmethod
+    def _map_iva_flag(value: Any) -> Optional[bool]:
+        """Map one raw "Con IVA" cell to True/False/None (§5.6). None,
+        NaN/NaT and anything outside the table answer None (D-S10-3).
+        Python/numpy booleans pass through; numeric 1/0 cells (Excel
+        stores them as floats) map to True/False and their "1.0"/"0.0"
+        string forms are normalized before the table lookup, so both the
+        TEXT (Si/No) and the 1/0 spelling habits of the real template
+        are honored without inventing values outside the §5.6 table."""
+        if value is None or value is pd.NaT:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            if pd.isna(value):
+                return None
+            if value == 1:
+                return True
+            if value == 0:
+                return False
+            return None
+        text = str(value).strip().lower()
+        if text.endswith(".0"):
+            text = text[:-2]
+        if text in BudgetTemplates.IVA_FLAG_TRUE:
+            return True
+        if text in BudgetTemplates.IVA_FLAG_FALSE:
+            return False
+        return None
+
     def process_budget_plan_expense(self) -> DataFrame:
         """
         Process expense budget plan Excel template.
@@ -1487,6 +1526,24 @@ class BudgetTemplates:
         self.df["variable_rate"] = raw_amount.where(
             self.df["behavior_type"] != "fixed", None
         )
+
+        # BE-S10-IVA (backend.02_20 §5.6): OPTIONAL "Con IVA" column
+        # (real SIIGO template row 8 col 11 -> con_iva after
+        # _clean_column_names). Mapped through the §5.6 table into the
+        # has_iva key consumed by build_expense_line_records. The column
+        # is forced to object dtype so the values stay NATIVE Python
+        # bool/None (an all-True/False pandas bool column would leak
+        # np.bool_ through to_dict and the pydantic bool validator).
+        # Column ABSENT (legacy files) -> an all-None has_iva column:
+        # upload behavior identical to today, the derivation reads the
+        # NULLs as CON IVA (AC-REG-01 / D-S10-3).
+        if "con_iva" in self.df.columns:
+            self.df["has_iva"] = pd.Series(
+                [self._map_iva_flag(value) for value in self.df["con_iva"]],
+                index=self.df.index, dtype="object",
+            )
+        else:
+            self.df["has_iva"] = None
 
         self.df["line_type"] = "expense"
 

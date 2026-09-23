@@ -22,7 +22,8 @@ ALTER TABLE budgets ADD COLUMN IF NOT EXISTS include_carryover BOOLEAN NOT NULL 
 ALTER TYPE public.linetypeenum ADD VALUE IF NOT EXISTS 'PURCHASE';
 ```
 
-- **APLICADO EN DEV el 2026-09-15** vía
+- **APLICADO EN DEV el 2026-09-15** (se perdió al restaurar la BD desde dump;
+  **re-aplicado el 2026-09-18** con la migración §3) vía
   `docker exec db_crm_dev psql -U postgres -d crm -c "ALTER TYPE public.linetypeenum ADD VALUE IF NOT EXISTS 'PURCHASE';"`.
   Verificación: `SELECT unnest(enum_range(NULL::linetypeenum));` ⇒
   `INCOME | EXPENSE | PURCHASE`.
@@ -43,3 +44,37 @@ ALTER TYPE public.linetypeenum ADD VALUE IF NOT EXISTS 'PURCHASE';
   filtro ciego (`get_carryover_lines`) quedó blindado con el guard
   BR-CO-12.
 - **PENDIENTE EN PRODUCCIÓN:** correr el mismo ALTER antes del deploy.
+
+## 3. Drift dev 2026-09-18 — migración completa aplicada a crm_dev
+
+Restauración de la BD dev desde dump anterior a varios ALTERs + cambios de tipo
+que `create_all` no puede aplicar. Diff completo modelos-vs-BD → migración en
+`crm_backend/spec/migrations/2026-09-18_Schema_drift_planning_backend.02_16_18.sql`
+(idempotente, `psql -v ON_ERROR_STOP=1 -f`; backup previo en
+`db_crm_dev:/tmp/crm_dev_backup_20260918.sql`).
+
+Aplicados:
+
+1. `budgets.include_carryover` (§1, era el 500 de `GET /budget/planning`).
+2. `linetypeenum` += 'PURCHASE' (§2).
+3. `budget_lines.behavior_type` varchar→`behaviortypeenum` (los datos ya
+   guardaban los NAMES mayúsculos; el default varchar `'fixed'` minúsculo era
+   incompatible con la lectura del Enum → se reemplazó por `'FIXED'::behaviortypeenum`
+   y SET NOT NULL). **NUEVO patrón de drift**: cambiar el tipo de una columna
+   existente tampoco lo hace `create_all`.
+4. Índices faltantes: `ix_actual_costs_document_number`,
+   `ix_activity_types_category` (NO único: ver hallazgo abajo).
+5. `customers.address` → DROP NOT NULL (nullable en modelo; dato legacy del dump).
+
+Verificado: diff modelos-vs-BD sin gaps, `get_planning_scenarios` OK (6 filas
+con `include_carryover`), toggle carryover roundtrip OK, filtros ORM de
+`PURCHASE` y `behavior_type` OK.
+
+**Hallazgos no aplicados (requieren decisión):**
+- `activity_types.category`: el modelo declara `unique=True` pero la semilla
+  tiene duplicados (Comercial x6, Mercadeo x3, General x2) ⇒ el índice único NO
+  se puede crear; en una BD limpia `create_all` SÍ lo crearía y la carga de
+  semilla fallaría. O quitar `unique` del modelo o limpiar datos.
+- `actual_expenses.amount`: modelo `NUMERIC(15,2)` vs BD `float8` (funcional,
+  sin error; convertiría con `USING round(amount::numeric,2)` si se desea).
+- Producción: correr la migración completa (§1+§2 ya documentados como pendientes).

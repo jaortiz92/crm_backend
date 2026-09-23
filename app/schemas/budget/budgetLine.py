@@ -51,6 +51,20 @@ class BudgetLineBase(BaseModel):
         le=1,
         description="Variable rate (0-1). Required when behavior_type is not 'fixed'"
     )
+    # BE-S10-IVA (spec backend.02_20 §5.2): additive Optional[bool] on the
+    # BASE so every response that serializes a line (BudgetLine /
+    # BudgetLineFull / PlanningDetail) gains the key AND BudgetLineCreate
+    # can round-trip the ETL flag through create_budget_lines_bulk (the
+    # upload path builds dicts -> BudgetLineCreate(**data) -> model_dump).
+    # None means "no explicit decision" and the DERIVATION reads NULL ≡
+    # True (D-S10-3); it is never a DB default. Meaningful on EXPENSE:
+    # INCOME ignores it (D-S10-5), PURCHASE is always taxed (§3.1).
+    has_iva: Optional[bool] = Field(
+        None,
+        description="Con IVA flag (BE-S10-IVA): true/false explicit, "
+                    "null = legacy/no-decision (derivation reads it as "
+                    "con IVA, D-S10-3). Only meaningful for expense lines.",
+    )
 
     @field_validator("variable_rate")
     @classmethod

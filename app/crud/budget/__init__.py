@@ -15,3 +15,4 @@ from .lineInternmentTerm import *
 from .commissionRate import *
 from .uploadStatus import *
 from .planning import *
+from .ivaPeriod import *
