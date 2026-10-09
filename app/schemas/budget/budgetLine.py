@@ -4,6 +4,7 @@ BudgetLine Schemas
 
 import enum
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -39,7 +40,10 @@ class BudgetLineBase(BaseModel):
     budget_date: date = Field(..., description="Date when the income/expense occurs (P&L)")
     payment_date: Optional[date] = Field(None, description="Date when cash flows (Cash Flow)")
     id_collection: Optional[int] = Field(None, gt=0, description="FK to collection")
-    projected_amount: float = Field(..., ge=0, description="Projected amount")
+    # Inputs may carry sub-cent values during existing scenario arithmetic;
+    # the shared NUMERIC(15,2) column applies the explicit storage scale.
+    projected_amount: Decimal = Field(..., ge=0, max_digits=15,
+                                      description="Projected COP amount")
     description: Optional[str] = Field(None, description="Optional description")
     behavior_type: BehaviorTypeEnum = Field(
         BehaviorTypeEnum.FIXED,

@@ -182,6 +182,10 @@ class CashFlowMeta(BaseModel):
     overdue_as: str                    # eco efectivo (D-2)
     budget_source: Optional[dict] = None   # {id_budget, budget_name, status} | null (D-7)
     overdue_outflows: float = 0.0      # total AP clampado/excluido segun modo
+    financing_principal: float = 0.0
+    financing_interest: float = 0.0
+    financing_insurance: float = 0.0
+    financing_installment_count: int = 0
     filters: dict                      # eco de los query params efectivos (BR-39)
     warnings: List[str] = []
 

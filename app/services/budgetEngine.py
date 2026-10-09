@@ -52,6 +52,8 @@ from app.models.budget import (
     PayableLedger as PayableLedgerModel,
     LineCostRate as LineCostRateModel,
     CommissionRate as CommissionRateModel,
+    FinancingCredit as FinancingCreditModel,
+    FinancingCreditInstallment as FinancingCreditInstallmentModel,
 )
 
 
@@ -1003,6 +1005,7 @@ class BudgetEngine:
                     func.sum(BudgetLineModel.projected_amount))
                  .filter(BudgetLineModel.id_budget == resolved_id,
                          BudgetLineModel.line_type == "expense",
+                         BudgetLineModel.source_engine.is_distinct_from("financing_credit"),
                          func.coalesce(BudgetLineModel.payment_date,
                                        BudgetLineModel.budget_date) >= slice_lo,
                          func.coalesce(BudgetLineModel.payment_date,
@@ -1010,6 +1013,54 @@ class BudgetEngine:
                  .group_by(BudgetLineModel.id_cost_center, "anchor")
                  .all())
             bud_anchored = [(r[1], r[0], float(r[2])) for r in bud_rows]
+
+        # Financing debt is a global obligation, independent from the
+        # selected budget/scenario and outflow_source. The ACTIVE revision of
+        # each active credit is the sole source for all three components;
+        # financing expense BudgetLines were excluded from Q5 above.
+        financing_anchored: List[tuple] = []  # (due date, amount)
+        financing_totals = {
+            "principal": 0, "interest": 0, "insurance": 0,
+        }
+        financing_base = (
+            self.db.query(FinancingCreditInstallmentModel)
+            .join(FinancingCreditModel,
+                  FinancingCreditInstallmentModel.id_financing_credit
+                  == FinancingCreditModel.id_financing_credit)
+            .filter(FinancingCreditModel.status == "active",
+                    FinancingCreditInstallmentModel.schedule_revision
+                    == FinancingCreditModel.schedule_revision,
+                    FinancingCreditInstallmentModel.projection_status == "projected")
+        )
+        financing_components = (
+            ("principal", FinancingCreditInstallmentModel.principal_due_date,
+             FinancingCreditInstallmentModel.principal_amount),
+            ("interest", FinancingCreditInstallmentModel.interest_due_date,
+             FinancingCreditInstallmentModel.interest_amount),
+            ("insurance", FinancingCreditInstallmentModel.insurance_due_date,
+             FinancingCreditInstallmentModel.insurance_amount),
+        )
+        for component, due_column, amount_column in financing_components:
+            component_rows = (financing_base.with_entities(
+                    due_column.label("due_date"),
+                    func.sum(amount_column).label("amount"))
+                .filter(due_column >= slice_lo, due_column <= date_to,
+                        amount_column > 0)
+                .group_by(due_column).all())
+            for row in component_rows:
+                amount = row.amount or 0
+                financing_anchored.append((row.due_date, float(amount)))
+                financing_totals[component] += amount
+        financing_installment_count = (financing_base.filter(
+            ((FinancingCreditInstallmentModel.principal_due_date >= slice_lo)
+             & (FinancingCreditInstallmentModel.principal_due_date <= date_to))
+            | ((FinancingCreditInstallmentModel.interest_due_date >= slice_lo)
+               & (FinancingCreditInstallmentModel.interest_due_date <= date_to))
+            | ((FinancingCreditInstallmentModel.insurance_due_date >= slice_lo)
+               & (FinancingCreditInstallmentModel.insurance_due_date <= date_to))
+        ).with_entities(func.count(func.distinct(
+            FinancingCreditInstallmentModel.id_financing_credit_installment
+        ))).scalar() or 0)
 
         # ── Imputation: cada ancla cae en el bucket que la cubre (§5.5) ─────
         def _cover(d: date) -> Optional[str]:
@@ -1022,6 +1073,10 @@ class BudgetEngine:
         outflow_by_bucket: Dict[str, float] = {label: 0.0 for label, _s, _e in buckets}
         budget_side: Dict[tuple, float] = {}    # (cc, label) totals for overlap (BR-29)
         ap_side: Dict[tuple, float] = {}
+        for anchor, amount in financing_anchored:
+            label = _cover(anchor)
+            if label is not None:
+                outflow_by_bucket[label] += amount
 
         for day, (rin, rout) in real_by_day.items():
             label = _cover(day)
@@ -1083,6 +1138,10 @@ class BudgetEngine:
                 "overdue_as": overdue_as,
                 "budget_source": budget_source,
                 "overdue_outflows": round(overdue_outflows, 2),
+                "financing_principal": float(financing_totals["principal"]),
+                "financing_interest": float(financing_totals["interest"]),
+                "financing_insurance": float(financing_totals["insurance"]),
+                "financing_installment_count": financing_installment_count,
                 "filters": {
                     "date_from": date_from.isoformat(),
                     "date_to": date_to.isoformat(),

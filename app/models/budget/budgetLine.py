@@ -7,7 +7,10 @@ Each line represents a projected income or expense for a given date.
 
 import enum
 
-from sqlalchemy import Boolean, Column, Date, Enum, ForeignKey, Float, Integer, String, Text
+from sqlalchemy import (
+    Boolean, Column, Date, Enum, ForeignKey, Float, Integer, Numeric, String,
+    Text, Index, text,
+)
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -39,6 +42,15 @@ class BudgetLine(Base):
     Each line represents a projected income or expense for a given date.
     """
     __tablename__ = "budget_lines"
+    __table_args__ = (
+        Index(
+            "uq_budget_lines_financing_source",
+            "id_budget", "source_engine", "source_engine_id", "cost_component_code",
+            unique=True,
+            postgresql_where=text("source_engine = 'financing_credit'"),
+            sqlite_where=text("source_engine = 'financing_credit'"),
+        ),
+    )
 
     id_budget_line = Column(Integer, primary_key=True, index=True)
     id_budget = Column(Integer, ForeignKey("budgets.id_budget"), nullable=False)
@@ -47,7 +59,7 @@ class BudgetLine(Base):
     budget_date = Column(Date, nullable=False)
     payment_date = Column(Date, nullable=True)
     id_collection = Column(Integer, ForeignKey("collections.id_collection"), nullable=True)
-    projected_amount = Column(Float, nullable=False, server_default="0")
+    projected_amount = Column(Numeric(15, 2), nullable=False, server_default="0")
     description = Column(Text)
     behavior_type = Column(Enum(BehaviorTypeEnum), nullable=False, server_default="fixed")
     variable_rate = Column(Float, nullable=True)
@@ -74,6 +86,9 @@ class BudgetLine(Base):
     id_collaborator = Column(Integer, nullable=True)
     cost_component_code = Column(String(20), nullable=True)
     source_engine = Column(String(40), nullable=True)
+    # BE-S12 financing: references the exact installment that owns an
+    # interest/insurance expense; intentionally polymorphic (no FK).
+    source_engine_id = Column(Integer, nullable=True)
 
     budget = relationship("Budget", back_populates="budget_lines")
     cost_center = relationship("CostCenter", back_populates="budget_lines")

@@ -275,6 +275,10 @@ class PlanningSetTargetResult(BaseModel):
     # de nomina falla la activacion (transacciones separadas, D-S11-5).
     payroll_lines_created: Optional[int] = None
     payroll_warnings: List[str] = Field(default_factory=list)
+    # BE-S12: financing expenses are materialized after target activation;
+    # failures are informational and never roll back set-target.
+    financing_lines_created: Optional[int] = None
+    financing_warnings: List[str] = Field(default_factory=list)
 
 
 class PlanningDetail(BudgetFull):
@@ -434,3 +438,55 @@ class PayrollSimulationOut(BaseModel):
     collaborators_count: int = 0
     total_annual: Decimal = Decimal("0.00")
     lines: List[PayrollSimulationLine] = []
+
+
+class FinancingSimulationLine(BaseModel):
+    """One read-only financing expense projected for a draft/closed budget."""
+
+    month: str
+    budget_date: date
+    payment_date: date
+    id_cost_center: int
+    cost_component_code: Literal["FIN_INTEREST", "FIN_INSURANCE"]
+    component_name: str
+    description: str
+    amount: Decimal
+    id_financing_credit: int
+    id_financing_credit_installment: int
+
+
+class FinancingSimulationOut(BaseModel):
+    """GET /budget/planning/{id}/financing-simulation response."""
+
+    id_budget: int
+    budget_year: int
+    financing_credits_count: int = 0
+    total_interest: Decimal = Decimal("0.00")
+    total_insurance: Decimal = Decimal("0.00")
+    total_annual_expenses: Decimal = Decimal("0.00")
+    lines: List[FinancingSimulationLine] = Field(default_factory=list)
+
+
+class FinancingPrincipalFlowLine(BaseModel):
+    """One principal payment in the budget-specific cash-flow stream.
+
+    Principal is deliberately separate from BudgetLine so it can affect cash
+    flow without becoming a P&L expense.
+    """
+
+    month: str
+    payment_date: date
+    id_cost_center: int
+    amount: Decimal
+    id_financing_credit: int
+    installment_number: int
+    description: str
+
+
+class FinancingPrincipalFlowOut(BaseModel):
+    """Read-only principal schedule returned to the planning cash-flow view."""
+
+    id_budget: int
+    budget_year: int
+    total_principal: Decimal = Decimal("0.00")
+    lines: List[FinancingPrincipalFlowLine] = Field(default_factory=list)

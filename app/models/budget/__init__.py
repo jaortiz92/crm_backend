@@ -21,3 +21,4 @@ from .collaborator import (
     Collaborator, CollaboratorSalaryPlan, LaborCostParameter, LaborArlRate,
     CostComponent, CollaboratorProvisionAccrual,
 )
+from .financingCredit import FinancingCredit, FinancingCreditInstallment

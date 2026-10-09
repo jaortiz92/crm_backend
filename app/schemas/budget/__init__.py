@@ -45,6 +45,8 @@ from .planning import (
     PlanningLineCreate, PlanningLineUpdate,
     PlanningCarryoverFlag, PlanningCarryoverSource, PlanningCarryoverLine,
     PlanningCarryoverResult, PayrollSimulationLine, PayrollSimulationOut,
+    FinancingSimulationLine, FinancingSimulationOut,
+    FinancingPrincipalFlowLine, FinancingPrincipalFlowOut,
 )
 # BE-S11-COLLABORATORS (backend.02_21 §8): named imports (repo style, no *).
 from .collaborator import (
@@ -57,4 +59,11 @@ from .collaborator import (
     CostComponentOut,
     BreakdownComponentOut, BreakdownOut,
     ProvisionBalanceOut, ProvisionsOut, MaterializationStatusOut,
+)
+from .financingCredit import (
+    FinancingCreditCreate, FinancingCreditUpdate, FinancingCreditOut,
+    FinancingCreditDetail, FinancingCreditListResponse,
+    FinancingInstallmentOut, FinancingScheduleTotals, FinancingSchedulePreview,
+    FinancingRecalculateResult, FinancingCloseRequest, FinancingCloseResult,
+    FinancingCreditDeleteResult,
 )

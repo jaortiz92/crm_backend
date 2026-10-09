@@ -60,16 +60,21 @@ from app.core.auth import get_current_user
 from app.schemas import (
     Budget, BudgetCreate, BudgetLine, BudgetLineCreate, User,
     PlanningCarryoverFlag, PlanningCarryoverResult,
-    PayrollSimulationOut,
+    PayrollSimulationOut, FinancingSimulationOut,
     PlanningCarryoverSource, PlanningCellUpdate, PlanningCloneRequest,
     PlanningDetail, PlanningLineCreate, PlanningLineUpdate,
     PlanningScenarioRow, PlanningSetTargetResult, PlanningUploadResult,
+    FinancingPrincipalFlowOut,
 )
 from app.services.budgetPlanningIngestion import (
     BudgetYearMismatchError,
     build_expense_line_records,
     build_income_line_records,
     build_purchase_line_records,
+)
+from app.services.budget.financingCreditService import (
+    materialize_financing_for_scenario_year,
+    simulate_financing_year,
 )
 from app.utils.templates import BudgetTemplates
 
@@ -662,6 +667,20 @@ def planning_set_target(
         payroll = materialize_for_scenario_year(db, result["budget_year"])
         result["payroll_lines_created"] = payroll["lines_created"]
         result["payroll_warnings"] = payroll["warnings"]
+        try:
+            financing = materialize_financing_for_scenario_year(
+                db, result["budget_year"], id_budget=result["id_budget"],
+            )
+            result["financing_lines_created"] = financing["lines_created"]
+            result["financing_warnings"] = financing["warnings"]
+        except Exception as exc:
+            # set-target has already committed. Financing is an additive,
+            # warning-only hook and must never fail the target activation.
+            db.rollback()
+            result["financing_lines_created"] = 0
+            result["financing_warnings"] = [
+                f"financing materialization failed: {exc}"
+            ]
         return result
 
     except HTTPException:
@@ -720,3 +739,56 @@ def planning_payroll_simulation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+
+
+@router.get("/{id_budget}/financing-simulation",
+            response_model=FinancingSimulationOut)
+def planning_financing_simulation(
+    id_budget: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Read-only what-if financing expenses for a draft/closed budget.
+
+    The active revision of active financing-credit schedules supplies only
+    interest and insurance installments whose accrual date is in the budget
+    year. Principal is never exposed as a budget/P&L expense. No DB writes.
+    """
+    db_budget = crud.get_budget_by_id(db, id_budget)
+    if db_budget is None:
+        Exceptions.register_not_found("Budget", id_budget)
+    if db_budget.status == "active":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "El escenario esta activo: sus gastos de financiacion ya "
+                "estan materializados en las lineas del presupuesto"
+            ),
+        )
+    out = simulate_financing_year(db, db_budget.budget_year)
+    return FinancingSimulationOut(id_budget=id_budget, **out)
+
+
+@router.get("/{id_budget}/financing-principal-flow",
+            response_model=FinancingPrincipalFlowOut)
+def planning_financing_principal_flow(
+    id_budget: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all active-schedule principal payments for planning cash flow.
+
+    This is a read-only what-if stream for every budget status. It includes
+    due dates both inside and outside the budget year for client-side buckets;
+    principal is never materialized as a budget line or P&L expense.
+    """
+    db_budget = crud.get_budget_by_id(db, id_budget)
+    if db_budget is None:
+        Exceptions.register_not_found("Budget", id_budget)
+
+    out = crud.get_financing_principal_flow(db)
+    return FinancingPrincipalFlowOut(
+        id_budget=id_budget,
+        budget_year=db_budget.budget_year,
+        **out,
+    )

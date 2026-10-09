@@ -45,4 +45,5 @@ from .budget import (
     IvaPeriod,
     Collaborator, CollaboratorSalaryPlan, LaborCostParameter,
     LaborArlRate, CostComponent, CollaboratorProvisionAccrual,
+    FinancingCredit, FinancingCreditInstallment,
 )

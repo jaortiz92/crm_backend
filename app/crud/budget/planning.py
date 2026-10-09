@@ -62,6 +62,7 @@ legacy ``create_budget`` stays untouched for the legacy endpoints.
 """
 
 import calendar
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from datetime import date, timedelta
@@ -77,6 +78,8 @@ from app.models.budget import LineCostRate as LineCostRateModel
 from app.models.budget import LinePayableTerm as LinePayableTermModel
 from app.models.budget import LineInternmentRate as LineInternmentRateModel
 from app.models.budget import LineInternmentTerm as LineInternmentTermModel
+from app.models.budget import FinancingCredit as FinancingCreditModel
+from app.models.budget import FinancingCreditInstallment as FinancingInstallmentModel
 from app.models.budget.budgetLine import BehaviorTypeEnum, LineTypeEnum
 from app.models.collection import Collection as CollectionModel
 from app.schemas.budget import (
@@ -84,6 +87,56 @@ from app.schemas.budget import (
     PlanningLineCreate, PlanningLineUpdate,
 )
 from app.crud.budget.budgetLine import create_budget_lines_bulk
+
+
+def get_financing_principal_flow(db: Session) -> Dict[str, Any]:
+    """Read the active projected principal schedule, independent of budget status.
+
+    The caller supplies the budget year for the response envelope, while all
+    schedule due dates are retained so clients can bucket payments outside
+    that year as well. This function is strictly read-only.
+    """
+    rows = (
+        db.query(FinancingInstallmentModel, FinancingCreditModel)
+        .join(
+            FinancingCreditModel,
+            FinancingCreditModel.id_financing_credit
+            == FinancingInstallmentModel.id_financing_credit,
+        )
+        .filter(
+            FinancingCreditModel.status == "active",
+            FinancingInstallmentModel.schedule_revision
+            == FinancingCreditModel.schedule_revision,
+            FinancingInstallmentModel.projection_status == "projected",
+            FinancingInstallmentModel.principal_amount > 0,
+        )
+        .order_by(
+            FinancingInstallmentModel.principal_due_date,
+            FinancingCreditModel.id_financing_credit,
+            FinancingInstallmentModel.installment_number,
+        )
+        .all()
+    )
+
+    lines = []
+    total_principal = Decimal("0.00")
+    for installment, credit in rows:
+        amount = Decimal(str(installment.principal_amount))
+        payment_date = installment.principal_due_date
+        total_principal += amount
+        lines.append({
+            "month": payment_date.strftime("%Y-%m"),
+            "payment_date": payment_date,
+            "id_cost_center": installment.id_cost_center,
+            "amount": amount,
+            "id_financing_credit": credit.id_financing_credit,
+            "installment_number": installment.installment_number,
+            "description": (
+                f"Principal — {credit.lender_name} — {credit.name} — "
+                f"installment {installment.installment_number}"
+            ),
+        })
+    return {"total_principal": total_principal, "lines": lines}
 
 
 def planning_name_exists_in_year(
@@ -209,7 +262,7 @@ def clone_budget_with_modifier(
       would corrupt the budgetEngine cash-flow).
     - The source is read as a snapshot and never mutated (BR-CLN-04).
     """
-    factor = 1.0 + (modifier_pct / 100.0)
+    factor = Decimal("1") + (Decimal(str(modifier_pct)) / Decimal("100"))
 
     new_budget = BudgetModel(
         budget_name=nuevo_nombre,
@@ -224,7 +277,8 @@ def clone_budget_with_modifier(
     db.flush()
 
     source_lines = db.query(BudgetLineModel).filter(
-        BudgetLineModel.id_budget == source_budget.id_budget
+        BudgetLineModel.id_budget == source_budget.id_budget,
+        BudgetLineModel.source_engine.is_distinct_from("financing_credit"),
     ).all()
 
     lines_to_create = [

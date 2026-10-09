@@ -74,6 +74,8 @@ from .budget import (
     PlanningLineCreate, PlanningLineUpdate,
     PlanningCarryoverFlag, PlanningCarryoverSource, PlanningCarryoverLine,
     PlanningCarryoverResult, PayrollSimulationLine, PayrollSimulationOut,
+    FinancingSimulationLine, FinancingSimulationOut,
+    FinancingPrincipalFlowLine, FinancingPrincipalFlowOut,
     IvaPeriod, IvaPeriodBase, IvaPeriodCreate,
     IvaGeneratedBreakdown, IvaDeductibleBreakdown, IvaSettlementPeriod,
     IvaUnassigned, IvaSettlementTotals, IvaSettlementMeta, IvaSettlementResult,
@@ -86,4 +88,9 @@ from .budget import (
     CostComponentOut,
     BreakdownComponentOut, BreakdownOut,
     ProvisionBalanceOut, ProvisionsOut, MaterializationStatusOut,
+    FinancingCreditCreate, FinancingCreditUpdate, FinancingCreditOut,
+    FinancingCreditDetail, FinancingCreditListResponse,
+    FinancingInstallmentOut, FinancingScheduleTotals, FinancingSchedulePreview,
+    FinancingRecalculateResult, FinancingCloseRequest, FinancingCloseResult,
+    FinancingCreditDeleteResult,
 )
