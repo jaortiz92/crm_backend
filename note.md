@@ -78,3 +78,38 @@ con `include_carryover`), toggle carryover roundtrip OK, filtros ORM de
 - `actual_expenses.amount`: modelo `NUMERIC(15,2)` vs BD `float8` (funcional,
   sin error; convertiría con `USING round(amount::numeric,2)` si se desea).
 - Producción: correr la migración completa (§1+§2 ya documentados como pendientes).
+
+## 4. `budget_lines` += 3 columnas del motor de nómina (BE-S11-COLLABORATORS, backend.02_21 §4.8)
+
+```sql
+ALTER TABLE budget_lines
+  ADD COLUMN IF NOT EXISTS id_collaborator    integer,
+  ADD COLUMN IF NOT EXISTS cost_component_code varchar(20),
+  ADD COLUMN IF NOT EXISTS source_engine       varchar(40);
+```
+
+- Mismo patrón que §1 (`include_carryover`) y que `has_iva` de BE-S10: las 6
+  tablas nuevas del módulo (`collaborators`, `collaborator_salary_plans`,
+  `labor_cost_parameters`, `labor_arl_rates`, `cost_components`,
+  `collaborator_provision_accruals`) las crea `create_all` en la fase 1 del
+  despliegue, pero `create_all` **nunca** agrega columnas a `budget_lines`
+  (tabla existente). Sin este ALTER, desplegar el modelo nuevo rompe cualquier
+  `GET/POST` sobre `budget_lines` con `UndefinedColumn` y el motor (R-13) no
+  puede poblar el vínculo `source_engine`/`id_collaborator`/`cost_component_code`.
+- Las tres son **nullable sin default** (D-S11-5): NULL en el 100 % de las filas
+  existentes ⇒ retrocompatible (NFR-05). `id_collaborator` lleva NO lleva FK de
+  BD a propósito (§4.7: la integridad la garantiza el motor y así el orden de
+  creación de tablas es irrelevante).
+- Sentencia completa (incluye el índice parcial opcional de rendimiento para
+  R-13 y las verificaciones):
+  `crm_backend/spec/migrations/2026-09-23_Schema_drift_collaborators_backend.02_21.sql`
+  (idempotente; aplicar con
+  `docker exec -i db_crm_dev psql -U postgres -d crm -v ON_ERROR_STOP=1 -f ...`).
+- **Pendiente en DEV (fase 2 + fase 3):** correr el ALTER de arriba y luego el
+  seed idempotente `python -m app.utils.seeds.laborCostSeed` (catálogo de 15
+  componentes + vigencia 2026 de parámetros/ARL). ⚠ Los valores sembrados son
+  los FICTICIOS del §4.3/§4.4 de la spec: **NUNCA sembrar producción sin la
+  validación de contabilidad (DEP-01, bloqueante go-live)**.
+- **PENDIENTE EN PRODUCCIÓN:** ALTER (misma sentencia) + seed con valores
+  validados por contabilidad, ambos ANTES del deploy. Cero cambios de esquema
+  en el lado real (SIIGO/ETLs intactos, D-S11-6/BR-13).

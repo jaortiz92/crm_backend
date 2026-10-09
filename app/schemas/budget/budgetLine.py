@@ -65,6 +65,27 @@ class BudgetLineBase(BaseModel):
                     "null = legacy/no-decision (derivation reads it as "
                     "con IVA, D-S10-3). Only meaningful for expense lines.",
     )
+    # BE-S11-COLLABORATORS (spec backend.02_21 §4.7, D-S11-5): additive
+    # Optionals on the BASE so BOTH the responses (BudgetLine/
+    # BudgetLineFull) and the Create round-trip gain the three motor
+    # link columns with None defaults — every existing contract stays
+    # byte-compatible (NFR-05). Only the laborCostEngine populates them
+    # (source_engine ∈ collaborator_cost|collaborator_liquidation); the
+    # idempotent replacement R-13 filters on exactly these columns.
+    id_collaborator: Optional[int] = Field(
+        None, description="FK (integrity by engine, no DB FK) to the "
+                          "collaborator whose cost materialized this line "
+                          "(BE-S11; None on every non-motor row)."
+    )
+    cost_component_code: Optional[str] = Field(
+        None, description="cost_components.code of the seat (BE-S11; None "
+                          "on every non-motor row)."
+    )
+    source_engine: Optional[str] = Field(
+        None, description="Motor that owns the line (collaborator_cost / "
+                          "collaborator_liquidation, BE-S11 D-S11-5); "
+                          "NULL = manual/legacy/other template."
+    )
 
     @field_validator("variable_rate")
     @classmethod

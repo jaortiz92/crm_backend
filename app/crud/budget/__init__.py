@@ -16,3 +16,6 @@ from .commissionRate import *
 from .uploadStatus import *
 from .planning import *
 from .ivaPeriod import *
+# BE-S11-COLLABORATORS (backend.02_21 §8): maestro, planes, parámetros,
+# arl_rates, componentes, accruals y helpers del motor (R-13).
+from .collaborator import *

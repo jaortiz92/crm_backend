@@ -44,5 +44,17 @@ from .planning import (
     PlanningScenarioRow, PlanningSetTargetResult, PlanningDetail,
     PlanningLineCreate, PlanningLineUpdate,
     PlanningCarryoverFlag, PlanningCarryoverSource, PlanningCarryoverLine,
-    PlanningCarryoverResult,
+    PlanningCarryoverResult, PayrollSimulationLine, PayrollSimulationOut,
+)
+# BE-S11-COLLABORATORS (backend.02_21 §8): named imports (repo style, no *).
+from .collaborator import (
+    CollaboratorCreate, CollaboratorUpdate, CollaboratorOut,
+    CollaboratorListResponse,
+    SalaryPlanCreate, SalaryPlanOut,
+    TerminateRequest, RecalculateRequest, RecalculateResult,
+    CollaboratorImportResult,
+    LaborParameterOut, LaborParameterUpsert, LaborParamsResponse, ArlRateOut,
+    CostComponentOut,
+    BreakdownComponentOut, BreakdownOut,
+    ProvisionBalanceOut, ProvisionsOut, MaterializationStatusOut,
 )

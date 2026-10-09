@@ -26,12 +26,43 @@ from .ivaSettlement import router as iva_settlement_router
 from .upload import router as upload_router
 from .analytics import router as analytics_router
 from .planning import router as planning_router
+# BE-S11-COLLABORATORS (backend.02_21 §8): maestro/planes/import/breakdown
+# + parámetros laborales + catálogo de componentes. app/main.py NO cambia
+# — el agregador `budget` ya estaba montado (patrón iva-period).
+from .collaborator import (
+    router as collaborator_router,
+    labor_params_router,
+    cost_components_router,
+)
 
 budget = APIRouter(prefix="/budget")
 
 budget.include_router(cost_center_router, prefix="/cost-center", tags=["Cost Centers"])
 budget.include_router(actual_expense_router, prefix="/actual-expense", tags=["Actual Expenses"])
 budget.include_router(actual_cost_router, prefix="/actual-cost", tags=["Actual Costs"])
+# BE-S11-COLLABORATORS (backend.02_21 §8, ENMIENDA 2026-09-28): los tres
+# sub-routers de nomina VAN ANTES de budget_router: el GET legacy
+# /budget/{id_budget} captura cualquier segmento literal de 2 partes
+# (/budget/collaborator, /budget/labor-params, /budget/cost-components) y
+# les responderia 422 'int_parsing' (input='collaborator'). Starlette resuelve
+# en ORDEN de registro: el literal debe ganarle al path param. El FE-S15 usa
+# las rutas SIN slash final (convencion del repo: cost-center, actual-cost).
+budget.include_router(
+    collaborator_router,
+    prefix="/collaborator",
+    tags=["Collaborators"],
+)
+budget.include_router(
+    labor_params_router,
+    prefix="/labor-params",
+    tags=["Collaborators"],
+)
+budget.include_router(
+    cost_components_router,
+    prefix="/cost-components",
+    tags=["Collaborators"],
+)
+
 budget.include_router(budget_router, tags=["Budgets"])
 budget.include_router(budget_line_router, prefix="/line", tags=["Budget Lines"])
 budget.include_router(

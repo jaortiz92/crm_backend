@@ -14,3 +14,10 @@ from .lineInternmentRate import LineInternmentRate
 from .lineInternmentTerm import LineInternmentTerm
 from .commissionRate import CommissionRate
 from .ivaPeriod import IvaPeriod
+# BE-S11-COLLABORATORS (backend.02_21 §4): maestro de colaboradores, planes
+# salariales, parámetros laborales, tarifas ARL, catálogo de componentes y
+# ledger de causación de provisiones.
+from .collaborator import (
+    Collaborator, CollaboratorSalaryPlan, LaborCostParameter, LaborArlRate,
+    CostComponent, CollaboratorProvisionAccrual,
+)

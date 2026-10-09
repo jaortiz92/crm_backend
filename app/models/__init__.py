@@ -43,4 +43,6 @@ from .budget import (
     LineInternmentTerm,
     CommissionRate,
     IvaPeriod,
+    Collaborator, CollaboratorSalaryPlan, LaborCostParameter,
+    LaborArlRate, CostComponent, CollaboratorProvisionAccrual,
 )

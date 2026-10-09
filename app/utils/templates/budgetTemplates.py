@@ -1,4 +1,4 @@
-﻿"""
+"""
 Budget Module - ETL Templates
 
 Processes Excel files from the accounting system and transforms them
@@ -13,13 +13,18 @@ Supported files:
   (BE-S8 backend.02_18 §10.1, amendment A-01: the REAL SIIGO layout
   "Formato Solicitud Presupuesto Importaciones" — first sheet, header on
   Excel ROW 8 (skiprows=7), with the mandatory Temporada column)
+- Formato Solicitud Presupuesto Nómina/Colaboradores.xlsx -> payroll
+  (BE-S11 backend.02_21 §6: OWN simple layout, same family as the
+  imports file — first sheet by position, skiprows=7, all-or-nothing)
 
 Uses pandas + openpyxl for data cleansing and transformation.
 """
 
 # Python
 import re
+import unicodedata
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -1757,6 +1762,318 @@ class BudgetTemplates:
         self.df["line_type"] = "purchase"
         self.df["behavior_type"] = "fixed"
 
+        return self.df
+
+    # ──────────────────────────────────────────────
+    # Budget Plan Collaborators / Nómina
+    # (Formato Solicitud Presupuesto Nómina/Colaboradores.xlsx)
+    # BE-S11-COLLABORATORS (backend.02_21 §6, A-13): the OWN payroll
+    # template in the SAME family/layout as the real SIIGO imports file
+    # processed above (first sheet read BY POSITION, headers on EXCEL
+    # ROW 8 => skiprows=7, data from ROW 9). The SIIGO expense layout
+    # stays untouched (A-13/D-S11-1).
+    # ──────────────────────────────────────────────
+
+    # Mandatory headers, MATCHED ACCENT-FOLDED + cleaned (strip, lower,
+    # space->'_'): the payroll template legitimately writes "Salario
+    # Básico Mensual" with the accent, and real-world files drop it.
+    COLLABORATOR_REQUIRED_COLS = [
+        "documento", "nombres_y_apellidos", "tipo_de_contrato",
+        "salario_basico_mensual", "centro_de_costo",
+    ]
+
+    # Strict §6 mapping "Tipo de Contrato" -> D-S11-2 enum (keys are
+    # accent-folded, lower, single-spaced).
+    COLLABORATOR_CONTRACT_MAP = {
+        "termino indefinido": "open_ended",
+        "termino fijo": "fixed_term",
+        "obra o labor": "work_or_service",
+        "prestacion de servicios": "service_provision",
+    }
+    COLLABORATOR_DOC_TYPES = {"CC", "CE", "NIT"}
+    COLLABORATOR_RISK_CLASSES = {"I", "II", "III", "IV", "V"}
+
+    @staticmethod
+    def _fold_accents(text: Any) -> str:
+        """Lowercase + strip + collapse whitespace + remove diacritics
+        (NFKD). Used ONLY by the collaborators processor for header and
+        contract-type matching — no other ETL behavior changes."""
+        if text is None:
+            return ""
+        normalized = unicodedata.normalize("NFKD", str(text))
+        ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+        return re.sub(r"\s+", " ", ascii_text.strip().lower())
+
+    @staticmethod
+    def _cell_text(value: Any) -> str:
+        """One raw cell to clean text: NaN/None -> '', numeric Excel
+        cells lose the float artifact ('1234.0' -> '1234') so doc_value
+        and the 20-char natural key stay sane."""
+        if value is None or value is pd.NaT:
+            return ""
+        if isinstance(value, float):
+            if pd.isna(value):
+                return ""
+            if value.is_integer():
+                return str(int(value))
+            return str(value)
+        try:
+            if pd.isna(value):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        text = str(value).strip()
+        return "" if text.lower() == "nan" else text
+
+    @staticmethod
+    def _cell_decimal(value: Any) -> Optional[Decimal]:
+        """Numeric cell -> Decimal (D-S11-4: the money NEVER travels as
+        float; str() of the pandas float round-trips the decimal literal
+        the user typed). Non-numeric/empty -> None."""
+        text = BudgetTemplates._cell_text(value).replace("$", "").replace(" ", "")
+        if text.endswith(".0"):
+            text = text[:-2]
+        if not text:
+            return None
+        try:
+            return Decimal(text)
+        except InvalidOperation:
+            return None
+
+    def process_budget_plan_collaborators(self) -> DataFrame:
+        """Process the payroll (collaborators) template with the OWN
+        simple layout of D-S11-1 (pair with process_budget_plan_purchase:
+        sheet_name=0, skiprows=7, _clean_column_names).
+
+        Header (row 8) -> record keys consumed by the import endpoint:
+        Documento -> doc_value · Tipo Documento -> doc_type (default CC,
+        case-insensitive) · Nombres y Apellidos -> full_name · Tipo de
+        Contrato -> contract_type (STRICT map, unknown rejects) ·
+        Salario Básico Mensual -> salary (>0 COP) · Centro de Costo ->
+        FIRST TOKEN (rule identical to income/purchase; unknown codes are
+        rejected ALL-OR-NOTHING by the API builder, §6) · Fecha de
+        Ingreso / Terminación / Aumento Salarial -> dates via
+         _parse_import_date (Aumento left None -> the endpoint resolves
+         it: hire_date on alta, today on re-imports; Ingreso left
+         None -> the endpoint defaults it to the first day of the load
+         window) · Asignación Salarial Fija / No Salarial -> Decimals >= 0
+        (default 0) · Clase de Riesgo ARL -> I..V (None -> the motor
+        applies arl_default_class) · Temporada -> short_collection_name
+        (tolerant: unknown -> NULL at the endpoint, purchase A-01
+        parity) · Observaciones -> notes.
+
+        Reject is all-or-nothing (R-06/T-05, AC-PLT-1): totally-empty
+        rows drop silently; any row with an empty mandatory cell, an
+        unknown contract type, a duplicate Documento IN THE FILE, or an
+        unparseable date/negative assignment raises the structured 400
+        {message, invalid_rows: [{excel_row, motivo}]} where
+        excel_row = df index + 9 (header on row 8)."""
+        from fastapi import HTTPException, status as http_status
+
+        self.df = pd.read_excel(
+            self.file,
+            engine="openpyxl",
+            sheet_name=0,
+            skiprows=7,
+        )
+        self._clean_column_names()
+
+        # Accent-folded lookup so "Salario Básico Mensual" and
+        # "Salario Basico Mensual" both resolve (the processor never
+        # mutates the incoming df columns beyond the shared cleaning).
+        folded = {self._fold_accents(c): c for c in self.df.columns}
+        missing_cols = [
+            col for col in self.COLLABORATOR_REQUIRED_COLS
+            if col not in folded
+        ]
+        if missing_cols:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": ("Payroll file is missing mandatory "
+                                "columns"),
+                    "missing_columns": missing_cols,
+                },
+            )
+
+        def cell(row: Any, canonical: str) -> Any:
+            actual = folded.get(canonical)
+            if actual is None:
+                return None
+            return row.get(actual)
+
+        self.df = self.df.dropna(how="all").reset_index(drop=True)
+
+        invalid_rows: List[Dict[str, Any]] = []
+        records: List[Dict[str, Any]] = []
+        seen_docs: Dict[str, int] = {}
+
+        for idx, row in self.df.iterrows():
+            excel_row = int(idx) + 9  # header on row 8 (§6/D-S11-1)
+            reasons: List[str] = []
+
+            # ── Documento (natural upsert key, R-07) ──
+            doc_value = self._cell_text(cell(row, "documento"))
+            if not doc_value:
+                reasons.append("Documento vacío")
+            elif doc_value in seen_docs:
+                reasons.append(
+                    "Documento duplicado en el archivo (primera "
+                    f"ocurrencia: fila {seen_docs[doc_value]})"
+                )
+            else:
+                seen_docs[doc_value] = excel_row
+
+            # ── Tipo Documento: CC|CE|NIT, default CC ──
+            raw_type = self._cell_text(cell(row, "tipo_documento")).upper()
+            doc_type = "CC"
+            if raw_type:
+                if raw_type not in self.COLLABORATOR_DOC_TYPES:
+                    reasons.append(
+                        f"Tipo Documento inválido: '{raw_type}' "
+                        "(esperado CC/CE/NIT)"
+                    )
+                else:
+                    doc_type = raw_type
+
+            # ── Nombres y Apellidos ──
+            full_name = self._cell_text(cell(row, "nombres_y_apellidos"))
+            if not full_name:
+                reasons.append("Nombres y Apellidos vacío")
+
+            # ── Tipo de Contrato: STRICT map (§6) ──
+            contract_raw = self._cell_text(cell(row, "tipo_de_contrato"))
+            contract_type = self.COLLABORATOR_CONTRACT_MAP.get(
+                self._fold_accents(contract_raw)
+            )
+            if contract_type is None:
+                reasons.append(
+                    "Tipo de Contrato no reconocido o vacío: "
+                    f"'{contract_raw}' (esperado: Término indefinido, "
+                    "Término fijo, Obra o labor, Prestación de servicios)"
+                )
+
+            # ── Salario Básico Mensual: COP > 0 (same as monto) ──
+            salary = self._cell_decimal(cell(row, "salario_basico_mensual"))
+            if salary is None or salary <= 0:
+                reasons.append(
+                    "Salario Básico Mensual inválido (numérico COP > 0)"
+                )
+
+            # ── Centro de Costo: FIRST TOKEN (income/purchase parity).
+            # The code exists check happens at the endpoint (DB); the
+            # empty cell is a row-level rejection here. ──
+            cc_text = self._cell_text(cell(row, "centro_de_costo"))
+            id_cost_center_code = cc_text.split()[0] if cc_text else ""
+            if not id_cost_center_code:
+                reasons.append("Centro de Costo vacío")
+
+            # ── Dates (optional; unparseable non-empty rejects) ──
+            def parse_date(canonical: str, label: str) -> Optional[date]:
+                raw = cell(row, canonical)
+                text = self._cell_text(raw)
+                if not text:
+                    return None
+                parsed = self._parse_import_date(raw)
+                if parsed is None:
+                    reasons.append(f"{label} no parseable: '{text}'")
+                return parsed
+
+            hire_date = parse_date("fecha_de_ingreso", "Fecha de Ingreso")
+            termination_date = parse_date(
+                "fecha_de_terminacion", "Fecha de Terminación"
+            )
+            # Fecha de Aumento Salarial -> plan valid_from; None when the
+            # cell is blank (§6): the endpoint resolves it per record —
+            # hire_date on alta (so the motor causes from the hire
+            # month), today on re-imports of existing collaborators.
+            valid_from = parse_date(
+                "fecha_de_aumento_salarial", "Fecha de Aumento Salarial"
+            )
+
+            # ── Asignaciones: numeric >= 0, default 0 ──
+            def parse_assignment(canonical: str, label: str) -> Decimal:
+                value = self._cell_decimal(cell(row, canonical))
+                if value is None:
+                    return Decimal("0.00")
+                if value < 0:
+                    reasons.append(f"{label} negativa: {value}")
+                    return Decimal("0.00")
+                return value
+
+            allowance_salary = parse_assignment(
+                "asignacion_salarial_fija", "Asignación Salarial Fija"
+            )
+            allowance_non_salary = parse_assignment(
+                "asignacion_no_salarial", "Asignación No Salarial"
+            )
+
+            # ── Clase de Riesgo ARL: I..V (None -> default class) ──
+            risk_class = self._cell_text(cell(row, "clase_de_riesgo_arl")).upper() or None
+            if risk_class is not None and risk_class not in self.COLLABORATOR_RISK_CLASSES:
+                reasons.append(
+                    f"Clase de Riesgo ARL inválida: '{risk_class}' "
+                    "(esperado I–V o vacío)"
+                )
+
+            # ── Temporada: tolerant (unknown -> NULL at the endpoint,
+            # purchase A-01 parity — never blocks here) ──
+            short_collection_name = self._cell_text(cell(row, "temporada"))
+
+            notes = self._cell_text(cell(row, "observaciones")) or None
+
+            if reasons:
+                invalid_rows.append({
+                    "excel_row": excel_row,
+                    "motivo": "; ".join(reasons),
+                })
+                continue
+
+            records.append({
+                "excel_row": excel_row,
+                "doc_type": doc_type,
+                "doc_value": doc_value,
+                "full_name": full_name,
+                "contract_type": contract_type,
+                "id_cost_center_code": id_cost_center_code,
+                "salary": salary,
+                "allowance_salary": allowance_salary,
+                "allowance_non_salary": allowance_non_salary,
+                # No "integral" column exists in the payroll template
+                # (§6): None = "keep whatever the open plan says" (or
+                # False on alta) — resolved by the import endpoint.
+                "is_integral": None,
+                "hire_date": hire_date,
+                "termination_date": termination_date,
+                "valid_from": valid_from,
+                "risk_class": risk_class,
+                "short_collection_name": short_collection_name,
+                "notes": notes,
+            })
+
+        if invalid_rows:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": (
+                        f"Payroll file has {len(invalid_rows)} invalid "
+                        "row(s): mandatory columns cannot be blank or "
+                        "unparseable (all-or-nothing, R-06)"
+                    ),
+                    "invalid_rows": invalid_rows[:20],
+                },
+            )
+
+        self.df = pd.DataFrame(
+            records,
+            columns=[
+                "excel_row", "doc_type", "doc_value", "full_name",
+                "contract_type", "id_cost_center_code", "salary",
+                "allowance_salary", "allowance_non_salary", "is_integral",
+                "hire_date", "termination_date", "valid_from",
+                "risk_class", "short_collection_name", "notes",
+            ],
+        )
         return self.df
 
     # ──────────────────────────────────────────────

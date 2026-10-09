@@ -7,7 +7,7 @@ Each line represents a projected income or expense for a given date.
 
 import enum
 
-from sqlalchemy import Boolean, Column, Date, Enum, ForeignKey, Float, Integer, Text
+from sqlalchemy import Boolean, Column, Date, Enum, ForeignKey, Float, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -60,6 +60,20 @@ class BudgetLine(Base):
     # the flag persists but the derivation ignores it (D-S10-5) — and
     # PURCHASE always taxed on both streams (§3.1).
     has_iva = Column(Boolean, nullable=True)
+    # BE-S11-COLLABORATORS (spec backend.02_21 §4.7, D-S11-5): the link
+    # motor<->line. THREE nullable columns — NULL on every existing row,
+    # so all current consumers are 100% backward compatible (NFR-05).
+    # id_collaborator carries NO DB FK (spec §4.7: integrity is enforced
+    # by the engine, not by the FK graph, so table-creation order never
+    # matters). Existing databases need the manual ALTER of §4.8 phase 2
+    # before deploying (create_all never alters an existing table — the
+    # include_carryover / has_iva precedent, see note.md).
+    # source_engine ∈ {collaborator_cost, collaborator_liquidation}; the
+    # idempotent replacement (R-13) ONLY touches rows with
+    # source_engine LIKE 'collaborator_%'.
+    id_collaborator = Column(Integer, nullable=True)
+    cost_component_code = Column(String(20), nullable=True)
+    source_engine = Column(String(40), nullable=True)
 
     budget = relationship("Budget", back_populates="budget_lines")
     cost_center = relationship("CostCenter", back_populates="budget_lines")

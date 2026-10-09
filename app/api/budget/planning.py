@@ -50,10 +50,17 @@ from sqlalchemy.orm import Session
 import app.crud as crud
 from app import get_db
 from app.api.utils import Exceptions
+from app.services.laborCostEngine import (
+    CostCatalogIncompleteError,
+    LaborCostEngine,
+    MissingLaborParametersError,
+    materialize_for_scenario_year,
+)
 from app.core.auth import get_current_user
 from app.schemas import (
     Budget, BudgetCreate, BudgetLine, BudgetLineCreate, User,
     PlanningCarryoverFlag, PlanningCarryoverResult,
+    PayrollSimulationOut,
     PlanningCarryoverSource, PlanningCellUpdate, PlanningCloneRequest,
     PlanningDetail, PlanningLineCreate, PlanningLineUpdate,
     PlanningScenarioRow, PlanningSetTargetResult, PlanningUploadResult,
@@ -649,6 +656,12 @@ def planning_set_target(
         result = crud.set_active_target(db, id_budget)
         if result is None:
             Exceptions.register_not_found("Budget", id_budget)
+        # BE-S11 enmienda (Opcion C): el escenario recien activo materializa
+        # la nomina pendiente (R-13 idempotente, warning-only, NUNCA falla
+        # la designacion: la activacion ya comiteo en su propia transaccion).
+        payroll = materialize_for_scenario_year(db, result["budget_year"])
+        result["payroll_lines_created"] = payroll["lines_created"]
+        result["payroll_warnings"] = payroll["warnings"]
         return result
 
     except HTTPException:
@@ -659,4 +672,51 @@ def planning_set_target(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error setting active target: {str(e)}",
+        )
+
+
+# ── BE-S11 extension: payroll what-if para escenarios NO activos ──
+
+@router.get("/{id_budget}/payroll-simulation",
+            response_model=PayrollSimulationOut)
+def planning_payroll_simulation(
+    id_budget: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Simulacion de nomina (what-if) de un escenario en borrador/cerrado.
+
+    Devuelve, SIN escribir nada (AC-SIM-4 — misma ruta persist=False del
+    breakdown), las lineas que el motor materializaria en este escenario
+    si se marcara meta activa: ene–dic del budget_year, prorrateadas por
+    ingreso/terminacion (BR-12), con totales por componente y anual.
+    Autoridad: auth simple — todo visor del escenario ve el COSTO laboral
+    proyectado (decision explícita de producto, paridad con las lineas
+    reales que el editor activo ya muestra); el salario basico individual
+    sigue maskado por COLLAB_VIEW_ROLES (D-S11-7).
+
+    - 404 escenario inexistente.
+    - 400 escenario ACTIVO: sus lineas reales ya viven en budget_lines
+      (AC-SIM-2; evitar suma doble real+simulada).
+    - 400 R-05 sin parametros de la vigencia del budget_year, o catalogo
+      de componentes incompleto (mismo error tipificado del import)."""
+    db_budget = crud.get_budget_by_id(db, id_budget)
+    if db_budget is None:
+        Exceptions.register_not_found("Budget", id_budget)
+    if db_budget.status == "active":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "El escenario esta activo: su nomina ya esta materializada "
+                "como lineas reales (POST /budget/collaborator/recalculate)"
+            ),
+        )
+    try:
+        engine = LaborCostEngine(db)
+        out = engine.simulate_year(db_budget.budget_year)
+        return PayrollSimulationOut(id_budget=id_budget, **out)
+    except (MissingLaborParametersError, CostCatalogIncompleteError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )

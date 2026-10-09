@@ -23,6 +23,7 @@ keys to ``PlanningUploadResult`` (optional third upload file) and lets
 
 import math
 from datetime import date, datetime
+from decimal import Decimal
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -268,6 +269,12 @@ class PlanningSetTargetResult(BaseModel):
     id_budget: int
     budget_year: int
     demoted_budget_id: Optional[int] = None
+    # BE-S11 enmienda (Opcion C): materializacion de nomina (colaboradores)
+    # ejecutada al activar la meta. None = backend pre-enmienda (default
+    # aditivo); [] = nada que proyectar o proyeccion limpia. Ningun warning
+    # de nomina falla la activacion (transacciones separadas, D-S11-5).
+    payroll_lines_created: Optional[int] = None
+    payroll_warnings: List[str] = Field(default_factory=list)
 
 
 class PlanningDetail(BudgetFull):
@@ -392,3 +399,38 @@ class PlanningCarryoverResult(BaseModel):
     source: Optional[PlanningCarryoverSource] = None
     lines: List[PlanningCarryoverLine] = []
     unavailable_reason: Optional[str] = None
+
+
+class PayrollSimulationLine(BaseModel):
+    """One simulated motor seat of a NON-active scenario (what-if).
+    Mirrors the budget_line the motor WOULD create: same dates,
+    component, cost center and amount, with the display name
+    pre-resolved server-side. No id_budget_line: nothing is or will be
+    persisted by this endpoint (AC-SIM-4)."""
+
+    month: str
+    budget_date: date
+    payment_date: Optional[date] = None
+    id_cost_center: int
+    id_collection: Optional[int] = None
+    cost_component_code: str
+    component_name: str
+    layer: str
+    kind: str = "caja"
+    description: str
+    amount: Decimal
+    id_collaborator: int
+    collaborator_name: str
+
+
+class PayrollSimulationOut(BaseModel):
+    """GET /budget/planning/{id}/payroll-simulation (BE-S11 what-if
+    extension). ``simulated`` is always true; active scenarios are
+    rejected (400) — they already carry the real motor lines."""
+
+    id_budget: int
+    year: int
+    simulated: bool = True
+    collaborators_count: int = 0
+    total_annual: Decimal = Decimal("0.00")
+    lines: List[PayrollSimulationLine] = []
