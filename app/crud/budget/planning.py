@@ -136,7 +136,37 @@ def get_financing_principal_flow(db: Session) -> Dict[str, Any]:
                 f"installment {installment.installment_number}"
             ),
         })
-    return {"total_principal": total_principal, "lines": lines}
+    disbursement_rows = (db.query(FinancingCreditModel)
+        .filter(
+            FinancingCreditModel.status == "active",
+            FinancingCreditModel.origin_type == "new",
+            FinancingCreditModel.disbursement_date.isnot(None),
+            FinancingCreditModel.original_principal > 0,
+        )
+        .order_by(FinancingCreditModel.disbursement_date,
+                  FinancingCreditModel.id_financing_credit)
+        .all())
+    disbursement_lines = []
+    total_disbursement = Decimal("0.00")
+    for credit in disbursement_rows:
+        amount = Decimal(str(credit.original_principal))
+        payment_date = credit.disbursement_date
+        total_disbursement += amount
+        disbursement_lines.append({
+            "month": payment_date.strftime("%Y-%m"),
+            "payment_date": payment_date,
+            "id_cost_center": credit.id_cost_center,
+            "amount": amount,
+            "id_financing_credit": credit.id_financing_credit,
+            "installment_number": 0,
+            "description": f"Disbursement - {credit.lender_name} - {credit.name}",
+        })
+    return {
+        "total_principal": total_principal,
+        "lines": lines,
+        "total_disbursement": total_disbursement,
+        "disbursement_lines": disbursement_lines,
+    }
 
 
 def planning_name_exists_in_year(

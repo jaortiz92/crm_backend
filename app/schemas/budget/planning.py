@@ -490,3 +490,5 @@ class FinancingPrincipalFlowOut(BaseModel):
     budget_year: int
     total_principal: Decimal = Decimal("0.00")
     lines: List[FinancingPrincipalFlowLine] = Field(default_factory=list)
+    total_disbursement: Decimal = Decimal("0.00")
+    disbursement_lines: List[FinancingPrincipalFlowLine] = Field(default_factory=list)
