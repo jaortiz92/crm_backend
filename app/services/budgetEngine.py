@@ -19,6 +19,7 @@ Implements the core financial engine for the Budget and Cash Flow module:
 
 # Python
 from datetime import date, timedelta
+import calendar
 from typing import List, Optional, Dict, Any
 from copy import deepcopy
 
@@ -54,6 +55,16 @@ from app.models.budget import (
     CommissionRate as CommissionRateModel,
     FinancingCredit as FinancingCreditModel,
     FinancingCreditInstallment as FinancingCreditInstallmentModel,
+    BudgetTaxAssumption as BudgetTaxAssumptionModel,
+    BudgetTaxResult as BudgetTaxResultModel,
+)
+from app.services.budgetTaxEngine import (
+    P_AND_L_TAX_TYPES,
+    aggregate_tax_cash_flow,
+    tax_cash_advance,
+    tax_cash_advance_date,
+    tax_pnl_date,
+    tax_result_locations,
 )
 
 
@@ -140,6 +151,16 @@ class BudgetEngine:
             outflows_by_month[month] += float(row[2])
             ap_keys.add((month, row.id_cost_center))
 
+        # An explicit scenario is authoritative even when the requested cash
+        # year is the following year (for example a 2026 scenario with tax or
+        # supplier payments in 2027).  Filtering the scenario again by its
+        # stored budget_year silently dropped those payments.
+        budget_scope = (
+            BudgetModel.id_budget == id_budget
+            if id_budget is not None
+            else BudgetModel.budget_year == budget_year
+        )
+
         income_query = (
             self.db.query(
                 extract("month", BudgetLineModel.budget_date).label("budget_month"),
@@ -147,12 +168,11 @@ class BudgetEngine:
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
             .filter(
-                BudgetModel.budget_year == budget_year,
+                budget_scope,
                 BudgetLineModel.line_type == "income",
+                extract("year", BudgetLineModel.budget_date) == budget_year,
             )
         )
-        if id_budget is not None:
-            income_query = income_query.filter(BudgetLineModel.id_budget == id_budget)
 
         income_rows = income_query.group_by("budget_month").all()
         for row in income_rows:
@@ -162,6 +182,9 @@ class BudgetEngine:
         for month in range(1, 13):
             inflows_by_month[month] = net_income_by_month[month] * (1 + TAX_RATE)
 
+        fixed_payment_date = func.coalesce(
+            BudgetLineModel.payment_date, BudgetLineModel.budget_date
+        )
         fixed_expense_query = (
             self.db.query(
                 func.coalesce(
@@ -173,13 +196,12 @@ class BudgetEngine:
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
             .filter(
-                BudgetModel.budget_year == budget_year,
+                budget_scope,
                 BudgetLineModel.line_type == "expense",
                 BudgetLineModel.behavior_type == "fixed",
+                extract("year", fixed_payment_date) == budget_year,
             )
         )
-        if id_budget is not None:
-            fixed_expense_query = fixed_expense_query.filter(BudgetLineModel.id_budget == id_budget)
 
         fixed_rows = (
             fixed_expense_query.group_by("payment_month", BudgetLineModel.id_cost_center)
@@ -204,13 +226,12 @@ class BudgetEngine:
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
             .filter(
-                BudgetModel.budget_year == budget_year,
+                budget_scope,
                 BudgetLineModel.line_type == "expense",
                 BudgetLineModel.behavior_type == "variable_sales",
+                extract("year", BudgetLineModel.budget_date) == budget_year,
             )
         )
-        if id_budget is not None:
-            variable_sales_query = variable_sales_query.filter(BudgetLineModel.id_budget == id_budget)
 
         for row in variable_sales_query.all():
             if row.accrual_month is None:
@@ -226,13 +247,12 @@ class BudgetEngine:
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
             .filter(
-                BudgetModel.budget_year == budget_year,
+                budget_scope,
                 BudgetLineModel.line_type == "expense",
                 BudgetLineModel.behavior_type == "variable_receivables",
+                extract("year", BudgetLineModel.budget_date) == budget_year,
             )
         )
-        if id_budget is not None:
-            variable_receivables_query = variable_receivables_query.filter(BudgetLineModel.id_budget == id_budget)
 
         # B2 (Enmienda E-02): accrues on the line's budget_date month (not
         # payment_date); base stays the composed expected-cash figure
@@ -550,6 +570,17 @@ class BudgetEngine:
             else None
         )
 
+        # Tax planning is a budget snapshot, not an actual-ledger tax
+        # accounting source.  Consequently it is exposed on the budget side
+        # of the P&L and never pretends that a tax calculation is an actual
+        # expense.  The helper also preserves the result rows as an audit
+        # trace and distinguishes tax expense from retention credits.
+        tax_expense, profit_after_tax, tax_summary = self._pnl_tax_values(
+            resolved_id, date_from, date_to, operating_budget,
+        )
+        if tax_summary is not None:
+            warnings.extend(tax_summary["warnings"])
+
         # ── meta: not_filterable (BR-9/BR-10/A-7) ────────────────────────
         if id_cost_center is not None:
             not_filterable.append("revenues (no cost-center dimension)")
@@ -578,6 +609,8 @@ class BudgetEngine:
                 "operating_profit": self._pnl_profit(
                     operating_actual, operating_budget,
                     revenues_actual, revenues_budget),
+                "tax_expense": tax_expense,
+                "profit_after_tax": profit_after_tax,
             },
             "meta": {
                 "mode": "slice" if slice_mode else "consolidated",
@@ -594,8 +627,141 @@ class BudgetEngine:
                 "not_filterable": not_filterable,
                 "cogs_budget_trace": cogs_trace,
                 "warnings": warnings,
+                "tax_summary": tax_summary,
             },
         }
+
+    def _pnl_tax_values(
+        self,
+        id_budget: Optional[int],
+        date_from: date,
+        date_to: date,
+        operating_budget: Optional[float],
+    ) -> tuple:
+        """Return P&L tax rows, budget expense and after-tax budget profit.
+
+        Only ``income_ordinary``/``simple`` and ``ica`` are accounting
+        expenses.  ``reteiva``, ``withholding`` and ``reteica`` remain visible
+        in the trace as cash credits/saldos and are excluded from expense.
+        A configured assumption with no result rows is explicitly warned about
+        so the UI can distinguish zero tax from a calculation not executed.
+        """
+        if id_budget is None:
+            return None, None, None
+        assumption = self.db.query(BudgetTaxAssumptionModel).filter(
+            BudgetTaxAssumptionModel.id_budget == id_budget
+        ).first()
+        if assumption is None:
+            # No tax planning has been configured for this budget; this is not
+            # a failed calculation and should not pollute legacy P&L warnings.
+            return None, None, None
+
+        all_rows = self.db.query(BudgetTaxResultModel).filter(
+            BudgetTaxResultModel.id_budget == id_budget
+        ).order_by(
+            BudgetTaxResultModel.period_start,
+            BudgetTaxResultModel.tax_type,
+            BudgetTaxResultModel.id_budget_tax_result,
+        ).all()
+        warnings: List[str] = []
+        if not all_rows:
+            warnings.append(
+                f"Tax calculation has not been executed for budget {id_budget}"
+            )
+
+        # Tax periods are not P&L dates.  In particular, the ordinary income
+        # tax result for a 2026 budget is recognized in Dec-2026 although its
+        # payment can be in 2027; SIMPLE is likewise recognized in Dec of the
+        # budget year.  ICA follows its declaration/liquidation date.  Credit
+        # results remain in the audit trace using their source period, but are
+        # never included in ``expense`` below.
+        budget = self.db.query(BudgetModel).filter(
+            BudgetModel.id_budget == id_budget
+        ).first()
+        budget_year = budget.budget_year if budget is not None else None
+
+        def belongs_to_pnl_window(row):
+            if row.tax_type in P_AND_L_TAX_TYPES:
+                pnl_date = tax_pnl_date(row, budget_year)
+                if pnl_date is None:
+                    return False
+                # ``pnl_date`` is a month coordinate (first day), so a
+                # partial-month request must still include the charge.
+                month_end = date(
+                    pnl_date.year,
+                    pnl_date.month,
+                    calendar.monthrange(pnl_date.year, pnl_date.month)[1],
+                )
+                return pnl_date <= date_to and month_end >= date_from
+            return row.period_start <= date_to and row.period_end >= date_from
+
+        rows = [r for r in all_rows if belongs_to_pnl_window(r)]
+        if all_rows and not rows:
+            warnings.append("No calculated tax result overlaps the requested P&L period")
+        for row in rows:
+            warnings.extend(row.warnings or [])
+        simple_count = sum(1 for row in all_rows if row.tax_type == "simple")
+        if simple_count and simple_count != 6:
+            warnings.append(
+                f"SIMPLE requires six calculated bimonthly results; found {simple_count}"
+            )
+
+        def f(value) -> float:
+            return round(float(value or 0), 2)
+
+        caused = sum((r.tax_caused for r in rows), 0)
+        expense_caused = sum(
+            (r.tax_caused for r in rows if r.tax_type in P_AND_L_TAX_TYPES), 0
+        )
+        advances = sum((r.advance_amount for r in rows), 0)
+        withholdings = sum((r.withholding_amount for r in rows), 0)
+        payable = sum((r.balance_payable for r in rows), 0)
+        trace = []
+        for r in rows:
+            locations = tax_result_locations(r, budget_year)
+            trace.append({
+                "id_budget_tax_result": r.id_budget_tax_result,
+                "tax_type": r.tax_type,
+                "period_start": r.period_start,
+                "period_end": r.period_end,
+                "taxable_base": f(r.taxable_base),
+                # Rates are ratios (0.035), not COP values: preserve their
+                # configured precision instead of applying money rounding.
+                "tax_rate": round(float(r.tax_rate or 0), 8),
+                "tax_caused": f(r.tax_caused),
+                "advance_amount": f(r.advance_amount),
+                "withholding_amount": f(r.withholding_amount),
+                "balance_payable": f(r.balance_payable),
+                "declaration_date": r.declaration_date,
+                "payment_date": locations["payment_date"],
+                "payment_year": locations["payment_year"],
+                "pnl_month": locations["pnl_month"],
+                "pnl_year": locations["pnl_year"],
+                "calculation_trace": r.calculation_trace or {},
+                "warnings": r.warnings or [],
+            })
+        summary = {
+            "calculation_executed": bool(all_rows),
+            "caused": f(caused),
+            "expense": f(expense_caused),
+            "advances": f(advances),
+            "withholdings": f(withholdings),
+            "balance_payable": f(payable),
+            "by_type": trace,
+            "warnings": sorted(set(warnings)),
+        }
+        if not rows:
+            return None, None, summary
+
+        tax_comparison = self._pnl_comparison(None, f(expense_caused), favorable_up=False)
+        after_tax_budget = (
+            round(operating_budget - f(expense_caused), 2)
+            if operating_budget is not None else None
+        )
+        after_tax = self._pnl_profit(
+            None, after_tax_budget, 0.0, None,
+        )
+        return tax_comparison, after_tax, summary
 
     @staticmethod
     def _pnl_comparison(
@@ -1014,6 +1180,37 @@ class BudgetEngine:
                  .all())
             bud_anchored = [(r[1], r[0], float(r[2])) for r in bud_rows]
 
+        # Tax snapshots are a separate budget obligation.  Keep the legacy
+        # budget/AP matrix intact, but include calculated tax cash payments in
+        # the same liquidity buckets when budget outflows are requested.
+        tax_anchored: List[tuple] = []       # (payment date, net outflow)
+        tax_summary: Optional[Dict[str, Any]] = None
+        if outflow_source in ("budget", "both") and resolved_id is not None:
+            tax_rows = (self.db.query(BudgetTaxResultModel)
+                        .filter(BudgetTaxResultModel.id_budget == resolved_id)
+                        .order_by(BudgetTaxResultModel.payment_date,
+                                  BudgetTaxResultModel.tax_type).all())
+            if tax_rows:
+                tax_aggregate = aggregate_tax_cash_flow(tax_rows)
+                tax_summary = tax_aggregate["totals"]
+                for tax_row in tax_rows:
+                    # The explicit tax endpoint reports all years.  The
+                    # analytics curve only contributes obligations in its
+                    # requested window, like every other projected outflow.
+                    # Advances and balances are separate cash events: an advance
+                    # leaves on its own date, the balance on the payment date.
+                    if tax_row.payment_date is not None and slice_lo <= tax_row.payment_date <= date_to:
+                        tax_anchored.append((tax_row.payment_date, float(tax_row.balance_payable or 0)))
+                    cash_advance = tax_cash_advance(tax_row)
+                    advance_date = tax_cash_advance_date(tax_row) or tax_row.payment_date
+                    if cash_advance and advance_date is not None and slice_lo <= advance_date <= date_to:
+                        tax_anchored.append((advance_date, float(cash_advance)))
+            elif self.db.query(BudgetTaxAssumptionModel).filter(
+                    BudgetTaxAssumptionModel.id_budget == resolved_id).first():
+                warnings.append(
+                    f"Tax calculation has not been executed for budget {resolved_id}"
+                )
+
         # Financing debt is a global obligation, independent from the
         # selected budget/scenario and outflow_source. The ACTIVE revision of
         # each active credit is the sole source for all three components;
@@ -1092,6 +1289,10 @@ class BudgetEngine:
             label = _cover(anchor)
             outflow_by_bucket[label] += amount
             ap_side[(cc, label)] = ap_side.get((cc, label), 0.0) + amount
+        for anchor, amount in tax_anchored:
+            label = _cover(anchor)
+            if label is not None:
+                outflow_by_bucket[label] += amount
 
         # ── Overlap detection, only in both mode (D-1/BR-29): se denuncia,
         #        nunca se deduplica; orden estable por (cc, label) ────────────
@@ -1121,6 +1322,10 @@ class BudgetEngine:
                 "outflows": -round(outflow, 2),     # payload SIEMPRE negativo (A-6)
                 "net_flow": net,
                 "accumulated_balance": accumulated,
+                "tax_outflows": -round(sum(
+                    amount for anchor, amount in tax_anchored
+                    if _cover(anchor) == label
+                ), 2),
             })
 
         return {
@@ -1142,6 +1347,19 @@ class BudgetEngine:
                 "financing_interest": float(financing_totals["interest"]),
                 "financing_insurance": float(financing_totals["insurance"]),
                 "financing_installment_count": financing_installment_count,
+                "tax_calculation_executed": (
+                    bool(tax_summary is not None) if resolved_id is not None else None
+                ),
+                "tax_caused": round(float(tax_summary["tax_caused"]), 2)
+                if tax_summary is not None else 0.0,
+                "tax_advances": round(float(tax_summary["advance_amount"]), 2)
+                if tax_summary is not None else 0.0,
+                "tax_withholdings": round(float(tax_summary["withholding_amount"]), 2)
+                if tax_summary is not None else 0.0,
+                "tax_payments": round(float(tax_summary["payments"]), 2)
+                if tax_summary is not None else 0.0,
+                "tax_net_outflow": round(float(tax_summary["net_outflow"]), 2)
+                if tax_summary is not None else 0.0,
                 "filters": {
                     "date_from": date_from.isoformat(),
                     "date_to": date_to.isoformat(),

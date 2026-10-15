@@ -52,7 +52,7 @@ FECHA DEL MOVIMIENTO, no de la causación):
 | D-S10-6 | Compra — IVA de importación = T × CostoProveedor (`Total/(1+%int)`): UN solo evento de contado en `budget_date` (fecha de compra), dentro de la corriente de pago a proveedores | A5 + Q6 lectura A |
 | D-S10-7 | Compra — IVA de internación = T × cada cuota del stream de internación: se paga y se descuenta JUNTO con cada cuota ("como en los gastos, al pagar") | A5 v2 |
 | D-S10-8 | Degradación: Línea sin `%int` o CECO sin Línea ⇒ CostoProveedor = Total ⇒ IVA-importación = T × Total; IVA-internación = 0 (cero stream int). Sin advertencia bloqueante | Q4 opción 1 |
-| D-S10-9 | Base de liquidación = **CAJA**: generado en el período del recaudo, descontable en el período del pago de cada cuota | Q5 |
+| D-S10-9 | **[SUPERADA 2026-10-14]** Base de liquidación = **CAUSACIÓN**: cada evento cae en el período que cubre `budget_date` de la línea (generado y descontable). Antes era base de caja (recaudo/pago). | Q5 |
 | D-S10-10 | Calendario configurable por año: tabla `iva_periods` (rango de fechas + vencimiento) — cubre el patrón bimestral del stakeholder (ene-feb vence 21-may) sin hardcodear reglas DIAN | A6 |
 | D-S10-11 | Sin aplicación manual del saldo: arrastre automático ilimitado; saldo a favor no se paga ni se devuelve ni se compensa en v1 | A8/A9 |
 | D-S10-12 | v1 = liquidación PROYECTADA sobre las líneas del escenario; NO toca carryover, NO toca `budgetEngine` (pilares 1/2/3) ni `project_cash_flow` legacy; conciliación contra IVA real = PQ | A7/A10/A15 |
@@ -137,11 +137,11 @@ El flag `has_iva` de una INCOME se IGNORA (D-S10-5). Concepto `ventas`.
 
 | # | Fuente | Fecha del evento | Base | IVA |
 |---|---|---|---|---|
-| E2 | EXPENSE fixed con flag efectivo True (NULL ≡ True) | `coalesce(payment_date, budget_date)` | `projected_amount` | base × T |
+| E2 | EXPENSE fixed con flag efectivo True (NULL ≡ True) | `budget_date` (causación, D-S10-9 enmendada) | `projected_amount` | base × T |
 | E3 | EXPENSE `variable_sales` con flag True | `budget_date` de la línea (aproximación de caja sobre el mes de causación de la base — R-S10-4) | `variable_rate × Q3[mes]` | base × T |
 | E4 | EXPENSE `variable_receivables` con flag True | idem E3 | `variable_rate × (Q3[mes] + Q4[mes])` | base × T |
 | E5 | PURCHASE — IVA importación | `budget_date` (momento de la compra, D-S10-6) | `Total / (1 + %int)` | base × T |
-| E6 | PURCHASE — IVA internación, cuota k | `budget_date + term.payment_days` (D-S10-7) | `CostoInt × term.payment_pct` (sin términos ⇒ 100 % en la ancla, BR-INT-04 de `02_19`) | base × T |
+| E6 | PURCHASE — IVA internación, cuota k | `budget_date` de la compra (causación, D-S10-9 enmendada; las cuotas ya no desplazan la fecha) | `CostoInt × term.payment_pct` (sin términos ⇒ 100 % en la ancla, BR-INT-04 de `02_19`) | base × T |
 
 Reglas compartidas con BE-S9 §4: `%int` irresoluble (sin Línea o sin fila del catálogo) ⇒ 0
 ⇒ E5 = T×Total y E6 no existe (D-S10-8); guard `pct > 0 Y costo_int > 0` (nota §10.2 de
@@ -178,7 +178,7 @@ final. Desglose descontable por concepto en la respuesta:
 ```jsonc
 {
   "id_budget": 126, "budget_name": "...", "year": 2027,
-  "tax_rate_used": 0.19, "basis": "cash",
+  "tax_rate_used": 0.19, "basis": "accrual",
   "periods": [{
     "period_no": 1, "date_from": "2027-01-01", "date_to": "2027-02-28",
     "payment_due_date": "2027-05-21", "description": null,

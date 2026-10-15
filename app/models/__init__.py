@@ -46,4 +46,5 @@ from .budget import (
     Collaborator, CollaboratorSalaryPlan, LaborCostParameter,
     LaborArlRate, CostComponent, CollaboratorProvisionAccrual,
     FinancingCredit, FinancingCreditInstallment,
+    TaxProfile, TaxRate, TaxCalendarPeriod, BudgetTaxAssumption, BudgetTaxResult,
 )

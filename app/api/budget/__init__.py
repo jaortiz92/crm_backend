@@ -35,6 +35,7 @@ from .collaborator import (
     cost_components_router,
 )
 from .financingCredit import router as financing_credit_router
+from .taxPlanning import router as tax_planning_router
 
 budget = APIRouter(prefix="/budget")
 
@@ -140,6 +141,7 @@ budget.include_router(
     prefix="/planning",
     tags=["Budget Planning"],
 )
+budget.include_router(tax_planning_router, prefix="/tax", tags=["Budget Tax Planning"])
 # Keep the legacy /budget/{id} router last: it is the catch-all path
 # parameter and literal planning routes (including financing-simulation)
 # must be registered before it.

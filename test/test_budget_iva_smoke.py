@@ -43,7 +43,7 @@ Cubre (numerales EXACTOS de spec §9):
                totals = sumas de columnas de PERIODOS con la clave
                LITERAL 'deductable' (8.900.000 / 4.000.000 / 4.900.000)
                y final_balance = arrastre remanente (0.0). Evento con
-               fecha 2028 => meta.out_of_year_events = 1, excluido.
+               fecha de causacion 2028 => meta.out_of_year_events = 1, excluido.
      AC-BE10-5 (catalogo): POST duplicado (year,no) => 400 LITERAL
                "Period {no} already exists for year {year}"; date_to <
                date_from => 422; period_no 99 / year 1999 => 422; PUT
@@ -544,7 +544,7 @@ def t03_seed_scenarios():
     insert_line(state.b_rec, state.ccs["C"], "EXPENSE", "2027-08-01",
                 "2027-08-20", net_of(500_000), "BE10 rec P4 desc 0.5M",
                 has_iva="TRUE")
-    insert_line(state.b_rec, state.ccs["C"], "INCOME", "2027-12-01",
+    insert_line(state.b_rec, state.ccs["C"], "INCOME", "2028-02-02",
                 "2028-02-02", 1_000_000, "BE10 rec out-of-year 2028")
 
     state.b_flags = insert_budget(MARK + "flags 2044", FLAGS_YEAR)
@@ -614,10 +614,10 @@ def t04_ac_be10_3_purchase_events():
            for n in range(2, 7))
        and approx(resp["totals"]["final_balance"], 3_800_000.0))
     ck("§4.6 contrato: year default = budget_year (2027), tax_rate_used "
-       "0.19, basis 'cash', sin warnings ni out-of-year, unassigned "
+       "0.19, basis 'accrual', sin warnings ni out-of-year, unassigned "
        "0/0/0 y filters eco",
        resp["year"] == YEAR and resp["tax_rate_used"] == 0.19
-       and resp["basis"] == "cash" and resp["meta"]["warnings"] == []
+       and resp["basis"] == "accrual" and resp["meta"]["warnings"] == []
        and resp["meta"]["out_of_year_events"] == 0
        and resp["unassigned"] == {"generated": 0.0, "deductible": 0.0,
                                   "events_count": 0}
@@ -679,7 +679,7 @@ def t05_ac_be10_4_recurrence():
                        {"generated": 8_900_000.0,
                         "deductable": 4_000_000.0,
                         "payments": 4_900_000.0, "final_balance": 0.0}))
-    ck("§4.4: el evento con fecha 2028 (recaudo 2028-02-02) NO liquida "
+    ck("§4.4: el evento con fecha de causación 2028-02-02 NO liquida "
        "=> meta.out_of_year_events=1; unassigned 0 (calendario 2027 "
        "cubre todo el anio)",
        resp["meta"]["out_of_year_events"] == 1
@@ -1091,14 +1091,14 @@ def t11_unit_be10():
         evs = eng.events(state.b_pur, YEAR)
         expected = [
             ("2027-01-10", "import_vat", E5_WITH),
+            ("2027-01-10", "nationalization_vat", E6_1),
+            ("2027-01-10", "nationalization_vat", E6_2),
             ("2027-01-20", "import_vat", E5_NO_PCT),
-            ("2027-01-25", "nationalization_vat", E6_1),
-            ("2027-02-24", "nationalization_vat", E6_2),
         ]
         got = [(e["date"], e["concept"], e["amount"]) for e in evs]
         sigma_a = sum(e["amount"] for e in evs if e["date"] != "2027-01-20")
-        ck("AC-BE10-3 events(): E5 1.727.272,73 en 2027-01-10 + E6 "
-           "103.636,36 (2027-01-25) + 69.090,91 (2027-02-24) en orden "
+        ck("AC-BE10-3 events(): E5 1.727.272,73 + E6 103.636,36 + 69.090,91 "
+           "en 2027-01-10 (causacion) + E5 sin pct en 2027-01-20, en orden "
            "(fecha, concepto, id) y SIGMA compra A = T x Total = "
            "1.900.000,00 EXACTO",
            len(got) == 4 and all(

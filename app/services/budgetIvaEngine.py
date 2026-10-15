@@ -10,14 +10,14 @@ settlement is recomputed LIVE on every read.
 
 T = TAX_RATE (app/core/constants.py) is the single rate source
 (D-S10-1: no per-category or per-line rates in v1, PQ-S10-7). The basis
-is CASH (D-S10-9): every event falls in the period covering the date of
-the MOVEMENT, not of the accrual —
+is ACCRUAL / causación (overrides D-S10-9): every event falls in the period
+covering the line's budget_date —
 
     E1 ventas           INCOME, always taxed, flag IGNORED (D-S10-5),
-                        coalesce(payment_date, budget_date)
+                        budget_date
     E2 fixed_expenses   EXPENSE fixed, effective flag True (NULL ≡ True,
                         D-S10-3; False emits NOTHING, not a 0 event),
-                        coalesce(payment_date, budget_date)
+                        budget_date
     E3 variable_expenses EXPENSE variable_sales: rate × income_budget
                         [month of budget_date] — base B1 of the legacy
                         project_cash_flow (02_02 §6) computed from the
@@ -58,7 +58,6 @@ LITERAL 'deductable' totals key and the literal no-calendar warning
 'No IVA calendar for {year}; configure /budget/iva-period' (AC-BE10-6).
 """
 
-from datetime import timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import extract, func
@@ -295,7 +294,7 @@ class BudgetIvaEngine:
             if line_type == "income":
                 # E1 (§4.2) — recaudo sobre el NETO proyectado; el flag
                 # de una INCOME se IGNORA (D-S10-5, AC-BE10-2).
-                emit(line.payment_date or line.budget_date,
+                emit(line.budget_date,
                      CONCEPT_VENTAS, lid, "generated", amount * T)
 
             elif line_type == "expense":
@@ -325,7 +324,7 @@ class BudgetIvaEngine:
                 else:
                     # E2 — fixed (also the safety branch for any dirty
                     # behavior value: never invent a variable base).
-                    emit(line.payment_date or line.budget_date,
+                    emit(line.budget_date,
                          CONCEPT_FIXED_EXPENSES, lid, "deductible",
                          amount * T)
 
@@ -348,10 +347,11 @@ class BudgetIvaEngine:
                         if id_line is not None else None
                     )
                     if terms:
+                        # Causation basis: the nationalization VAT belongs to
+                        # the import date, whatever the installment schedule.
                         for term in terms:  # D-7 order from Q6
                             emit(
-                                line.budget_date
-                                + timedelta(days=term.payment_days),
+                                line.budget_date,
                                 CONCEPT_NATIONALIZATION_VAT, lid,
                                 "deductible",
                                 costo_int * float(term.payment_pct) * T,
@@ -485,7 +485,7 @@ class BudgetIvaEngine:
             "budget_name": budget.budget_name,
             "year": year,
             "tax_rate_used": TAX_RATE,
-            "basis": "cash",
+            "basis": "accrual",
             "periods": rows,
             "unassigned": {
                 "generated": round(un_generated, 2),

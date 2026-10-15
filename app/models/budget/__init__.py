@@ -22,3 +22,4 @@ from .collaborator import (
     CostComponent, CollaboratorProvisionAccrual,
 )
 from .financingCredit import FinancingCredit, FinancingCreditInstallment
+from .taxPlanning import TaxProfile, TaxRate, TaxCalendarPeriod, BudgetTaxAssumption, BudgetTaxResult

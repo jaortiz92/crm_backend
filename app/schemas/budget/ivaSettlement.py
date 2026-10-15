@@ -103,7 +103,7 @@ class IvaSettlementResult(BaseModel):
     budget_name: str
     year: int
     tax_rate_used: float
-    basis: str = "cash"
+    basis: str = "accrual"
     periods: List[IvaSettlementPeriod] = []
     unassigned: IvaUnassigned = Field(default_factory=IvaUnassigned)
     totals: IvaSettlementTotals = Field(default_factory=IvaSettlementTotals)

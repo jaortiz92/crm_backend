@@ -5,7 +5,8 @@ from .budget import (
     Budget, BudgetCreate, BudgetFull,
     BudgetVsActual, CashFlowProjection, BudgetTrackingSummary,
     PnLResponse, PnLMeta, PnLStatement, PnLComparison,
-    PnLProfit, PnLOpex, OpexBreakdownItem, CogsBudgetTraceItem,
+    PnLProfit, PnLOpex, PnLTaxType, PnLTaxSummary,
+    OpexBreakdownItem, CogsBudgetTraceItem,
     CashFlowResponse, CashFlowMeta, CashFlowSummary, CashFlowPoint,
     CommissionRateTrace, CommissionDetailRow, CommissionSellerBlock,
     CommissionSummary, CommissionMeta, CommissionResponse,
@@ -66,4 +67,11 @@ from .financingCredit import (
     FinancingInstallmentOut, FinancingScheduleTotals, FinancingSchedulePreview,
     FinancingRecalculateResult, FinancingCloseRequest, FinancingCloseResult,
     FinancingCreditDeleteResult,
+)
+from .taxPlanning import (
+    TaxProfile, TaxProfileCreate, TaxRate, TaxRateCreate,
+    TaxCalendar, TaxCalendarCreate, BudgetTaxAssumption,
+    BudgetTaxAssumptionCreate, BudgetTaxResult, BudgetTaxTotals,
+    BudgetTaxCalculationResponse, BudgetTaxCashFlowType,
+    BudgetTaxCashFlowPeriod, BudgetTaxCashFlowResponse,
 )

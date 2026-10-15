@@ -121,12 +121,60 @@ class PnLOpex(PnLComparison):
     breakdown: Optional[List[OpexBreakdownItem]] = None   # solo con include_breakdown=true
 
 
+class PnLTaxType(BaseModel):
+    """Auditable tax snapshot included in the P&L period.
+
+    ``tax_caused`` is an accrual amount.  Advances and withholdings are
+    deliberately exposed separately because they are credits/cash movements,
+    not additional expenses.
+    """
+    id_budget_tax_result: Optional[int] = None
+    tax_type: str
+    period_start: date
+    period_end: date
+    taxable_base: float = 0.0
+    tax_rate: float = 0.0
+    tax_caused: float = 0.0
+    advance_amount: float = 0.0
+    withholding_amount: float = 0.0
+    balance_payable: float = 0.0
+    declaration_date: Optional[date] = None
+    payment_date: Optional[date] = None
+    payment_year: Optional[int] = None
+    pnl_month: Optional[int] = None
+    pnl_year: Optional[int] = None
+    calculation_trace: Dict[str, Any] = {}
+    warnings: List[str] = []
+
+
+class PnLTaxSummary(BaseModel):
+    """Tax classification used by the budget P&L integration.
+
+    ``income_ordinary``/``simple`` and ``ica`` affect profit.  ``reteiva``,
+    ``withholding`` and ``reteica`` are shown for cash/credit traceability and
+    are not included in ``expense`` unless a future explicit accounting rule
+    says otherwise.
+    """
+    calculation_executed: bool = False
+    caused: float = 0.0
+    expense: float = 0.0
+    advances: float = 0.0
+    withholdings: float = 0.0
+    balance_payable: float = 0.0
+    by_type: List[PnLTaxType] = []
+    warnings: List[str] = []
+
+
 class PnLStatement(BaseModel):
     revenues: PnLComparison
     cogs: PnLComparison
     gross_profit: PnLProfit
     opex: PnLOpex
     operating_profit: PnLProfit
+    # Additive and nullable: old consumers can continue to deserialize the
+    # original five statement lines.
+    tax_expense: Optional[PnLComparison] = None
+    profit_after_tax: Optional[PnLProfit] = None
 
 
 class CogsBudgetTraceItem(BaseModel):
@@ -146,6 +194,7 @@ class PnLMeta(BaseModel):
     not_filterable: List[str] = []               # p.ej. "revenues (no cost-center dimension)"
     cogs_budget_trace: List[CogsBudgetTraceItem] = []   # D-6: auditoria CECO-por-CECO de cogs.budget
     warnings: List[str] = []                     # BR-15: tasas faltantes, ano cruzado, NC sin referencia
+    tax_summary: Optional[PnLTaxSummary] = None
 
 
 class PnLResponse(BaseModel):
@@ -166,6 +215,7 @@ class CashFlowPoint(BaseModel):
     outflows: float                    # <= 0 (convencion del JSON de ejemplo del HSpec)
     net_flow: float                    # = inflows + outflows (nunca se "resta el negativo")
     accumulated_balance: float         # running-sum desde starting_balance (BR-35)
+    tax_outflows: float = 0.0          # additive tax component of outflows
 
 
 class CashFlowSummary(BaseModel):
@@ -186,6 +236,12 @@ class CashFlowMeta(BaseModel):
     financing_interest: float = 0.0
     financing_insurance: float = 0.0
     financing_installment_count: int = 0
+    tax_calculation_executed: Optional[bool] = None
+    tax_caused: float = 0.0
+    tax_advances: float = 0.0
+    tax_withholdings: float = 0.0
+    tax_payments: float = 0.0
+    tax_net_outflow: float = 0.0
     filters: dict                      # eco de los query params efectivos (BR-39)
     warnings: List[str] = []
 
