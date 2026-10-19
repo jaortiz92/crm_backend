@@ -209,6 +209,17 @@ class RecalculateResult(BaseModel):
     warnings: List[str] = []
 
 
+class CollaboratorDeleteResult(BaseModel):
+    """200 of DELETE /budget/collaborator/{id} (S12-COLLAB-DELETE):
+    summary of the physical cascade for audit + FE success toast."""
+
+    id_collaborator: int
+    full_name: str
+    deleted_salary_plans: int = 0
+    deleted_provision_accruals: int = 0
+    deleted_budget_lines: int = 0
+
+
 # ──────────────────────────────────────────────────
 # Import (plantilla de nómina) — §6/§9
 # ──────────────────────────────────────────────────

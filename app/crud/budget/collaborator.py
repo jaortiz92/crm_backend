@@ -607,3 +607,37 @@ def count_engine_lines_for_budget(db: Session, id_budget: int) -> int:
         BudgetLineModel.id_budget == id_budget,
         BudgetLineModel.source_engine.like(ENGINE_SOURCE_PATTERN),
     ).count()
+
+
+# ──────────────────────────────────────────────────
+# Physical delete of the collaborator (S12-COLLAB-DELETE)
+# ──────────────────────────────────────────────────
+
+def delete_collaborator(db: Session, collab: Collaborator) -> Dict[str, int]:
+    """S12-COLLAB-DELETE: PERMANENT physical delete of the master + ALL
+    its dependents, atomic — the CALLER owns the single db.commit()
+    (T-05). This is the ONLY allowed history DELETE of the module
+    (NFR-03 exception: scoped to exactly one collaborator; every other
+    route — terminate, vigencias — preserves the historics).
+
+    Order matters: budget_lines carry id_collaborator as a plain
+    Integer with NO DB FK, so the motor-owned rows are deleted
+    EXPLICITLY first (BR-D2) — the ORM cascade can never reach them.
+    The children are counted BEFORE db.delete() because the ORM
+    cascade ("all, delete-orphan") empties both collections at flush
+    time. Returns the deletion summary for audit + the FE toast."""
+    # No FK ⇒ explicit delete of every engine line of every
+    # scenario/year, otherwise the master's delete would orphan them.
+    deleted_budget_lines = delete_collaborator_engine_lines(
+        db, collab.id_collaborator
+    )
+    deleted_salary_plans = len(collab.salary_plans)
+    deleted_provision_accruals = len(collab.provision_accruals)
+    # ORM cascade deletes the plans and the causacion ledger with the
+    # master (delete-orphan on both relationships).
+    db.delete(collab)
+    return {
+        "deleted_salary_plans": deleted_salary_plans,
+        "deleted_provision_accruals": deleted_provision_accruals,
+        "deleted_budget_lines": deleted_budget_lines,
+    }

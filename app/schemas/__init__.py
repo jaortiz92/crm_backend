@@ -85,6 +85,7 @@ from .budget import (
     SalaryPlanCreate, SalaryPlanOut,
     TerminateRequest, RecalculateRequest, RecalculateResult,
     CollaboratorImportResult,
+    CollaboratorDeleteResult,
     LaborParameterOut, LaborParameterUpsert, LaborParamsResponse, ArlRateOut,
     CostComponentOut,
     BreakdownComponentOut, BreakdownOut,

@@ -46,6 +46,7 @@ from app.schemas import (
     BreakdownOut,
     CollaboratorCreate, CollaboratorUpdate, CollaboratorOut,
     CollaboratorListResponse, CollaboratorImportResult,
+    CollaboratorDeleteResult,
     CostComponentOut,
     LaborParameterUpsert, LaborParamsResponse,
     ProvisionsOut, ProvisionBalanceOut,
@@ -687,6 +688,51 @@ def update_collaborator(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating collaborator: {str(e)}",
+        )
+
+
+@router.delete("/{id_collaborator}", response_model=CollaboratorDeleteResult)
+def delete_collaborator(
+    id_collaborator: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_collab_edit),
+):
+    """DELETE /budget/collaborator/{id} → PERMANENT physical delete
+    (S12-COLLAB-DELETE, BR-D1..D6): the master + its salary plans +
+    provision accruals (ORM cascade) + ALL motor budget_lines of every
+    scenario/year (explicit delete — id_collaborator carries NO DB FK,
+    BR-D2). The whole operation commits ONCE (T-05/BR-D3). Requires
+    COLLAB_EDIT_ROLES (BR-D4).
+
+    NFR-03 exception: this is the ONLY allowed history DELETE of the
+    module, scoped to exactly one collaborator — distinct from
+    POST /{id}/terminate, which preserves the history (status
+    terminated + LIQ seats)."""
+    try:
+        collab = crud.get_collaborator_by_id(db, id_collaborator)
+        if collab is None:
+            Exceptions.register_not_found("Collaborator", id_collaborator)
+
+        counts = crud.delete_collaborator(db, collab)
+
+        # Snapshot the audit fields BEFORE the commit: once committed
+        # the master row no longer exists and the instance is detached.
+        result = CollaboratorDeleteResult(
+            id_collaborator=collab.id_collaborator,
+            full_name=collab.full_name,
+            **counts,
+        )
+        db.commit()
+        return result
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting collaborator: {str(e)}",
         )
 
 
