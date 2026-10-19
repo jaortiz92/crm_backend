@@ -200,6 +200,12 @@ def calculate(id_budget:int,db:Session=Depends(get_db),current_user:User=Depends
 @router.get('/budgets/{id_budget}/summary')
 def summary(id_budget:int,db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
     _role(current_user);_budget(db,id_budget);rows=crud.list_budget_tax_results(db,id_budget)
+    # S12-TAX-FE-2: el resumen publica el régimen VIGENTE (perfil de los
+    # supuestos), no el último dropdown tocado en la UI — el FE etiqueta el
+    # panel con la verdad persistida (income_ordinary vs simple rows).
+    _a=crud.get_budget_tax_assumption(db,id_budget)
+    _p=crud.get_tax_profile(db,_a.id_tax_profile) if _a else None
+    regime=None if _p is None else _p.regime
     warnings = [] if rows else [
         f'Tax calculation has not been executed for budget {id_budget}'
     ]
@@ -226,6 +232,7 @@ def summary(id_budget:int,db:Session=Depends(get_db),current_user:User=Depends(g
     )
     budget_year = _budget(db, id_budget).budget_year
     return {'id_budget':id_budget,
+            'regime':regime,
             'calculation_executed':bool(rows),
             'total_caused':sum((r.tax_caused for r in rows),Decimal('0')),
             'total_advance':total_advance,
