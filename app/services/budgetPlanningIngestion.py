@@ -54,11 +54,30 @@ top of read-only queries (T-05 — the caller owns the transaction).
 """
 
 from datetime import date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
 import app.crud as crud
+
+# Exact money arithmetic for the payment-rule expansion: multiplications
+# like ``1394190 * 0.3`` produce float residue (464729.99999999994) which
+# overflows BudgetLineCreate's Decimal(max_digits=15) -> 500 on the whole
+# upload. Rounded to 2 decimals so every emitted amount is a legal column.
+TWO_PLACES = Decimal("0.01")
+
+
+def _money(amount: Any) -> Decimal:
+    """Coerce ANY ETL amount (float/int/str/Decimal/None) to an exact,
+    2-decimal Decimal (HALF_UP), immune to float residue from the
+    ``projected_amount * payment_pct`` expansion."""
+    if amount is None:
+        return Decimal("0.00")
+    try:
+        return Decimal(str(amount)).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0.00")
 
 
 class BudgetYearMismatchError(Exception):
@@ -136,7 +155,7 @@ def build_income_line_records(
                         rule_payment_date = budget_date + timedelta(
                             days=rule.payment_days
                         )
-                        partial_amount = (
+                        partial_amount = _money(
                             record.get("projected_amount", 0) * rule.payment_pct
                         )
                         budget_lines_data.append({
@@ -159,7 +178,7 @@ def build_income_line_records(
             "budget_date": budget_date,
             "payment_date": payment_date,
             "id_collection": id_collection,
-            "projected_amount": record.get("projected_amount", 0),
+            "projected_amount": _money(record.get("projected_amount", 0)),
             "description": record.get("description"),
             "behavior_type": "fixed",
         })
@@ -211,7 +230,7 @@ def build_expense_line_records(
         payment_date = _as_date(record.get("payment_date"))
 
         behavior_type = record.get("behavior_type", "fixed")
-        projected_amount = record.get("projected_amount", 0)
+        projected_amount = _money(record.get("projected_amount", 0))
         variable_rate = record.get("variable_rate")
 
         if behavior_type != "fixed" and variable_rate is not None:
@@ -305,7 +324,7 @@ def build_purchase_line_records(
             "budget_date": budget_date,
             "payment_date": None,
             "id_collection": id_collection,
-            "projected_amount": record.get("projected_amount", 0),
+            "projected_amount": _money(record.get("projected_amount", 0)),
             "description": record.get("description"),
             "behavior_type": "fixed",
         })
