@@ -18,13 +18,21 @@ covering the line's budget_date —
     E2 fixed_expenses   EXPENSE fixed, effective flag True (NULL ≡ True,
                         D-S10-3; False emits NOTHING, not a 0 event),
                         budget_date
-    E3 variable_expenses EXPENSE variable_sales: rate × income_budget
-                        [month of budget_date] — base B1 of the legacy
-                        project_cash_flow (02_02 §6) computed from the
-                        SAME scenario's income lines (parity), anchored
-                        on the line's budget_date (R-S10-4)
-    E4 idem variable_receivables: rate × (income_budget + AR due) of
-                        the month — base B2 legacy parity
+    E3 variable_expenses EXPENSE variable_sales: rate × I_c(m) where
+                        I_c(m) = income_ceco_by_month[c][m], the
+                        budgeted income of the line's RESOLVED CECO c
+                        (own CECO first, else the single billing CECO of
+                        its (id_zone, id_line) bucket — Enmienda A-01 §10)
+                        for the month of budget_date — base per CECO
+                        (Spec 02_24 §6.2, BR-VE-07), anchored on the
+                        line's budget_date (R-S10-4)
+    E4 idem variable_receivables: rate × R_c(m) of the line's RESOLVED
+                        CECO — base B2c parity per CECO. Enmienda A-02
+                        (§11): R_c(m) = collections of the resolved CECO
+                        (income entries by COBRO month, cfMonth
+                        payment_date || budget_date, year of the CASH
+                        month); the AR term left the base (no CECO in
+                        accounts_receivable)
     E5 import_vat       PURCHASE: T × costo_prov, costo_prov =
                         Total / (1 + %int) (§4.3, D-S10-6), cash event
                         on the import date budget_date
@@ -64,6 +72,11 @@ from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.core.constants import TAX_RATE
+from app.services.cecoBucketUtils import (
+    build_ceco_buckets,
+    load_ceco_bucket_catalog,
+    resolve_income_ceco,
+)
 from app.models.budget import (
     AccountReceivable as AccountReceivableModel,
     Budget as BudgetModel,
@@ -154,7 +167,20 @@ class BudgetIvaEngine:
         # by ACCRUAL month (month of budget_date), computed from the Q2
         # scan itself (zero extra SQL) exactly like project_cash_flow's
         # income_rows loop, so the E3/E4 bases are parity figures.
+        # Spec 02_24 §6.2 / BR-VE-07: additionally the per-CECO mirror
+        # income_ceco_by_month[c][m] = I_c(m), the SAME base scope B1c
+        # as the cash-flow engine (global dict kept for other uses).
         income_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
+        income_ceco_by_month: Dict[int, Dict[int, float]] = {}
+        # Enmienda A-02 (spec backend.02_24 §11): the E4 mirror of
+        # COLLECTIONS, same dict pass as the income mirror — income lines
+        # positioned by their PAYMENT month (cfMonth = payment_date ||
+        # budget_date, same convention as the Flujo view) and filtered by
+        # the YEAR OF THAT CASH DATE (lines collected outside the
+        # settlement year land on the view's out-of-year buckets, so they
+        # neither fatten an in-year month nor are smugged into their
+        # budget month). NET amounts (sin IVA gross-up, §11.3).
+        cash_received_ceco_by_month: Dict[int, Dict[int, float]] = {}
         purchase_lines: Set[int] = set()
         for line, id_line in line_rows:
             lt = _enum_value(line.line_type)
@@ -162,6 +188,23 @@ class BudgetIvaEngine:
                 income_by_month[line.budget_date.month] += float(
                     line.projected_amount or 0.0
                 )
+                if line.id_cost_center is not None:
+                    income_ceco_map = income_ceco_by_month.setdefault(
+                        int(line.id_cost_center),
+                        {m: 0.0 for m in range(1, 13)},
+                    )
+                    income_ceco_map[line.budget_date.month] += float(
+                        line.projected_amount or 0.0
+                    )
+                    cash_date = line.payment_date or line.budget_date
+                    if cash_date.year == year:
+                        cash_ceco_map = cash_received_ceco_by_month.setdefault(
+                            int(line.id_cost_center),
+                            {m: 0.0 for m in range(1, 13)},
+                        )
+                        cash_ceco_map[cash_date.month] += float(
+                            line.projected_amount or 0.0
+                        )
             elif lt == "purchase" and id_line is not None:
                 purchase_lines.add(id_line)
 
@@ -169,6 +212,14 @@ class BudgetIvaEngine:
         # base B2): accounts_receivable.balance by month of due_date OF
         # THE SETTLEMENT YEAR, same unfiltered-by-budget scope as the
         # legacy query (parity of cifras, AC-BE10-7 E4 case).
+        # NOTE (Enmienda A-01, 2026-10-20): accounts_receivable has NO
+        # cost-center dimension in the schema (model, table and the
+        # EstadoCuenta306090 template agree), so a per-CECO AR mirror is
+        # IMPOSSIBLE — the previous attempt to group AR by
+        # id_cost_center crashed with AttributeError on every real run.
+        # The AR overdue term keeps feeding the GLOBAL recaudo figures;
+        # the per-CECO E4 term is 0 today (BR-VE-06 conservative zero
+        # rule) until the AR upload gains a CECO.
         ar_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
         ar_rows = (
             self.db.query(
@@ -183,6 +234,19 @@ class BudgetIvaEngine:
         )
         for row in ar_rows:
             ar_by_month[int(row.month)] += float(row[1])
+
+        # Enmienda A-01 (spec backend.02_24 §10, AC-BE24-11): the E3/E4
+        # bases resolve through the SAME helper as the cash-flow engine's
+        # B1/B2 — own CECO first, else the SINGLE billing CECO of the
+        # line's (id_zone, id_line) bucket, else None ⇒ 0. The catalog is
+        # one query; the buckets are derived from the income mirror by
+        # dict passes (no new JOINs, no N+1). The collections mirror of
+        # Enmienda A-02 (§11) shares the resolver: the RESOLVED CECO is
+        # looked up in the COBRO mirror, never in AR (removed from the
+        # base per §11 — the AR schema has no CECO; BR-VE-06 zero rule).
+        ceco_catalog = load_ceco_bucket_catalog(self.db)
+        income_bucket_by_month, income_bucket_cecos = build_ceco_buckets(
+            income_ceco_by_month, ceco_catalog)
 
         # Q5/Q6 — split catalogs IN over the DISTINCT purchase Lines
         # (BE-S9 §5.4 economy mirror): rates {id_line: pct} and the
@@ -225,8 +289,9 @@ class BudgetIvaEngine:
         )
 
         events, out_of_year = self._derive_events(
-            line_rows, income_by_month, ar_by_month, rates,
-            int_terms_by_line, year,
+            line_rows, income_ceco_by_month, rates,
+            int_terms_by_line, year, ceco_catalog, income_bucket_cecos,
+            cash_received_ceco_by_month,
         )
         return {
             "budget": budget,
@@ -243,17 +308,25 @@ class BudgetIvaEngine:
     def _derive_events(
         self,
         line_rows: List[Tuple[Any, Optional[int]]],
-        income_by_month: Dict[int, float],
-        ar_by_month: Dict[int, float],
+        income_ceco_by_month: Dict[int, Dict[int, float]],
         rates: Dict[int, float],
         int_terms_by_line: Dict[int, List[Any]],
         year: int,
+        ceco_catalog: Optional[Dict[int, tuple]] = None,
+        income_bucket_cecos: Optional[Dict[tuple, set]] = None,
+        cash_received_ceco_by_month: Optional[Dict[int, Dict[int, float]]] = None,
     ) -> Tuple[List[Dict[str, Any]], int]:
         """Build the raw IVA events (amounts as RAW floats = base × T,
         zero intermediate rounding per NFR-BE10-4) and count the events
         whose movement date falls OUTSIDE the settlement year (§4.4:
         ``meta.out_of_year_events`` and excluded — the calendar only
         ever covers its own year, so the filter precedes the assignment).
+
+        Spec 02_24 §6.2 (BR-VE-07) + Enmienda A-01 (§10, AC-BE24-11):
+        the E3/E4 bases come from the per-CECO mirrors resolved through
+        resolve_income_ceco — the same priority (own CECO, then the
+        single billing CECO of the (zone, line) bucket) and the same
+        helpers as the cash-flow engine's B1/B2 (02_24 §6.1 / §10.2).
 
         Flag semantics (§4.3): an EXPENSE with has_iva False emits
         NOTHING (no 0-event); NULL/True emits (D-S10-3). INCOME always
@@ -304,21 +377,68 @@ class BudgetIvaEngine:
                     continue
                 behavior = _enum_value(line.behavior_type)
                 if behavior == "variable_sales":
-                    # E3 — base B1 legacy parity (income_budget_by_month
-                    # of the line's ACCRUAL month), cash-approximated on
-                    # the line's budget_date (R-S10-4).
-                    if line.budget_date is not None:
-                        rate = float(line.variable_rate or 0.0)
-                        base = rate * income_by_month[line.budget_date.month]
-                        emit(line.budget_date, CONCEPT_VARIABLE_EXPENSES,
-                             lid, "deductible", base * T)
-                elif behavior == "variable_receivables":
-                    # E4 — base B2 legacy parity: AR vencido del mes +
-                    # ingreso presupuestado del mes.
+                    # E3 (Spec 02_24 §6.2, BR-VE-01/02/07 + Enmienda A-01
+                    # §10) — base B1c per CECO RESOLVED: own CECO if it
+                    # has income, else the single billing CECO of the
+                    # line's (id_zone, id_line) bucket; the base month is
+                    # the line's ACCRUAL month (budget_date,
+                    # cash-approximated there per R-S10-4). An unresolvable
+                    # CECO (0/multiple generators, NULL zone/line) or a
+                    # missing base simply contributes 0 (BR-VE-02).
                     if line.budget_date is not None:
                         rate = float(line.variable_rate or 0.0)
                         m = line.budget_date.month
-                        base = rate * (income_by_month[m] + ar_by_month[m])
+                        c = resolve_income_ceco(
+                            line.id_cost_center,
+                            income_ceco_by_month,
+                            income_bucket_cecos or {},
+                            ceco_catalog or {},
+                        )
+                        income_ceco_map = (
+                            income_ceco_by_month.get(c)
+                            if c is not None else None
+                        )
+                        base = rate * (
+                            income_ceco_map.get(m, 0.0)
+                            if income_ceco_map else 0.0
+                        )
+                        emit(line.budget_date, CONCEPT_VARIABLE_EXPENSES,
+                             lid, "deductible", base * T)
+                elif behavior == "variable_receivables":
+                    # E4 (Spec 02_24 §6.2, BR-VE-04/07 + Enmienda A-02
+                    # §11) — base B2c of the RESOLVED CECO (same helper
+                    # as E3/B1/B2): the COLLECTIONS of the CECO the
+                    # resolution points to (income entries by COBRO
+                    # month = payment_date || budget_date, Enmienda
+                    # A-02). The AR term LEFT the base per §11: the
+                    # budget's recaudo is built from the plan's own
+                    # ENTRADAS, which DO carry a CECO; the AR of
+                    # accounts_receivable has no CECO dimension
+                    # (BR-VE-06 zero rule, now a structural condition of
+                    # the base instead of a conservative 0 term).
+                    # Accrual stays on the line's budget_date month; the
+                    # base month m is that same month. Unresolvable /
+                    # missing entries degrade to 0 (no exclusion,
+                    # BR-VE-02).
+                    if line.budget_date is not None:
+                        rate = float(line.variable_rate or 0.0)
+                        m = line.budget_date.month
+                        c = resolve_income_ceco(
+                            line.id_cost_center,
+                            income_ceco_by_month,
+                            income_bucket_cecos or {},
+                            ceco_catalog or {},
+                        )
+                        cash_ceco_map = (
+                            cash_received_ceco_by_month.get(c)
+                            if c is not None
+                            and cash_received_ceco_by_month is not None
+                            else None
+                        )
+                        base = rate * (
+                            cash_ceco_map.get(m, 0.0)
+                            if cash_ceco_map else 0.0
+                        )
                         emit(line.budget_date, CONCEPT_VARIABLE_EXPENSES,
                              lid, "deductible", base * T)
                 else:

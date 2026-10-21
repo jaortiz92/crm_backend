@@ -66,6 +66,11 @@ from app.services.budgetTaxEngine import (
     tax_pnl_date,
     tax_result_locations,
 )
+from app.services.cecoBucketUtils import (
+    build_ceco_buckets,
+    load_ceco_bucket_catalog,
+    resolve_income_ceco,
+)
 
 
 class BudgetEngine:
@@ -95,9 +100,14 @@ class BudgetEngine:
         - expected_inflows: float (cash inflows with tax)
         - expected_outflows: float (fixed expenses + variable expenses + accounts
           payable). Variable sales = rate x budgeted income of the line's
-          accrual month (budget_date); variable receivables = rate x (AR due
-          + budgeted income) of the line's accrual month. Both income bases
-          are NET (see note below).
+          RESOLVED CECO (Enmienda A-01, §10) for the accrual month; variable
+          receivables = rate x the collections of the line's RESOLVED CECO
+          (Enmienda A-02, §11: base = income lines of the resolved CECO
+          positioned by their PAYMENT month — the inflow entries of the Flujo
+          view, which DO carry a CECO; the AR accounts_receivable term was
+          dropped from the base: it has no CECO dimension and the budget's
+          recaudo must be built from the plan's own entries).
+          Both bases are NET (see note below).
         - net_cash_flow: float
         - cumulative_cash_flow: float
 
@@ -118,7 +128,17 @@ class BudgetEngine:
         # sales/billing base.
         income_budget_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
 
-        ar_rows = (
+        # AR is summed by month of due_date GLOBALLY (net_income_by_month
+        # feeds the expected-collection inflows). NOTE (Enmienda A-01,
+        # 2026-10-20): accounts_receivable has NO cost-center dimension in
+        # the schema (busqueda real: el modelo, la tabla y el template de
+        # carga EstadoCuenta306090 no traen id_cost_center), so an AR
+        # attribution to any R_c(m) is IMPOSSIBLE today — the previous
+        # attempt to group AR by id_cost_center crashed with
+        # AttributeError on every real run. Under the conservative
+        # BR-VE-06 zero rule the AR component contributes 0 to every
+        # per-CECO base until the AR upload gains a CECO.
+        ar_by_ceco_rows = (
             self.db.query(
                 extract("month", AccountReceivableModel.due_date).label("month"),
                 func.coalesce(func.sum(AccountReceivableModel.balance), 0),
@@ -129,7 +149,7 @@ class BudgetEngine:
             .group_by("month")
             .all()
         )
-        for row in ar_rows:
+        for row in ar_by_ceco_rows:
             net_income_by_month[int(row.month)] += float(row[1])
 
         ap_rows = (
@@ -161,9 +181,14 @@ class BudgetEngine:
             else BudgetModel.budget_year == budget_year
         )
 
+        # Spec 02_24 §6.1: income aggregated by (month, CECO) for the
+        # variable-expense base I_c(m) = income_ceco_by_month[c][m]; the
+        # global dicts remain untouched for the other formulas of this
+        # engine (inflows, etc.).
         income_query = (
             self.db.query(
                 extract("month", BudgetLineModel.budget_date).label("budget_month"),
+                BudgetLineModel.id_cost_center,
                 func.coalesce(func.sum(BudgetLineModel.projected_amount), 0),
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
@@ -174,10 +199,71 @@ class BudgetEngine:
             )
         )
 
-        income_rows = income_query.group_by("budget_month").all()
+        income_rows = income_query.group_by(
+            "budget_month", BudgetLineModel.id_cost_center
+        ).all()
+        income_ceco_by_month: Dict[int, Dict[int, float]] = {}
         for row in income_rows:
-            net_income_by_month[int(row.budget_month)] += float(row[1])
-            income_budget_by_month[int(row.budget_month)] += float(row[1])
+            net_income_by_month[int(row.budget_month)] += float(row[2])
+            income_budget_by_month[int(row.budget_month)] += float(row[2])
+            if row.id_cost_center is not None:
+                income_ceco_map = income_ceco_by_month.setdefault(
+                    int(row.id_cost_center), {m: 0.0 for m in range(1, 13)}
+                )
+                income_ceco_map[int(row.budget_month)] += float(row[2])
+
+        # Enmienda A-02 (spec backend.02_24 §11): the variable_receivables
+        # base is now the COLLECTIONS of the resolved CECO — income lines
+        # positioned by their PAYMENT month (Frontend "Vista Flujo"
+        # convention, cfMonth = payment_date || budget_date; lines whose
+        # payment month falls outside the budget year land on that view's
+        # out-of-year buckets, so the filter below by year OF THE COALESCE
+        # squares with the view: Dec-2026 invoicing collected in Jan-2027
+        # contributes to the 2027 base, never to 2026). The AR
+        # accounts_receivable table has NO cost-center dimension (model,
+        # table and EstadoCuenta306090 template agree), so — per the user's
+        # decision — the AR term has been REMOVED from B2c/E4c entirely
+        # (A-01 kept it at a conservative 0); the global AR-by-due-month
+        # query above still feeds the inflows (spec 02_10, untouched).
+        ceco_catalog = load_ceco_bucket_catalog(self.db)
+        income_bucket_by_month, income_bucket_cecos = build_ceco_buckets(
+            income_ceco_by_month, ceco_catalog)
+
+        cash_query = (
+            self.db.query(
+                extract(
+                    "month",
+                    func.coalesce(
+                        BudgetLineModel.payment_date,
+                        BudgetLineModel.budget_date,
+                    ),
+                ).label("cash_month"),
+                BudgetLineModel.id_cost_center,
+                func.coalesce(func.sum(BudgetLineModel.projected_amount), 0),
+            )
+            .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
+            .filter(
+                budget_scope,
+                BudgetLineModel.line_type == "income",
+                extract(
+                    "year",
+                    func.coalesce(
+                        BudgetLineModel.payment_date,
+                        BudgetLineModel.budget_date,
+                    ),
+                ) == budget_year,
+            )
+            .group_by("cash_month", BudgetLineModel.id_cost_center)
+        )
+        cash_rows = cash_query.all()
+        cash_received_ceco_by_month: Dict[int, Dict[int, float]] = {}
+        for row in cash_rows:
+            if row.id_cost_center is None:
+                continue
+            cash_ceco_map = cash_received_ceco_by_month.setdefault(
+                int(row.id_cost_center), {m: 0.0 for m in range(1, 13)}
+            )
+            cash_ceco_map[int(row.cash_month)] += float(row[2])
 
         for month in range(1, 13):
             inflows_by_month[month] = net_income_by_month[month] * (1 + TAX_RATE)
@@ -223,6 +309,7 @@ class BudgetEngine:
             self.db.query(
                 extract("month", BudgetLineModel.budget_date).label("accrual_month"),
                 BudgetLineModel.variable_rate,
+                BudgetLineModel.id_cost_center,
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
             .filter(
@@ -233,17 +320,31 @@ class BudgetEngine:
             )
         )
 
+        # Spec 02_24 §6.1 (BR-VE-02/03/05) + Enmienda A-01 (§10): the
+        # per-row rate applies to the zone+line income base I_c(m) of the
+        # RESOLVED CECO — own CECO if it has income, else the single
+        # billing CECO of the line's (id_zone, id_line) bucket. None
+        # (0/multiple generators, NULL zone/line) simply contributes 0 —
+        # never an exclusion or error.
         for row in variable_sales_query.all():
             if row.accrual_month is None:
                 continue
             month = int(row.accrual_month)
             rate = float(row.variable_rate) if row.variable_rate else 0.0
-            outflows_by_month[month] += income_budget_by_month[month] * rate
+            c = resolve_income_ceco(
+                row.id_cost_center,
+                income_ceco_by_month, income_bucket_cecos, ceco_catalog)
+            ceco_income = (
+                income_ceco_by_month.get(c, {}).get(month, 0.0)
+                if c is not None else 0.0
+            )
+            outflows_by_month[month] += ceco_income * rate
 
         variable_receivables_query = (
             self.db.query(
                 extract("month", BudgetLineModel.budget_date).label("accrual_month"),
                 BudgetLineModel.variable_rate,
+                BudgetLineModel.id_cost_center,
             )
             .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
             .filter(
@@ -254,16 +355,32 @@ class BudgetEngine:
             )
         )
 
-        # B2 (Enmienda E-02): accrues on the line's budget_date month (not
-        # payment_date); base stays the composed expected-cash figure
-        # (AR due this month + budgeted income, 02_02 §6). Per-row iteration:
-        # two lines with the same rate/month apply the base twice.
+        # B2 per CECO (Spec 02_24 §6.1, BR-VE-04) + Enmienda A-02 (§11):
+        # base = COBRO of the RESOLVED CECO (own billing CECO first, else
+        # the single billing CECO of the line's (zone, line) bucket — the
+        # SAME resolver as B1) positioned by payment month: the RECAUDO of
+        # the plan's own income entries, which DO carry a CECO. The AR
+        # term of the old base left the formula (A-02: the AR of
+        # accounts_receivable has no CECO; a presupuesto's recaudo is its
+        # Flow's ENTRADAS). Accrual stays on budget_date month — the
+        # variable expense of month m falls in month m of its own line —
+        # per-row iteration and 2-dec output unchanged.
         for row in variable_receivables_query.all():
             if row.accrual_month is None:
                 continue
             month = int(row.accrual_month)
             rate = float(row.variable_rate) if row.variable_rate else 0.0
-            outflows_by_month[month] += net_income_by_month[month] * rate
+            c = resolve_income_ceco(
+                row.id_cost_center,
+                income_ceco_by_month, income_bucket_cecos, ceco_catalog)
+            cash_ceco_map = (
+                cash_received_ceco_by_month.get(c)
+                if c is not None else None
+            )
+            ceco_base = (
+                cash_ceco_map.get(month, 0.0) if cash_ceco_map else 0.0
+            )
+            outflows_by_month[month] += ceco_base * rate
 
         result = []
         cumulative = 0.0

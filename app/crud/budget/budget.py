@@ -1,4 +1,4 @@
-"""
+﻿"""
 Budget CRUD Operations
 """
 
@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.models.budget import Budget as BudgetModel
 from app.models.budget import BudgetLine as BudgetLineModel
 from app.models.budget import BudgetScenario as BudgetScenarioModel
+from app.models.budget import BudgetTaxAssumption as BudgetTaxAssumptionModel
+from app.models.budget import BudgetTaxResult as BudgetTaxResultModel
 from app.schemas.budget import BudgetCreate
 
 
@@ -70,7 +72,8 @@ def delete_budget(db: Session, id_budget: int) -> bool:
     BR-DEL-01: any status other than 'draft' raises 400 with no mutation
     (active = the year's live target, closed = was a target; neither is
     deletable). BR-DEL-02: own rows referencing the budget (budget_lines,
-    budget_scenarios, legacy NOT NULL FKs) are bulk-deleted first.
+    budget_scenarios, budget_tax_results/budget_tax_assumptions) are
+    bulk-deleted first.
     BR-DEL-03: guest clones survive, orphaned via parent_budget_id = NULL.
     BR-DEL-04: exactly ONE commit at the end (T-05); any failure before it
     leaves the transaction rollback-able (no partial delete)."""
@@ -88,7 +91,16 @@ def delete_budget(db: Session, id_budget: int) -> bool:
             detail="Only draft budgets can be deleted",
         )
 
-    # BR-DEL-02: physical cascade over the budget's own rows.
+    # BR-DEL-02: physical cascade over the budget's own rows. Tax-planning
+    # rows are deleted FIRST (results -> assumptions, FK dependency) so a
+    # budget that carries the Tributario module never 500s with a dangling
+    # budget_tax_assumptions/budget_tax_results FK at commit time.
+    db.query(BudgetTaxResultModel).filter(
+        BudgetTaxResultModel.id_budget == id_budget
+    ).delete(synchronize_session=False)
+    db.query(BudgetTaxAssumptionModel).filter(
+        BudgetTaxAssumptionModel.id_budget == id_budget
+    ).delete(synchronize_session=False)
     db.query(BudgetLineModel).filter(
         BudgetLineModel.id_budget == id_budget
     ).delete(synchronize_session=False)
