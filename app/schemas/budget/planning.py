@@ -261,6 +261,13 @@ class PlanningScenarioRow(BaseModel):
     # the new column is exposed here too (additive key, NFR-S6-BE-2) for the
     # FE-S6 dashboard chips.
     include_carryover: bool = False
+    # BE-S7-INITBAL §3.1 (initbal analogue of the S6 chip mirror — the
+    # planning listing item DOES mirror model fields, so the 4 new columns
+    # ride along additively; NFR-IB-BE-2 keeps every old key intact).
+    initial_cash_mode: str = "manual"
+    initial_cash_manual: float = 0.0
+    initial_warehouse_mode: str = "manual"
+    initial_warehouse_manual: float = 0.0
 
 
 class PlanningSetTargetResult(BaseModel):
@@ -492,3 +499,89 @@ class FinancingPrincipalFlowOut(BaseModel):
     lines: List[FinancingPrincipalFlowLine] = Field(default_factory=list)
     total_disbursement: Decimal = Decimal("0.00")
     disbursement_lines: List[FinancingPrincipalFlowLine] = Field(default_factory=list)
+
+
+# ──────────────────────────────────────────────────────────────
+# BE-S7-INITBAL (backend.02_25): configurable initial balances
+# (cash & warehouse) — config + source resolution contracts
+# ──────────────────────────────────────────────────────────────
+
+class PlanningInitialBalanceSide(BaseModel):
+    """One of the two independently configured opening balances (SD7-1).
+
+    - mode: ONLY 'carryover' | 'manual' (Literal — any other value is a
+      422 at parse time, BR-IB-01 / AC-S7-BE-3).
+    - manual_value: ALWAYS persisted, even in carryover mode (it is the
+      degradation base when no source exists, BR-IB-04). Finite numbers
+      only (NaN/inf -> 422, BR-IB-08); the sign check lives on the
+      container (warehouse >= 0, cash free) in PlanningInitialBalanceSet,
+      NOT here — the sign rule is per balance kind, not per side shape.
+    """
+
+    mode: Literal["carryover", "manual"]
+    manual_value: float = Field(
+        0.0,
+        description="Opening balance to use when mode = manual (and the "
+                    "degradation base when carryover has no source).",
+    )
+
+    @field_validator("manual_value")
+    @classmethod
+    def must_be_finite(cls, v: float) -> float:
+        if not math.isfinite(v):
+            raise ValueError("manual_value must be a finite number")
+        return v
+
+
+class PlanningInitialBalanceSet(BaseModel):
+    """Request body for PUT /budget/planning/{id_budget}/initial-balance
+    (spec §5.1). The payload is COMPLETE: both balances always travel
+    together (missing one -> 422, because a field of the container is
+    required). Same-side validations:
+
+    - cash.manual_value: ANY finite value including negatives (a
+      budgeted overdraft is legal, BR-IB-08 / AC-S7-BE-3).
+    - warehouse.manual_value: >= 0 strictly (BR-IB-08 -> 422 naming the
+      violated field).
+    """
+
+    cash: PlanningInitialBalanceSide = Field(
+        ..., description="Opening CASH balance config",
+    )
+    warehouse: PlanningInitialBalanceSide = Field(
+        ..., description="Opening WAREHOUSE balance config",
+    )
+
+    @field_validator("warehouse")
+    @classmethod
+    def warehouse_value_must_be_non_negative(
+        cls, v: PlanningInitialBalanceSide,
+    ):
+        if v.manual_value < 0:
+            raise ValueError(
+                "warehouse.manual_value must be >= 0 (only cash accepts "
+                "a negative opening balance)"
+            )
+        return v
+
+
+class PlanningInitialBalanceDetail(BaseModel):
+    """Response 200 for GET /budget/planning/{id_budget}/initial-balance
+    (spec §5.2, BR-IB-04).
+
+    - cash / warehouse: the scenario's CURRENT persisted config.
+    - carryover_source: the N−1 winner resolved via
+      crud.get_carryover_source_budget — ALWAYS resolved (v1.1 enmienda
+      SD7-10), whatever the modes (the FE offers "continue with the
+      prior-year target" from it even in manual/manual).
+    - unavailable_reason: null | "no_source" (no N-1 candidate, with
+      ANY mode combination — ALWAYS a friendly 200, never an HTTP
+      error, SD7-5). No other values for now (§5.2).
+    - The numeric carry-over value is NEVER computed server-side (SA-1 /
+      D-S7-9): the FE's cashFlowPivot derives it from the source data.
+    """
+
+    cash: PlanningInitialBalanceSide
+    warehouse: PlanningInitialBalanceSide
+    carryover_source: Optional[PlanningCarryoverSource] = None
+    unavailable_reason: Optional[Literal["no_source"]] = None

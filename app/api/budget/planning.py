@@ -24,6 +24,10 @@ endpoints, all JWT-protected (NFR-4):
                               installments of BE-S7 §4 (origin "cogs")
 - PUT  /{id}/carryover       toggle include_carryover; 200 with the full
                               PlanningDetail for the FE cache (BE-S6 §5.2)
+ - PUT  /{id}/initial-balance  set cash+warehouse opening-balance config
+                               (BE-S7-INITBAL §5.1, BR-IB-03)
+ - GET  /{id}/initial-balance  read that config + its N-1 carryover source
+                               (BR-IB-04; no server-side derived value, SA-1)
 
 BE-S4/BE-S4D added no tables/columns: scenarios are rows of `budgets`
 (is_scenario, parent_budget_id) and cells are rows of `budget_lines`.
@@ -40,7 +44,8 @@ The carry-in is pure READ-DERIVATION: it never writes budget_lines
 """
 
 from io import BytesIO
-from typing import List, Optional
+import math
+from typing import List, Optional, Tuple
 
 from fastapi import (
     APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status,
@@ -60,6 +65,7 @@ from app.core.auth import get_current_user
 from app.schemas import (
     Budget, BudgetCreate, BudgetLine, BudgetLineCreate, User,
     PlanningCarryoverFlag, PlanningCarryoverResult,
+    PlanningInitialBalanceSet, PlanningInitialBalanceDetail,
     PayrollSimulationOut, FinancingSimulationOut,
     PlanningCarryoverSource, PlanningCellUpdate, PlanningCloneRequest,
     PlanningDetail, PlanningLineCreate, PlanningLineUpdate,
@@ -79,6 +85,52 @@ from app.services.budget.financingCreditService import (
 from app.utils.templates import BudgetTemplates
 
 router = APIRouter()
+
+
+# BE-S7-INITBAL (backend.02_25 §5, BR-IB-02): validator of the 4 OPTIONAL
+# multipart opening-balance fields of POST /upload. Empty/omitted string ->
+# the value is IGNORED (default manual/0, zero regression BR-IB-06);
+# non-empty values are parsed strictly: mode ∉ {carryover, manual} -> 422
+# (same rejection the Pydantic Literal would produce), warehouse < 0 or a
+# non-finite/NaN number -> 422 naming the field (BR-IB-08).
+def _upload_initial_balance(
+    mode_raw: Optional[str],
+    manual_raw: Optional[str],
+    field_name: str,
+    allow_negative: bool,
+) -> Optional[Tuple[str, float]]:
+    if (mode_raw is None or mode_raw.strip() == "") and (
+        manual_raw is None or manual_raw.strip() == ""
+    ):
+        return None
+    mode = (mode_raw or "manual").strip() or "manual"
+    if mode not in crud.INITIAL_BALANCE_MODES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(f"{field_name}_mode must be 'carryover' or 'manual'"),
+        )
+    try:
+        manual_value = (
+            float(manual_raw)
+            if manual_raw is not None and manual_raw.strip() != ""
+            else 0.0
+        )
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name}_manual must be a number",
+        )
+    if not math.isfinite(manual_value):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name}_manual must be a finite number",
+        )
+    if not allow_negative and manual_value < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name}_manual must be >= 0",
+        )
+    return mode, manual_value
 
 # PQ-1 (resolved): real CRM roles. set-target is management-only;
 # "Financiero" may upload/clone/edit cells but NOT designate the target.
@@ -112,6 +164,14 @@ async def planning_upload(
     budget_year: int = Form(..., ge=2000, le=2100),
     budget_period: str = Form("ANUAL", max_length=20),
     id_department: Optional[int] = Form(None),
+    # BE-S7-INITBAL §5 (BR-IB-02): 4 OPTIONAL multipart fields. Absent,
+    # empty or omitted -> defaults manual/0 (zero regression, BR-IB-06).
+    # Mode values other than carryover|manual -> 422; warehouse manual
+    # value must be >= 0 (422, BR-IB-08); cash may be negative.
+    initial_cash_mode: Optional[str] = Form(None),
+    initial_cash_manual: Optional[str] = Form(None),
+    initial_warehouse_mode: Optional[str] = Form(None),
+    initial_warehouse_manual: Optional[str] = Form(None),
     file_ingresos: UploadFile = File(...),
     file_gastos: Optional[UploadFile] = File(None),
     file_compras: Optional[UploadFile] = File(None),
@@ -170,6 +230,26 @@ async def planning_upload(
             is_scenario=False,
             parent_budget_id=None,
         ))
+
+        # BE-S7-INITBAL §5 (BR-IB-02): parse/validate the 4 multipart
+        # fields BEFORE the heavy ETL (a 422 costs nothing) and apply them
+        # to the flushed-but-uncommitted Budget — the single T-05 commit
+        # below persists budget + lines + config all-or-nothing. Absent /
+        # empty -> defaults manual/0 already set by the server defaults
+        # (BR-IB-06).
+        _cash = _upload_initial_balance(
+            initial_cash_mode, initial_cash_manual, "initial_cash",
+            allow_negative=True,
+        )
+        _warehouse = _upload_initial_balance(
+            initial_warehouse_mode, initial_warehouse_manual,
+            "initial_warehouse", allow_negative=False,
+        )
+        if _cash is not None:
+            new_budget.initial_cash_mode, new_budget.initial_cash_manual = _cash
+        if _warehouse is not None:
+            new_budget.initial_warehouse_mode = _warehouse[0]
+            new_budget.initial_warehouse_manual = _warehouse[1]
 
         # Phase A — incomes (mandatory, §4.1).
         etl = BudgetTemplates(ingresos_bytes)
@@ -638,6 +718,86 @@ def planning_set_carryover(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error setting carryover flag: {str(e)}",
         )
+
+
+# ── BE-S7-INITBAL (backend.02_25 §5): configurable opening balances ──
+
+@router.put("/{id_budget}/initial-balance", response_model=PlanningDetail)
+def planning_set_initial_balance(
+    id_budget: int,
+    payload: PlanningInitialBalanceSet,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Set the opening-balance configuration of the scenario (BR-IB-03).
+
+    Updates ONLY the 4 config columns (include_carryover and every line
+    are untouched — BR-IB-07). Invalid mode ('carryover'|'manual' only)
+    and/or a negative warehouse manual_value are 422s raised by the
+    Pydantic body (BR-IB-01/08); cash may be negative. Idempotent:
+    re-sending the current config is a plain 200 (no side effects).
+    Response: the FULL PlanningDetail already updated — same pattern as
+    the PUT /carryover toggle (the FE refreshes its cache with it).
+    Missing scenario -> 404 with the verbatim "Budget {id} not found"
+    detail (BR-CO-07 convention). Auth identical to the scenario
+    mutations (get_current_user, no new gate)."""
+    try:
+        updated = crud.set_planning_initial_balance(
+            db, id_budget,
+            payload.cash.mode, payload.cash.manual_value,
+            payload.warehouse.mode, payload.warehouse.manual_value,
+        )
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Budget {id_budget} not found",
+            )
+
+        result = crud.get_budget_with_parent_name(db, id_budget)
+        db_budget, parent_budget_name = result
+        detail = PlanningDetail.model_validate(db_budget)
+        detail.parent_budget_name = parent_budget_name
+        return detail
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error setting initial balance: {str(e)}",
+        )
+
+
+@router.get("/{id_budget}/initial-balance",
+            response_model=PlanningInitialBalanceDetail)
+def planning_get_initial_balance(
+    id_budget: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Read the opening-balance configuration + its carryover source
+    (BR-IB-04). NO derived numeric value is computed server-side (SA-1 /
+    D-S7-9: the FE cashFlowPivot owns that formula from the source data).
+
+    Flow: 1) scenario existence FIRST -> 404 "Budget {id} not found"
+    (verbatim). 2) Source resolution ALWAYS runs (v1.1 enmienda SD7-10:
+    the FE offers "continue with the prior-year target budget" from
+    carryover_source even when both modes are still manual, so gating
+    the lookup on a carryover mode produced FALSE "no_source" UX on
+    budget 126): exactly 1 extra SQL query (get_carryover_source_budget,
+    NFR-IB-BE-1). No candidate -> friendly 200 with
+    unavailable_reason="no_source" whatever the modes, NEVER an HTTP
+    error (SD7-5). Orthogonal to /carryover and include_carryover at all
+    times (BR-IB-07)."""
+    db_budget = crud.get_budget_by_id(db, id_budget)
+    if db_budget is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Budget {id_budget} not found",
+        )
+    return crud.get_initial_balance_config(db, db_budget)
 
 
 @router.put("/{id_budget}/set-target",

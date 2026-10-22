@@ -113,3 +113,26 @@ ALTER TABLE budget_lines
 - **PENDIENTE EN PRODUCCIÓN:** ALTER (misma sentencia) + seed con valores
   validados por contabilidad, ambos ANTES del deploy. Cero cambios de esquema
   en el lado real (SIIGO/ETLs intactos, D-S11-6/BR-13).
+
+## 5. `budgets` += 4 columnas de saldo inicial configurable (BE-S7-INITBAL, backend.02_25 §3.2)
+
+```sql
+ALTER TABLE budgets ADD COLUMN IF NOT EXISTS initial_cash_mode VARCHAR(20) NOT NULL DEFAULT 'manual';
+ALTER TABLE budgets ADD COLUMN IF NOT EXISTS initial_cash_manual NUMERIC(15,2) NOT NULL DEFAULT 0;
+ALTER TABLE budgets ADD COLUMN IF NOT EXISTS initial_warehouse_mode VARCHAR(20) NOT NULL DEFAULT 'manual';
+ALTER TABLE budgets ADD COLUMN IF NOT EXISTS initial_warehouse_manual NUMERIC(15,2) NOT NULL DEFAULT 0;
+```
+
+- Config por escenario de los DOS saldos iniciales del flujo de planificación
+  (efectivo y bodega), con modo independiente `carryover | manual` (BR-IB-01).
+- `NUMERIC(15,2)` = mismo tipo real de `budget_lines.projected_amount`
+  (orientativo `NUMERIC(18,2)` de la spec corregido al tipo del repo).
+- El valor manual se persiste SIEMPRE, incluso en modo `carryover` (es la
+  base de degradación sin fuente, BR-IB-04). El backend NUNCA deriva el valor
+  por arrastre (SA-1/D-S7-9: esa fórmula vive en el FE `cashFlowPivot`).
+- Defaults `manual`/`0` ⇒ filas existentes se comportan exactamente igual que
+  hoy (BR-IB-06). Con estos ALTER las filas previas a la feature arruncan
+  `manual`/`0` automáticamente (AC-S7-BE-9).
+- **PENDIENTE EN DEV/PRODUCCIÓN:** correr los 4 ALTER ANTES del deploy
+  (patrón R-S7-3: `create_all` nunca agrega columnas a `budgets`; sin ellos
+  todo GET sobre budgets falla con `UndefinedColumn`).

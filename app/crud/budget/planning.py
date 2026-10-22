@@ -84,7 +84,7 @@ from app.models.budget.budgetLine import BehaviorTypeEnum, LineTypeEnum
 from app.models.collection import Collection as CollectionModel
 from app.schemas.budget import (
     BudgetCreate, BudgetLineCreate, PlanningCarryoverLine,
-    PlanningLineCreate, PlanningLineUpdate,
+    PlanningLineCreate, PlanningLineUpdate, PlanningCarryoverSource,
 )
 from app.crud.budget.budgetLine import create_budget_lines_bulk
 
@@ -1472,3 +1472,93 @@ def set_planning_carryover_flag(
     db.commit()
     db.refresh(db_budget)
     return db_budget
+
+
+# ──────────────────────────────────────────────────────────────
+# BE-S7-INITBAL (backend.02_25 §4): configurable opening balances
+# ──────────────────────────────────────────────────────────────
+
+INITIAL_BALANCE_MODES = ("carryover", "manual")
+
+
+def set_planning_initial_balance(
+    db: Session,
+    id_budget: int,
+    cash_mode: str,
+    cash_manual: float,
+    warehouse_mode: str,
+    warehouse_manual: float,
+) -> Optional[BudgetModel]:
+    """PUT /budget/planning/{id_budget}/initial-balance (BR-IB-03).
+
+    Mutates ONLY the 4 configuration columns — include_carryover and
+    every line are untouched (BR-IB-07 orthogonality). Idempotent:
+    re-sending the current config emits no UPDATE (ORM net-zero) yet
+    still returns the refreshed row (200). Missing budget -> None (the
+    API layer raises the 404 with the verbatim "Budget {id} not found"
+    detail, same convention as set_planning_carryover_flag). The sign
+    rules (warehouse >= 0, cash free) are enforced by the Pydantic body
+    schema (422 before this layer runs); the mode Literal too (422).
+    Single commit (T-05). Unchanged by the v1.1 enmienda (SD7-10): the
+    PUT contract and its response (the full PlanningDetail) stay as
+    frozen in v1.0."""
+    db_budget = db.query(BudgetModel).filter(
+        BudgetModel.id_budget == id_budget
+    ).first()
+    if db_budget is None:
+        return None
+
+    db_budget.initial_cash_mode = cash_mode
+    db_budget.initial_cash_manual = cash_manual
+    db_budget.initial_warehouse_mode = warehouse_mode
+    db_budget.initial_warehouse_manual = warehouse_manual
+    db.commit()
+    db.refresh(db_budget)
+    return db_budget
+
+
+def get_initial_balance_config(
+    db: Session, db_budget: BudgetModel
+) -> Dict[str, Any]:
+    """GET-side payload builder (BR-IB-04 / NFR-IB-BE-1).
+
+    ENMIENDA v1.1 (spec backend.02_25, SD7-10 — stakeholder UX report
+    2026-10-22, presupuesto 126): the prior-year source is resolved
+    ALWAYS, regardless of the configured modes — the FE uses it to
+    offer "Continuar con el presupuesto meta del año anterior" even
+    when the scenario is still in both `manual`, so gating the lookup
+    on some mode being `carryover` produced a FALSE blocking notice.
+    The source is money-availability of N−1, not configuration: reading
+    it never writes anything (BR-IB-05/07 intact).
+
+    Cost (NFR-IB-BE-1 v1.1): the row is already loaded by the caller;
+    the GET then pays EXACTLY 1 extra query — the SQL-filtered
+    deterministic source pick (no N+1). Returns a dict shaped for
+    PlanningInitialBalanceDetail: cash/warehouse from the row's columns
+    (float() over the NUMERIC) + carryover_source / unavailable_reason
+    ("no_source" when N−1 has NO candidate, whatever the modes)."""
+
+    def side(mode: str, manual: Any) -> Dict[str, Any]:
+        return {"mode": mode, "manual_value": float(manual or 0.0)}
+
+    carryover_source = get_carryover_source_budget(
+        db, db_budget.budget_year - 1, db_budget.id_budget,
+    )
+    return {
+        "cash": side(
+            db_budget.initial_cash_mode, db_budget.initial_cash_manual
+        ),
+        "warehouse": side(
+            db_budget.initial_warehouse_mode,
+            db_budget.initial_warehouse_manual,
+        ),
+        "carryover_source": (
+            PlanningCarryoverSource.model_validate(carryover_source)
+            if carryover_source is not None else None
+        ),
+        # BR-IB-04 (v1.1): with a source the reason is null REGARDLESS of
+        # the modes; without one it is "no_source" for every mode combo.
+        "unavailable_reason": (
+            None if carryover_source is not None else "no_source"
+        ),
+    }

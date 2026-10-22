@@ -47,6 +47,12 @@ class Budget(BudgetBase):
     # BudgetCreate intentionally do NOT carry it: creation never sets it and
     # the ONLY writer is PUT /budget/planning/{id_budget}/carryover.
     include_carryover: bool = False
+    # BE-S7-INITBAL §3.1 (additive mirror of the new budgets columns;
+    # defaults keep pre-feature payloads validating, NFR-IB-BE-2):
+    initial_cash_mode: str = "manual"
+    initial_cash_manual: float = 0.0
+    initial_warehouse_mode: str = "manual"
+    initial_warehouse_manual: float = 0.0
 
     class Config:
         from_attributes = True
