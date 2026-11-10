@@ -70,7 +70,11 @@ ENGINE_LIQUIDATION = "collaborator_liquidation"
 _CONTRACT_SERVICE = "service_provision"
 
 # Keys mandatory per contract flavor (§4.3). Missing key == missing
-# vigencia for the motor (R-05: it never guesses).
+# vigencia for the motor (R-05: it never guesses). backend.02_27 adds
+# three MODE-ONLY keys read just in their applicacion_parafiscales
+# branch (NOT mandatory globally — "all" runs fine without them):
+#   * parafiscales_tope_exoneracion_smlv  (exonerated_lt100, §6.2)
+#   * liquidar_caja / liquidar_sena / liquidar_icbf  (custom, "1"/"0")
 _DEPENDENT_KEYS = (
     "smlv", "aux_transporte_valor", "aux_transporte_tope_smlv",
     "salud_patronal_pct", "pension_pct", "caja_pct", "caja_tope_smlv",
@@ -502,7 +506,12 @@ class LaborCostEngine:
             caja.append((C_TRA, q2(aux_valor * factor)))
 
         caja.append((C_SALUD, q2(bases["ibc"] * self._param_dec(y, "salud_patronal_pct"))))
-        caja.append((C_PENSION, q2(bases["ibc"] * self._param_dec(y, "pension_pct"))))
+        # backend.02_27 §6.1: the employer pension seat is governed by
+        # the collaborator's own flag (default True — old rows without
+        # the column keep today's behavior). It does NOT touch SAL /
+        # SALUD / ARL / CAJA / aux / provisions.
+        if getattr(collab, "pays_pension", True):
+            caja.append((C_PENSION, q2(bases["ibc"] * self._param_dec(y, "pension_pct"))))
 
         risk_class = collab.risk_class or self._param(y, "arl_default_class")
         arl_rates = crud.get_labor_arl_rates(self.db, y)
@@ -513,12 +522,34 @@ class LaborCostEngine:
             raise MissingLaborParametersError(y, f"arl_rate[{risk_class}]")
         caja.append((C_ARL, q2(bases["ibc"] * Decimal(rate))))
 
+        # ── Parafiscales (backend.02_27 §6.2 matrix) ──
+        # all              -> SENA + ICBF + CAJA
+        # exonerated_lt100 -> CAJA always; SENA/ICBF only when
+        #                     ibc >= parafiscales_tope_exoneracion_smlv
+        #                     * smlv (per collaborator; the tope is read
+        #                     ONLY in this mode — R-05 if missing).
+        # custom           -> each of CAJA/SENA/ICBF per its liquidar_*
+        #                     key ("1"/"0", read ONLY in this mode —
+        #                     R-05 if missing).
         aplicacion = self._param(y, "aplicacion_parafiscales").strip().lower()
-        caja.append((C_CAJA, q2(bases["base_caja"] * self._param_dec(y, "caja_pct"))))
-        # all | exonerated_lt100 | custom (custom se trata como all:
-        # aún no hay toggles por componente — DEP-01 lo definirá).
-        parafisc_exonerados = aplicacion == "exonerated_lt100"
-        if not parafisc_exonerados:
+        caja_pct = self._param_dec(y, "caja_pct")
+        if aplicacion == "exonerated_lt100":
+            tope = self._param_dec(y, "parafiscales_tope_exoneracion_smlv")
+            caja.append((C_CAJA, q2(bases["base_caja"] * caja_pct)))
+            if bases["ibc"] >= tope * smlv:
+                caja.append((C_SENA, q2(bases["ibc"] * self._param_dec(y, "sena_pct"))))
+                caja.append((C_ICBF, q2(bases["ibc"] * self._param_dec(y, "icbf_pct"))))
+        elif aplicacion == "custom":
+            if self._param(y, "liquidar_caja") == "1":
+                caja.append((C_CAJA, q2(bases["base_caja"] * caja_pct)))
+            if self._param(y, "liquidar_sena") == "1":
+                caja.append((C_SENA, q2(bases["ibc"] * self._param_dec(y, "sena_pct"))))
+            if self._param(y, "liquidar_icbf") == "1":
+                caja.append((C_ICBF, q2(bases["ibc"] * self._param_dec(y, "icbf_pct"))))
+        else:
+            # "all" (and any unexpected value: the motor keeps the
+            # inclusive default instead of dropping components).
+            caja.append((C_CAJA, q2(bases["base_caja"] * caja_pct)))
             caja.append((C_SENA, q2(bases["ibc"] * self._param_dec(y, "sena_pct"))))
             caja.append((C_ICBF, q2(bases["ibc"] * self._param_dec(y, "icbf_pct"))))
 
@@ -775,6 +806,13 @@ class LaborCostEngine:
                     "payment_date": seat.payment_date,
                     "id_collection": collab.id_collection,
                     "projected_amount": seat.amount,
+                    # IVA fix 2026-10-26: payroll never bears VAT (D-S10-3
+                    # semantics — NULL would be read as "con IVA" by the
+                    # liquidation engine and the flow view's gross-up). The
+                    # materialized lines now enter with an EXPLICIT False so
+                    # every consumer (E2 emission, budget engine, FE flow)
+                    # keeps salary/benefits/liquidation net.
+                    "has_iva": False,
                     "description": self._description(collab, label),
                     "id_collaborator": collab.id_collaborator,
                     "cost_component_code": seat.component_code,

@@ -52,6 +52,12 @@ class Collaborator(Base):
     termination_date = Column(Date, nullable=True)
     # I..V; NULL => arl_default_class parameter of the vigencia (§4.3)
     risk_class = Column(String(3), nullable=True)
+    # backend.02_27 §3: FALSE => the motor does NOT emit the employer
+    # pension seat (C_PENSION). Default TRUE preserves the behavior of
+    # every pre-existing collaborator. create_all does NOT alter the
+    # existing table: manual DDL in note.md §6
+    # (ALTER TABLE collaborators ADD COLUMN pays_pension ...).
+    pays_pension = Column(Boolean, nullable=False, server_default="True")
     # temporada default (NULL ok). Spec says "product_collections"; the
     # actual catalog table of this repo is `collections` (income/expense/
     # purchase ETL parity via short_collection_name).

@@ -59,6 +59,12 @@ class CollaboratorCreate(BaseModel):
     )
     id_collection: Optional[int] = Field(None, gt=0,
                                          description="Temporada default")
+    # backend.02_27 §4: FALSE => the motor never emits C_PENSION for
+    # this collaborator. Default TRUE = current behavior.
+    pays_pension: bool = Field(
+        True, description="Cotiza pensión: FALSE suprime el asiento "
+                          "patronal de pensión (C_PENSION)"
+    )
     notes: Optional[str] = None
     # First salary plan (stored in collaborator_salary_plans, §4.2)
     salary: Optional[Decimal] = Field(None, gt=0, description="COP/mes (honorarios en servicio); None => sin plan inicial: la UI FE-S15 encadena POST /{id}/salary-plan")
@@ -90,6 +96,8 @@ class CollaboratorUpdate(BaseModel):
     termination_date: Optional[date] = None
     risk_class: Optional[RiskClass] = None
     id_collection: Optional[int] = Field(None, gt=0)
+    # backend.02_27 §4: None = leave the current flag untouched
+    pays_pension: Optional[bool] = None
     notes: Optional[str] = None
 
 
@@ -110,6 +118,11 @@ class CollaboratorOut(BaseModel):
     risk_class: Optional[str] = None
     id_collection: Optional[int] = None
     notes: Optional[str] = None
+    # backend.02_27 §4: default True so OLD rows (pre-ALTER, or masked
+    # responses built before the column existed) answer the flag.
+    pays_pension: bool = Field(
+        True, description="Cotiza pensión (motor: C_PENSION solo si True)"
+    )
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     cost_center_name: Optional[str] = None

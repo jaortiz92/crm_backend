@@ -1793,6 +1793,26 @@ class BudgetTemplates:
     COLLABORATOR_DOC_TYPES = {"CC", "CE", "NIT"}
     COLLABORATOR_RISK_CLASSES = {"I", "II", "III", "IV", "V"}
 
+    # backend.02_27 §7.1: optional "Cotiza pension" truthy/falsy cells
+    # (accent-folded lookup cotiza_pension; case-insensitive + trim).
+    # Keys are LOWERCASE accent-folded (the _fold_accents contract).
+    COLLABORATOR_PENSION_TRUE = {"si", "true", "1", "s"}
+    COLLABORATOR_PENSION_FALSE = {"no", "false", "0", "n"}
+
+    @classmethod
+    def _parse_pension_cell(cls, value: Any) -> Optional[bool]:
+        """'Cotiza pension' cell -> True / False / None (empty). A
+        non-empty unrecognized value returns None WITHOUT raising: the
+        caller appends the row-level reason (R-06 all-or-nothing)."""
+        text = cls._cell_text(value).upper()
+        if not text:
+            return None
+        if cls._fold_accents(text) in cls.COLLABORATOR_PENSION_TRUE:
+            return True
+        if cls._fold_accents(text) in cls.COLLABORATOR_PENSION_FALSE:
+            return False
+        return None
+
     @staticmethod
     def _fold_accents(text: Any) -> str:
         """Lowercase + strip + collapse whitespace + remove diacritics
@@ -1860,7 +1880,12 @@ class BudgetTemplates:
         (default 0) · Clase de Riesgo ARL -> I..V (None -> the motor
         applies arl_default_class) · Temporada -> short_collection_name
         (tolerant: unknown -> NULL at the endpoint, purchase A-01
-        parity) · Observaciones -> notes.
+        parity) · Observaciones -> notes · Cotiza pension (OPTIONAL
+        column, backend.02_27 §7.1: NOT in COLLABORATOR_REQUIRED_COLS so
+        old files import unchanged) -> pays_pension — case-insensitive
+        SÍ/SI/TRUE/1/S => True · NO/FALSE/0/N => False · empty cell =>
+        None (ALTA default True; RE-IMPORT keeps the master's flag);
+        any other non-empty value rejects the row (R-06 all-or-nothing).
 
         Reject is all-or-nothing (R-06/T-05, AC-PLT-1): totally-empty
         rows drop silently; any row with an empty mandatory cell, an
@@ -2020,6 +2045,16 @@ class BudgetTemplates:
             # purchase A-01 parity — never blocks here) ──
             short_collection_name = self._cell_text(cell(row, "temporada"))
 
+            # ── Cotiza pension (OPTIONAL, backend.02_27 §7.1) ──
+            raw_pension = cell(row, "cotiza_pension")
+            pension_text = self._cell_text(raw_pension)
+            pays_pension = self._parse_pension_cell(raw_pension)
+            if pays_pension is None and pension_text:
+                reasons.append(
+                    "Cotiza pension inválida: "
+                    f"'{pension_text}' (esperado SÍ/NO o vacío)"
+                )
+
             notes = self._cell_text(cell(row, "observaciones")) or None
 
             if reasons:
@@ -2048,6 +2083,10 @@ class BudgetTemplates:
                 "valid_from": valid_from,
                 "risk_class": risk_class,
                 "short_collection_name": short_collection_name,
+                # None = empty/absent column: ALTA -> True, RE-IMPORT ->
+                # keep the master's flag (resolved by the import
+                # endpoint, backend.02_27 §7.2).
+                "pays_pension": pays_pension,
                 "notes": notes,
             })
 
@@ -2071,7 +2110,8 @@ class BudgetTemplates:
                 "contract_type", "id_cost_center_code", "salary",
                 "allowance_salary", "allowance_non_salary", "is_integral",
                 "hire_date", "termination_date", "valid_from",
-                "risk_class", "short_collection_name", "notes",
+                "risk_class", "short_collection_name", "pays_pension",
+                "notes",
             ],
         )
         return self.df

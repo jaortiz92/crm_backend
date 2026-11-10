@@ -153,6 +153,8 @@ def _collaborator_out(
         created_at=collab.created_at,
         updated_at=collab.updated_at,
         cost_center_name=cost_center_name,
+        # backend.02_27: getattr True = tolera filas viejas sin la columna
+        pays_pension=bool(getattr(collab, "pays_pension", True)),
     )
     if can_view and plan is not None:
         out.salary = Decimal(plan.salary)
@@ -304,6 +306,12 @@ async def collaborator_import(
                     "risk_class": rec.get("risk_class"),
                     "id_collection": id_collection,
                     "notes": rec.get("notes"),
+                    # backend.02_27 §7.2 ALTA: explicit value or default
+                    # True (empty "Cotiza pension" cell never lands NULL).
+                    "pays_pension": (
+                        rec.get("pays_pension")
+                        if rec.get("pays_pension") is not None else True
+                    ),
                 })
             else:
                 fields: Dict[str, Any] = {
@@ -321,6 +329,11 @@ async def collaborator_import(
                     fields["id_collection"] = id_collection
                 if rec.get("notes"):
                     fields["notes"] = rec["notes"]
+                # backend.02_27 §7.2 RE-IMPORT: an explicit SÍ/NO updates
+                # the flag; an EMPTY cell must NOT reset the master's
+                # pays_pension (AC-3: keep current value on blank).
+                if rec.get("pays_pension") is not None:
+                    fields["pays_pension"] = rec["pays_pension"]
                 if termination_date is not None:
                     fields["termination_date"] = termination_date
                     fields["status"] = status_value
@@ -538,6 +551,9 @@ def create_collaborator(
             "risk_class": payload.risk_class,
             "id_collection": payload.id_collection,
             "notes": payload.notes,
+            # backend.02_27 §4/§5: the flag rides the master fields
+            # (schema default True; crud re-guards None).
+            "pays_pension": payload.pays_pension,
         })
 
         if payload.salary is not None:

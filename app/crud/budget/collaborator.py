@@ -103,7 +103,13 @@ def query_collaborators(
 def create_collaborator(
     db: Session, fields: Dict[str, Any]
 ) -> Collaborator:
-    """Add the master row (flush only — the caller commits, T-05)."""
+    """Add the master row (flush only — the caller commits, T-05).
+    backend.02_27 §5: ``pays_pension`` defaults to True when the alta
+    payload omits it or carries None (never NULL — the column is NOT
+    NULL)."""
+    fields = dict(fields)
+    if fields.get("pays_pension") is None:
+        fields["pays_pension"] = True
     db_collaborator = Collaborator(**fields)
     db.add(db_collaborator)
     db.flush()
@@ -116,7 +122,14 @@ def update_collaborator_master(
     fields: Dict[str, Any],
 ) -> Collaborator:
     """PUT of the master fields ONLY (salary never — §9). Applied
-    in-place; the caller commits (T-05)."""
+    in-place; the caller commits (T-05). backend.02_27 §5:
+    ``pays_pension`` is written ONLY when the value is explicit
+    (present and not None) — a None must NEVER null the NOT NULL
+    column nor reset an explicit False."""
+    fields = {
+        k: v for k, v in fields.items()
+        if k != "pays_pension" or v is not None
+    }
     for key, value in fields.items():
         setattr(db_collaborator, key, value)
     db.flush()

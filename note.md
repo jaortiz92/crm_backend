@@ -136,3 +136,22 @@ ALTER TABLE budgets ADD COLUMN IF NOT EXISTS initial_warehouse_manual NUMERIC(15
 - **PENDIENTE EN DEV/PRODUCCIÓN:** correr los 4 ALTER ANTES del deploy
   (patrón R-S7-3: `create_all` nunca agrega columnas a `budgets`; sin ellos
   todo GET sobre budgets falla con `UndefinedColumn`).
+
+## 6. `collaborators` += `pays_pension` (backend.02_27 §3, flag "Cotiza pension")
+
+```sql
+ALTER TABLE collaborators ADD COLUMN pays_pension BOOLEAN NOT NULL DEFAULT TRUE;
+```
+
+- Mismo patrón que §1 (`include_carryover`) y §4 (`budget_lines`): las 6 tablas
+  del módulo de nómina las creó `create_all` en su día, pero `create_all`
+  **nunca** agrega columnas a una tabla existente — sin este ALTER, cualquier
+  `GET/POST` de colaboradores y el motor (R-13) fallan con `UndefinedColumn`.
+- `NOT NULL DEFAULT TRUE` ⇒ colaboradores existentes arruncan `True`
+  (comportamiento actual preservado: el motor emite `C_PENSION` solo si
+  `pays_pension` es True, backend.02_27 §6.1).
+- Fuente del flag: formulario/API (`pays_pension`) y plantilla de nómina
+  (columna opcional **"Cotiza pension"**; vacía ⇒ alta `True` / re-import no
+  toca el master, §7.1/§7.2).
+- **PENDIENTE EN DEV/PRODUCCIÓN:** correr el ALTER ANTES del deploy del
+  backend que incluye backend.02_27.
