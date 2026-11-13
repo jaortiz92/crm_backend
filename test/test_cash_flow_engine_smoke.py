@@ -39,7 +39,7 @@ Cobertura:
            "Comparing against scenario budget"
   - AC-13  BR-32: conteos identicos antes/despues de 5 llamadas (6 tablas)
   - AC-14  regresion: cash-flow-projection byte-a-byte antes/despues de toda
-           la bateria + stubs budget-vs-actual/tracking intactos. El smoke
+           la bateria + stubs budget-vs-actual/tracking en 501 (fix 7 pre-prod). El smoke
            02_09 (test_pnl_engine_smoke.py) se ejecuta como paso final de
            verificacion manual (misma guardia cruzada; no se sub-invoca aqui
            para no anidar cuarentenas).
@@ -565,13 +565,11 @@ def proj_baseline(cur):
         ck("AC-14 cash-flow-projection responde 200", False,
            f"status={r.status_code if r is not None else 'sin conexion'}")
     r = api("GET", "/budget/analytics/budget-vs-actual?id_budget=1")
-    ck("AC-14 stub budget-vs-actual ⇒ 200 []",
-       r is not None and r.status_code == 200 and r.json() == [])
+    ck("AC-14 budget-vs-actual ⇒ 501 not implemented (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
     r = api("GET", "/budget/analytics/tracking/1")
-    stub = r is not None and r.status_code == 200 and r.json().get("budget_name") == "" \
-        and r.json().get("total_budgeted") in (0, 0.0)
-    ck("AC-14 stub tracking ⇒ 200 con forma stub", stub,
-       r.text[:120] if r is not None else "sin conexion")
+    ck("AC-14 tracking ⇒ 501 not implemented (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
 
 
 def ac02(cur):
@@ -857,11 +855,11 @@ def ac14_final(cur):
     ck("AC-14 cash-flow-projection idéntica antes/después (legado intacto, BR-36)",
        after is not None and after == state.proj_before)
     r = api("GET", "/budget/analytics/budget-vs-actual?id_budget=1")
-    ck("AC-14 stub budget-vs-actual sigue []",
-       r is not None and r.status_code == 200 and r.json() == [])
+    ck("AC-14 budget-vs-actual sigue 501 (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
     r = api("GET", "/budget/analytics/tracking/1")
-    ck("AC-14 stub tracking sigue igual (budget_name='')",
-       r is not None and r.status_code == 200 and r.json().get("budget_name") == "")
+    ck("AC-14 tracking sigue 501 (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
 
 
 def ac15_errors():

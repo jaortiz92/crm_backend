@@ -21,7 +21,7 @@ Cobertura:
   - AC-10  filtro id_cost_center => BR-9 (revenues no filtrable, eco literal)
   - AC-11  rango sin datos (2027) => ceros y margenes null, 200 OK
   - AC-12  read-only: conteos identicos antes/despues de 5 llamadas
-  - AC-13  cash-flow byte-a-byte + stubs budget-vs-actual/tracking intactos
+  - AC-13  cash-flow byte-a-byte + stubs budget-vs-actual/tracking en 501 (fix 7 pre-prod)
   - AC-14  auth: pnl y tasas sin token => 401/403
   - AC-15  OpenAPI: ruta + response_model PnLResponse + 5 rutas de tasas
   - AC-16  invariante BR-21 en TODAS las respuestas capturadas
@@ -600,13 +600,11 @@ def ac13_baseline(cur):
         ck("AC-13 cash-flow responde 200", False,
            f"status={r.status_code if r is not None else 'sin conexion'}")
     r = api("GET", "/budget/analytics/budget-vs-actual?id_budget=1")
-    ck("AC-13 stub budget-vs-actual ⇒ 200 []",
-       r is not None and r.status_code == 200 and r.json() == [])
+    ck("AC-13 budget-vs-actual ⇒ 501 not implemented (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
     r = api("GET", "/budget/analytics/tracking/1")
-    stub = r is not None and r.status_code == 200 and r.json().get("budget_name") == "" \
-        and r.json().get("total_budgeted") in (0, 0.0)
-    ck("AC-13 stub tracking ⇒ 200 con forma stub", stub,
-       r.text[:120] if r is not None else "sin conexion")
+    ck("AC-13 tracking ⇒ 501 not implemented (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
 
 
 def ac03(cur):
@@ -969,11 +967,11 @@ def ac13_final(cur):
     ck("AC-13 cash-flow idéntico antes/después (regresión budgetEngine)",
        after is not None and after == state.cashflow_before)
     r = api("GET", "/budget/analytics/budget-vs-actual?id_budget=1")
-    ck("AC-13 stub budget-vs-actual sigue []",
-       r is not None and r.status_code == 200 and r.json() == [])
+    ck("AC-13 budget-vs-actual sigue 501 (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
     r = api("GET", "/budget/analytics/tracking/1")
-    ck("AC-13 stub tracking sigue igual (budget_name='')",
-       r is not None and r.status_code == 200 and r.json().get("budget_name") == "")
+    ck("AC-13 tracking sigue 501 (fix 7 pre-prod)",
+       r is not None and r.status_code == 501)
 
 
 def e1_e2_errors():

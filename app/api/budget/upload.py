@@ -34,9 +34,19 @@ async def upload_cost_centers(
     """
     Upload and process a cost centers Excel file.
     Processes the file using the budget templates ETL pipeline.
+
+    DISABLED (fix 7 pre-prod): returns 501 instead of the former fake
+    200 acknowledgement that never touched the file. Cost centers are
+    managed via /budget/planning configuration; the Excel ingestion
+    arrives with the execution and comparisons phase.
     """
-    # TODO: Implement ETL processing via BudgetTemplates
-    return {"message": "Cost centers upload endpoint - implementation pending"}
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "cost-centers upload is not implemented yet: planned for the "
+            "execution and comparisons phase"
+        ),
+    )
 
 
 @router.post("/actual-expenses")

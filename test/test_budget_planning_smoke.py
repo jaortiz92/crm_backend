@@ -11,7 +11,7 @@ test/data/:
     AC-MT-1..3   Meta Activa por ano (invariante, Q0 del engine ve el
                  escenario, gate 403 para Financiero)
     AC-REG-01    endpoints legados budget-plan-income/expense +
-                 clone-for-scenario con comportamiento IDENTICO tras T-02
+                 clone-for-scenario en 501 tras fix 7 pre-prod (planificacion T-02 intacta)
     AC-REG-02    Q0 con 0 activos: resolucion y warnings literales intactos
 
 Aislamiento ("schema aislado" a nivel de datos): todos los registros creados
@@ -36,6 +36,7 @@ import sys
 import threading
 import traceback
 from datetime import date, datetime
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -118,6 +119,7 @@ NAME_CLONE0 = MARK + "B cero%"
 NAME_CLONE100 = MARK + "C -100%"
 NAME_CLONEDUP = MARK + "D clon de clon"
 NAME_BADCLONE = MARK + "clon invalido"
+NAME_VS = MARK + "Var Salidas 2027"   # backend.02_28: line manager
 TEMP_USER = "smkplnfin2027"
 TEMP_USER_PASS = "SmkPln!2027"
 TEMP_DOC = 999911111.0
@@ -138,6 +140,7 @@ state.leg_inc_id = None
 state.leg_exp_id = None
 state.base_lines = {}          # id -> line dict (snapshot)
 state.target_line_id = None    # celda usada en AC-CE
+state.vs_line = None           # backend.02_28: linea variable_outflows
 state.created_budgets = []     # ids para limpieza
 state.created_names = []       # nombres para limpieza (por si el id no se capturo)
 state.temp_xlsx = []
@@ -531,7 +534,7 @@ def t08_upload_income_only():
 def t09_ac_reg_01():
     """AC-REG-01: legados budget-plan-income|expense dan resultados
     IDENTICOS tras el refactor T-02 (mismos archivos -> mismas lineas) y
-    clone-for-scenario sigue respondiendo 200 (stub)."""
+    clone-for-scenario responde 501 (stub desactivado por fix 7 pre-prod)."""
     with INCOME_EXCEL.open("rb") as fi:
         r_inc = api("POST", "/budget/upload/budget-plan-income",
                     files={"file": (INCOME_EXCEL.name, fi, XLSX_MIME)},
@@ -566,8 +569,9 @@ def t09_ac_reg_01():
 
     r_clone = api("POST", f"/budget/analytics/clone-for-scenario/{state.base_id}"
                           f"?scenario_name=PLN-stub")
-    ok_stub = r_clone is not None and r_clone.status_code == 200
-    return ck("AC-REG-01 /analytics/clone-for-scenario (stub) intacto", ok_stub,
+    ok_not_impl = r_clone is not None and r_clone.status_code == 501
+    return ck("AC-REG-01 /analytics/clone-for-scenario responde 501 (fix 7 pre-prod)",
+              ok_not_impl,
               f"status={r_clone and r_clone.status_code}; base is_scenario="
               f"{base.get('is_scenario')}")
 
@@ -955,6 +959,93 @@ def t20_budget_year_range():
               f"status={r and r.status_code}")
 
 
+def t21_ac_vs_line_manager():
+    """backend.02_28 (AC-BE-VS-1/AC-BE-VS-7): la linea 'Variable por
+    Salidas' via line manager sobre un escenario PROPIO (income-only
+    upload, robusto ante fallos de clon ajenos) — 201 con tasa y
+    projected_amount forzado a 0 (BR-LINE-03/AC-UP-1 generico); sin tasa
+    => 422 (mismo codigo que los otros variables, BR-LINE-03);
+    behavior_type INMUTABLE tras crear (BR-LINE-06: pydantic ignora el
+    campo); PUT projected_amount sobre variable => 400 (guard generica
+    != FIXED); persistencia cruda 'VARIABLE_OUTFLOWS' (NAME) en
+    budget_lines."""
+    files = {
+        "scenario_name": (None, NAME_VS),
+        "budget_year": (None, str(YEAR)),
+        "budget_period": (None, PERIOD),
+        "file_ingresos": ("inc.xlsx",
+                          BytesIO(INCOME_EXCEL.read_bytes()), XLSX_MIME),
+    }
+    r0 = api("POST", "/budget/planning/upload", files=files)
+    if r0 is None or r0.status_code != 201:
+        return ck("AC-BE-VS-1 setup: upload income-only para el "
+                  "escenario de la linea", False,
+                  (r0.text[:120] if r0 is not None else "error"))
+    vs_budget = r0.json()["id_budget"]
+    state.created_budgets.append(vs_budget)
+    existing = get_lines(vs_budget) or []
+    cc_any = existing[0]["id_cost_center"] if existing else None
+
+    ok_create = False
+    r = api("POST", f"/budget/planning/{vs_budget}/line", json={
+        "id_cost_center": cc_any,
+        "line_type": "expense",
+        "budget_date": f"{YEAR}-02-10",
+        "projected_amount": 0,
+        "description": "PLN var por salidas",
+        "behavior_type": "variable_outflows",
+        "variable_rate": 0.004,
+    })
+    if r is not None and r.status_code == 201:
+        body = r.json()
+        ok_create = (body["behavior_type"] == "variable_outflows"
+                     and float(body["projected_amount"]) == 0
+                     and abs(float(body["variable_rate"]) - 0.004) < 1e-9)
+        state.vs_line = body["id_budget_line"]
+    ck("AC-BE-VS-1 POST variable_outflows con tasa 0.004 -> 201 "
+       "(projected_amount=0 forzado, BR-LINE-03/AC-UP-1)", ok_create,
+       (r.text[:130] if r is not None else "error"))
+    if not ok_create:
+        return False
+
+    raw = run_sql("SELECT behavior_type, variable_rate FROM budget_lines "
+                  f"WHERE id_budget_line = {state.vs_line}", fetch=True)
+    ck("AC-BE-VS-1 DB cruda: behavior_type='VARIABLE_OUTFLOWS' (NAME) y "
+       "tasa persistida",
+       len(raw) == 1 and raw[0][0] == "VARIABLE_OUTFLOWS"
+       and abs(float(raw[0][1]) - 0.004) < 1e-9, f"raw={raw}")
+
+    r_no_rate = api("POST", f"/budget/planning/{vs_budget}/line", json={
+        "id_cost_center": 999999999, "line_type": "expense",
+        "budget_date": f"{YEAR}-03-10", "projected_amount": 0,
+        "behavior_type": "variable_outflows",
+    })
+    ok_no_rate = (r_no_rate is not None and r_no_rate.status_code == 422
+                  and "variable_rate is required" in r_no_rate.text)
+    ck("AC-BE-VS-1 POST variable_outflows SIN tasa -> 422 'variable_rate "
+       "is required...' (mismo codigo que variable_sales/receivables, "
+       "BR-LINE-03)", ok_no_rate,
+       (r_no_rate.text[:130] if r_no_rate is not None else "error"))
+
+    r_put = api("PUT", f"/budget/planning/line/{state.vs_line}", json={
+        "behavior_type": "fixed", "variable_rate": 0.05})
+    ok_put = (r_put is not None and r_put.status_code == 200
+              and r_put.json()["behavior_type"] == "variable_outflows"
+              and abs(float(r_put.json()["variable_rate"]) - 0.05) < 1e-9)
+    ck("AC-BE-VS-7/BR-LINE-06 PUT con behavior_type enviado -> "
+       "IGNORADO (sigue variable_outflows) y la tasa si edita a 0.05",
+       ok_put, (r_put.text[:130] if r_put is not None else "error"))
+
+    r_amt = api("PUT", f"/budget/planning/line/{state.vs_line}",
+                json={"projected_amount": 1000.0})
+    ok_amt = (r_amt is not None and r_amt.status_code == 400
+              and "variable lines derive their amount from the rate" in r_amt.text)
+    ck("AC-BE-VS-7/BR-VS-05 PUT projected_amount sobre variable -> 400 "
+       "(guard generica != FIXED intacta para el tercer valor)",
+       ok_amt, (r_amt.text[:130] if r_amt is not None else "error"))
+    return ok_put and ok_amt
+
+
 # ══════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════
@@ -997,6 +1088,7 @@ def main():
         t18_ac_mt_3,
         t19_listing_and_404,
         t20_budget_year_range,
+        t21_ac_vs_line_manager,
     ]
     try:
         for t in tests:

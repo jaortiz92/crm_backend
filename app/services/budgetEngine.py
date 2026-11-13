@@ -107,7 +107,19 @@ class BudgetEngine:
           view, which DO carry a CECO; the AR accounts_receivable term was
           dropped from the base: it has no CECO dimension and the budget's
           recaudo must be built from the plan's own entries).
-          Both bases are NET (see note below).
+          backend.02_28 (BR-VS-01/02): variable_outflows = rate x Base(m),
+          where Base(m) = AP(m) + Fixed(m) [ap_keys filter] + SalesVar(m) +
+          ReceivVar(m) + Financing(m) [ACTIVE credits' PRINCIPAL installments
+          by principal_due_date month] + Impuestos(m) [BudgetTaxResult
+          balance_payable by payment_date + cash advances, budgetTaxEngine
+          helpers] for the budget scope and year. Base(m) EXCLUDES the
+          contribution of ALL variable_outflows lines (deterministic,
+          no fixed-point iteration; they are NOT deductible so the tax
+          term never depends on them, BR-VS-04). Each line contributes
+          independently on the month of its budget_date (year filtered
+          to the budget year); no per-CECO mirror — the contribution is
+          attributed to the line's own CECO by the frontend pivot.
+          Both variable bases are NET (see note below).
         - net_cash_flow: float
         - cumulative_cash_flow: float
 
@@ -121,6 +133,14 @@ class BudgetEngine:
         """
         inflows_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
         outflows_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
+        # backend.02_28 (BR-VS-01): monthly mirror of the OUTFLOW base for
+        # the variable_outflows behavior — composed in PARALLEL with
+        # outflows_by_month across the 4 existing accumulators (AP,
+        # fixed, B1, B2) plus the financing/tax queries below. It
+        # EXCLUDES the contribution of every variable_outflows line, so
+        # the base stays deterministic (no iteration) and every line's
+        # `rate x Base(m)` adds on top of it (BR-VS-06 identity).
+        base_outflows_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
         net_income_by_month: Dict[int, float] = {m: 0.0 for m in range(1, 13)}
         # B1 (Enmienda E-02 a backend.02_02 §6): accrual base for
         # variable_sales = budgeted income ONLY. The accounts-receivable
@@ -169,6 +189,7 @@ class BudgetEngine:
         for row in ap_rows:
             month = int(row.month)
             outflows_by_month[month] += float(row[2])
+            base_outflows_by_month[month] += float(row[2])
             ap_keys.add((month, row.id_cost_center))
 
         # An explicit scenario is authoritative even when the requested cash
@@ -297,6 +318,7 @@ class BudgetEngine:
             month = int(row.payment_month)
             if (month, row.id_cost_center) not in ap_keys:
                 outflows_by_month[month] += float(row[2])
+                base_outflows_by_month[month] += float(row[2])
 
         # B1+B2 (Enmienda E-02 a backend.02_02 §6): variable expenses accrue
         # on the MONTH OF THE LINE (budget_date), never on the expense's
@@ -339,6 +361,9 @@ class BudgetEngine:
                 if c is not None else 0.0
             )
             outflows_by_month[month] += ceco_income * rate
+            # backend.02_28 (BR-VS-01): the B1 contribution IS part of
+            # the variable_outflows base (calculated-variable expense).
+            base_outflows_by_month[month] += ceco_income * rate
 
         variable_receivables_query = (
             self.db.query(
@@ -381,6 +406,93 @@ class BudgetEngine:
                 cash_ceco_map.get(month, 0.0) if cash_ceco_map else 0.0
             )
             outflows_by_month[month] += ceco_base * rate
+            # backend.02_28 (BR-VS-01): the B2 contribution IS part of
+            # the variable_outflows base (calculated-variable expense).
+            base_outflows_by_month[month] += ceco_base * rate
+
+        # ── backend.02_28 (§5.5): the two NEW base-only terms ────────────
+        # Financing(m) — ACTIVE credits' PRINCIPAL installments, by month
+        # of principal_due_date within the budget year (same query shape
+        # as get_cash_flow §5.5 financing_base; only the PRINCIPAL here:
+        # interest/insurance already materialize expense BudgetLines with
+        # source_engine = "financing_credit" (_materialize_expenses) and
+        # enter Fixed(m) above). Fills base_outflows_by_month ONLY — the
+        # returned outflows stay byte-identical for budgets without
+        # variable_outflows lines (spec §11 compatibilidad).
+        financing_base = (
+            self.db.query(FinancingCreditInstallmentModel)
+            .join(FinancingCreditModel,
+                  FinancingCreditInstallmentModel.id_financing_credit
+                  == FinancingCreditModel.id_financing_credit)
+            .filter(FinancingCreditModel.status == "active",
+                    FinancingCreditInstallmentModel.schedule_revision
+                    == FinancingCreditModel.schedule_revision,
+                    FinancingCreditInstallmentModel.projection_status == "projected")
+        )
+        financing_rows = financing_base.with_entities(
+            extract("month",
+                    FinancingCreditInstallmentModel.principal_due_date).label("principal_month"),
+            func.coalesce(
+                func.sum(FinancingCreditInstallmentModel.principal_amount), 0
+            ).label("principal"),
+        ).filter(
+            extract("year", FinancingCreditInstallmentModel.principal_due_date) == budget_year,
+            FinancingCreditInstallmentModel.principal_amount > 0,
+        ).group_by("principal_month").all()
+        for row in financing_rows:
+            base_outflows_by_month[int(row.principal_month)] += float(row.principal)
+
+        # Impuestos(m) — persisted BudgetTaxResult obligations of the
+        # budget scope (same event split as get_cash_flow L1303-1324):
+        # the balance leaves on payment_date, the advance on its own
+        # trace date (or the payment date). Read-only, so the base is
+        # independent of variable_outflows (BR-VS-04: not deductible).
+        tax_rows = (
+            self.db.query(BudgetTaxResultModel)
+            .join(BudgetModel,
+                  BudgetTaxResultModel.id_budget == BudgetModel.id_budget)
+            .filter(budget_scope)
+            .order_by(BudgetTaxResultModel.payment_date,
+                      BudgetTaxResultModel.tax_type)
+            .all()
+        )
+        for tax_row in tax_rows:
+            if (tax_row.payment_date is not None
+                    and tax_row.payment_date.year == budget_year):
+                base_outflows_by_month[tax_row.payment_date.month] += float(
+                    tax_row.balance_payable or 0
+                )
+            cash_advance = tax_cash_advance(tax_row)
+            advance_date = tax_cash_advance_date(tax_row) or tax_row.payment_date
+            if (cash_advance and advance_date is not None
+                    and advance_date.year == budget_year):
+                base_outflows_by_month[advance_date.month] += float(cash_advance)
+
+        # backend.02_28 (§5.5b) — third variable branch (BR-VS-02/03):
+        # each line contributes rate x Base(month of its budget_date) on
+        # that month, filtered to the budget year. NO per-CECO mirror —
+        # the base is GLOBAL to the budget; the frontend pivot breaks
+        # the contribution down by the line's own CECO.
+        variable_outflows_query = (
+            self.db.query(
+                extract("month", BudgetLineModel.budget_date).label("accrual_month"),
+                BudgetLineModel.variable_rate,
+                BudgetLineModel.id_cost_center,
+            )
+            .join(BudgetModel, BudgetLineModel.id_budget == BudgetModel.id_budget)
+            .filter(
+                budget_scope,
+                BudgetLineModel.line_type == "expense",
+                BudgetLineModel.behavior_type == "variable_outflows",
+                extract("year", BudgetLineModel.budget_date) == budget_year,
+            )
+        )
+        for row in variable_outflows_query.all():
+            if row.accrual_month is None:
+                continue
+            month = int(row.accrual_month)
+            rate = float(row.variable_rate) if row.variable_rate else 0.0
+            outflows_by_month[month] += rate * base_outflows_by_month[month]
 
         result = []
         cumulative = 0.0

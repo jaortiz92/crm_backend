@@ -661,10 +661,19 @@ def t04_ac_be8_1_guards():
     ok3 = (r3 is not None and r3.status_code == 400
            and (r3.json().get("detail") or {}).get("reason")
            == PURCHASE_SHAPE_REASON)
+    rvo = _post_line({**base, "behavior_type": "variable_outflows",
+                      "variable_rate": 0.004})
+    okvo = (rvo is not None and rvo.status_code == 400
+            and (rvo.json().get("detail") or {}).get("reason")
+            == PURCHASE_SHAPE_REASON)
     ck("BR-PUR-02 (A-01) purchase+variable_sales -> 400 {reason} literal "
        "NUEVO", ok1, (r1.text[:130] if r1 is not None else "error"))
     ck("BR-PUR-02 (A-01) purchase+variable_rate -> 400 {reason} literal "
        "NUEVO", ok3, (r3.text[:130] if r3 is not None else "error"))
+    ck("backend.02_28/AC-BE-VS-7 purchase+variable_outflows -> 400 "
+       "{reason: PURCHASE_SHAPE_REASON} (guard generica != FIXED: la "
+       "linea NO es elegible como compra, BR-VS-05)", okvo,
+       (rvo.text[:130] if rvo is not None else "error"))
 
     # AC-BE8a-2: temporada VALIDA en compra -> 201 + id_collection
     # persistido (paridad ingreso). La fila se elimina enseguida via

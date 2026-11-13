@@ -33,6 +33,15 @@ covering the line's budget_date —
                         payment_date || budget_date, year of the CASH
                         month); the AR term left the base (no CECO in
                         accounts_receivable)
+    E3bis variable_outflows: backend.02_28 (BR-VS-04) — NO event is
+                        emitted. The "Variable por Salidas" behavior is
+                        NOT deductible: its own base already includes the
+                        tax payments (BR-VS-01), so a deduction would be
+                        circular, and the identity of spec §2 must hold
+                        to the cent without iteration. The branch is
+                        EXPLICIT (continue) before the fixed `else`
+                        below, which would otherwise emit an incorrect
+                        E2 for this (and any unknown) behavior value.
     E5 import_vat       PURCHASE: T × costo_prov, costo_prov =
                         Total / (1 + %int) (§4.3, D-S10-6), cash event
                         on the import date budget_date
@@ -441,6 +450,15 @@ class BudgetIvaEngine:
                         )
                         emit(line.budget_date, CONCEPT_VARIABLE_EXPENSES,
                              lid, "deductible", base * T)
+                elif behavior == "variable_outflows":
+                    # backend.02_28 (BR-VS-04): NOT deductible — the line
+                    # emits NO IVA-settlement events (E1..E6). The
+                    # variable_outflows base already includes the tax
+                    # payments, so a deduction would create circularity;
+                    # the branch is EXPLICIT before the fixed `else`
+                    # below, which would otherwise emit an incorrect E2
+                    # for this behavior value.
+                    continue
                 else:
                     # E2 — fixed (also the safety branch for any dirty
                     # behavior value: never invent a variable base).

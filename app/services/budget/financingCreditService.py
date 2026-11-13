@@ -222,6 +222,11 @@ def _materialize_expenses(db: Session, credit: FinancingCredit,
                     projected_amount=amount,
                     description=(f"{label} — {credit.lender_name} — "
                                  f"{credit.name} — installment {installment.installment_number}"),
+                    # IVA fix 2026-10-26: interest/insurance of a credit are
+                    # non-taxed for the borrower (NULL would be read as
+                    # "con IVA" by the liquidation engine and the FE flow
+                    # gross-up — D-S10-3 rule). EXPLICIT False.
+                    has_iva=False,
                     source_engine=ENGINE,
                     source_engine_id=installment.id_financing_credit_installment,
                     cost_component_code=code,

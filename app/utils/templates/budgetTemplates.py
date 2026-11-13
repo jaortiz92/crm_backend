@@ -1513,6 +1513,7 @@ class BudgetTemplates:
             "Fijo": "fixed",
             "Variable por Facturación": "variable_sales",
             "Variable por Recaudo": "variable_receivables",
+            "Variable por Salidas": "variable_outflows",   # backend.02_28
         }
         self.df["behavior_type"] = (
             self.df["comportamiento"]

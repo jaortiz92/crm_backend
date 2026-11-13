@@ -23,9 +23,13 @@ class LineTypeEnum(str, enum.Enum):
 
 
 class BehaviorTypeEnum(str, enum.Enum):
+    """Mirror of app/models/budget/budgetLine.py: backend.02_28 adds
+    VARIABLE_OUTFLOWS ("Variable por Salidas") — base = the budget's
+    monthly OUTFLOW total (BR-VS-01), third variable behavior."""
     FIXED = "fixed"
     VARIABLE_SALES = "variable_sales"
     VARIABLE_RECEIVABLES = "variable_receivables"
+    VARIABLE_OUTFLOWS = "variable_outflows"
 
 
 class BudgetLineBase(BaseModel):
@@ -47,7 +51,7 @@ class BudgetLineBase(BaseModel):
     description: Optional[str] = Field(None, description="Optional description")
     behavior_type: BehaviorTypeEnum = Field(
         BehaviorTypeEnum.FIXED,
-        description="Cost behavior: fixed, variable_sales, variable_receivables"
+        description="Cost behavior: fixed, variable_sales, variable_receivables, variable_outflows"
     )
     variable_rate: Optional[float] = Field(
         None,

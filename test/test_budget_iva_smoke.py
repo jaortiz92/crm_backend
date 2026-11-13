@@ -73,6 +73,10 @@ Cubre (numerales EXACTOS de spec §9):
                compara sets exactos de claves de linea => cero ajustes
                esperados, documentado como nota §10 estilo 02_19). El
                carryover no toca has_iva (D-S10-12).
+     AC-BE-VS-6 (backend.02_28): agregar lineas variable_outflows NO
+               altera el settlement IVA (BR-VS-04 no deducible; rama de
+               exclusion explicita ANTES del else fijo — sin eventos
+               E1..E6 y sin la deduccion E2 incorrecta). t08b.
      NFR-BE10-1/2: durante settlement() NO se emite ningun DML (listener
                SQLAlchemy: 0 INSERT/UPDATE/DELETE) y el conteo de SELECT
                es constante (6 con rate resuelto, 5 sin compras con
@@ -862,6 +866,55 @@ def t08_ac_be10_7_flags_and_bases():
               and lines[l_null]["has_iva"] is None)
 
 
+def t08b_ac_vs_iva_isolation():
+    """backend.02_28 (AC-BE-VS-6 / BR-VS-04): agregar lineas
+    variable_outflows NO altera el settlement IVA de b_flags (2044) —
+    la rama de exclusion explicita (continue) evita la caida al else
+    fijo que emitiria una deduccion E2 incorrecta. La linea se siembra
+    con projected_amount SUCIO 500.000: si el comportamiento cayera al
+    else, el periodo ene-feb ganaria fixed_expenses += 95.000 y un
+    evento extra."""
+    before = settle(state.b_flags)
+    if before is None:
+        return ck("AC-BE-VS-6 settlement(b_flags) base 200", False)
+    before_counts = [(p["period_no"], p["events_count"])
+                     for p in before["periods"]]
+    before_totals = dict(before["totals"])
+    before_p2 = period_row(before, 2)
+    before_p3 = period_row(before, 3)
+    insert_line(state.b_flags, state.ccs["C"], "EXPENSE", "2044-05-15",
+                None, 500_000.0, "BE10 var por salidas (NO deducible)",
+                behavior="VARIABLE_OUTFLOWS", rate=0.004, has_iva="TRUE")
+    after = settle(state.b_flags)
+    if after is None:
+        return ck("AC-BE-VS-6 settlement(b_flags) con la linea 200", False)
+    after_counts = [(p["period_no"], p["events_count"])
+                    for p in after["periods"]]
+    after_totals = dict(after["totals"])
+    ok_counts = before_counts == after_counts
+    ck("AC-BE-VS-6/BR-VS-04 events_count por periodo IDENTICO (la linea "
+       "variable_outflows NO emite NINGUN evento E1..E6 — sin caer en el "
+       "else fijo E2)", ok_counts,
+       f"antes={before_counts} despues={after_counts}")
+    ok_totals = all(abs(after_totals[k] - before_totals[k]) <= TOL
+                    for k in before_totals)
+    ck("AC-BE-VS-6 totals del settlement IDENTICOS (generated/"
+       "deductable/payments/final_balance — la deduccion sucia de "
+       "500.000 x T = 95.000 jamas aparece)", ok_totals,
+       f"antes={before_totals} despues={after_totals}")
+    p2 = period_row(after, 2)
+    p3 = period_row(after, 3)
+    ok_fixed = (p2 is not None and before_p2 is not None
+                and approx(p2["deductible"]["fixed_expenses"],
+                           before_p2["deductible"]["fixed_expenses"])
+                and p3 is not None and before_p3 is not None
+                and approx(p3["deductible"]["variable_expenses"],
+                           before_p3["deductible"]["variable_expenses"]))
+    ck("AC-BE-VS-6 desgloses P2 fixed_expenses y P3 variable_expenses "
+       "intactos (el escenario sigue cerrando igual)", ok_fixed)
+    return ok_counts and ok_totals and ok_fixed
+
+
 def t09_ac_be10_1_etl():
     """AC-BE10-1: legacy POST /budget/upload/budget-plan-expense CON la
     columna Con IVA (Si/No/sí/X/vacia) y planning upload de 3 archivos
@@ -1250,6 +1303,7 @@ def main():
         t06_ac_be10_5_catalog,
         t07_ac_be10_6_no_calendar,
         t08_ac_be10_7_flags_and_bases,
+        t08b_ac_vs_iva_isolation,
         t09_ac_be10_1_etl,
         t10_ac_be10_2_line_manager,
         t11_unit_be10,

@@ -789,12 +789,32 @@ def t07_ac_be9_7_row_intact():
     ok2 = (r2 is not None and r2.status_code == 400
            and (r2.json().get("detail") or {}).get("reason")
            == PURCHASE_PAYMENT_REASON)
-    return ck("AC-BE9-7 guards del line manager intactos: POST "
-              "purchase+variable_rate -> 400 {reason: forma BR-PUR-02}; "
-              "PUT payment_date -> 400 {reason: BR-PUR-04}",
-              ok1 and ok2,
-              f"post={r1.status_code if r1 is not None else 'err'} "
-              f"put={r2.status_code if r2 is not None else 'err'}")
+    okg = ck("AC-BE9-7 guards del line manager intactos: POST "
+             "purchase+variable_rate -> 400 {reason: forma BR-PUR-02}; "
+             "PUT payment_date -> 400 {reason: BR-PUR-04}",
+             ok1 and ok2,
+             f"post={r1.status_code if r1 is not None else 'err'} "
+             f"put={r2.status_code if r2 is not None else 'err'}")
+
+    # ── backend.02_28 (AC-BE-VS-7 / BR-VS-05): la linea 'Variable por
+    # Salidas' NO es elegible al arrastre — get_carryover_lines filtra
+    # behavior == FIXED (crud/budget/planning.py L839). Se siembra con
+    # monto SUCIO 777.0: si el filtro se rompiera, el payload del target
+    # ganaria una fila 'line' 777.0. Antes == despues (payload
+    # bit-for-bit).
+    before_vo = payload_tuples(carry_payload(state.tgt) or {"lines": []})
+    state.vs_line = insert_line(
+        state.src_main, state.ccs["A"], "EXPENSE", "2026-07-10", None,
+        777.0, "BE9 var por salidas (NO carryover)",
+        behavior="VARIABLE_OUTFLOWS")
+    run_sql(f"UPDATE budget_lines SET variable_rate = 0.004 "
+            f"WHERE id_budget_line = {state.vs_line}")
+    after_vo = payload_tuples(carry_payload(state.tgt) or {"lines": []})
+    ck("backend.02_28/BR-VS-05 carryover: la linea VARIABLE_OUTFLOWS no "
+       "genera fila de arrastre (payload antes == despues, monto sucio "
+       "777.0 invisible)", before_vo == after_vo,
+       f"antes={len(before_vo)} despues={len(after_vo)}")
+    return okg
 
 
 def _unit_planning():
@@ -950,6 +970,21 @@ def t08_unit_be9():
                for l in built_main],
            f"http={len(http_payload.get('lines', []))} "
            f"unit={len(built_main)}")
+        # ── backend.02_28 (BR-VS-05): get_carryover_lines (== FIXED,
+        # crud/budget/planning.py L839/L969) excluye la linea
+        # VARIABLE_OUTFLOWS del fixture (t07), para el anio fuente y el
+        # target — jamas entra al arrastre por ningun anio.
+        vo_ids = []
+        for tgt_year in (SRC_YEAR, TGT_YEAR):
+            rows_vo = planning.get_carryover_lines(db, state.src_main,
+                                                   tgt_year)
+            vo_ids.extend(int(r.id_budget_line) for r in rows_vo
+                          if getattr(r, "id_budget_line", None))
+        ck("backend.02_28/BR-VS-05 unit: get_carryover_lines (filtro "
+           "== FIXED) excluye la linea VARIABLE_OUTFLOWS del fixture "
+           "para 2026 y 2027",
+           state.vs_line not in vo_ids,
+           f"ids={len(vo_ids)} vs_line={state.vs_line}")
     finally:
         db.close()
     return True

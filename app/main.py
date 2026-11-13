@@ -1,4 +1,4 @@
-# FastApi
+﻿# FastApi
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import configure_mappers
@@ -14,9 +14,17 @@ from app.settings import settings
 Base.metadata.create_all(bind=engine)
 
 
-app = FastAPI(
-    docs_url="/"
-)
+# Fix 6 (SECU): Swagger UI completo (estructura de endpoints y schemas)
+# vive hoy en "/" y, junto a redoc/openapi.json, se sirve SIN autenticacion.
+# En produccion se desactiva por completo; en dev se conserva como esta.
+_is_production = settings.ENV.strip().lower() == "production"
+
+if _is_production:
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+else:
+    app = FastAPI(
+        docs_url="/"
+    )
 
 # CORS
 origins = settings.BACKEND_CORS_ORIGINS.split(",")

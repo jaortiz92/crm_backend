@@ -13,12 +13,9 @@ from sqlalchemy.orm import Session
 
 from app.schemas import User
 from app.schemas.budget import (
-    Budget,
-    BudgetVsActual,
     CashFlowProjection,
     CashFlowResponse,
     CommissionResponse,
-    BudgetTrackingSummary,
     PnLResponse,
 )
 from app import get_db
@@ -46,7 +43,7 @@ def get_cash_flow_projection(
     return engine.project_cash_flow(budget_year=budget_year, id_budget=id_budget)
 
 
-@router.get("/budget-vs-actual", response_model=List[BudgetVsActual])
+@router.get("/budget-vs-actual")
 def get_budget_vs_actual(
     id_budget: int = Query(..., description="Budget ID to compare"),
     id_cost_center: Optional[int] = Query(None, description="Filter by cost center"),
@@ -57,12 +54,21 @@ def get_budget_vs_actual(
     """
     Compare budget projections against actual execution.
     Returns aggregated values by month and cost center with variance analysis.
+
+    DISABLED (fix 7 pre-prod): returns 501 instead of the former empty
+    200 payload, which misled clients into reading real results from it.
+    Implementation arrives with the execution and comparisons phase.
     """
-    # TODO: Implement via BudgetEngine service
-    return []
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "budget-vs-actual is not implemented yet: planned for the "
+            "execution and comparisons phase"
+        ),
+    )
 
 
-@router.get("/tracking/{id_budget}", response_model=BudgetTrackingSummary)
+@router.get("/tracking/{id_budget}")
 def get_budget_tracking_summary(
     id_budget: int,
     db: Session = Depends(get_db),
@@ -71,18 +77,21 @@ def get_budget_tracking_summary(
     """
     Get a complete budget tracking summary with total budgeted,
     total actual, variance and execution percentage.
+
+    DISABLED (fix 7 pre-prod): returns 501 instead of the former
+    hardcoded zero-vector 200 payload. Implementation arrives with
+    the execution and comparisons phase.
     """
-    # TODO: Implement via BudgetEngine service
-    return BudgetTrackingSummary(
-        id_budget=id_budget,
-        budget_name="",
-        total_budgeted=0,
-        total_actual=0,
-        total_variance=0,
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "budget tracking is not implemented yet: planned for the "
+            "execution and comparisons phase"
+        ),
     )
 
 
-@router.post("/clone-for-scenario/{id_budget}", response_model=Budget)
+@router.post("/clone-for-scenario/{id_budget}")
 def clone_budget_for_scenario(
     id_budget: int,
     scenario_name: str = Query(..., description="Name for the scenario clone"),
@@ -93,9 +102,21 @@ def clone_budget_for_scenario(
     Clone a budget into a sandbox for what-if simulation.
     Creates a new budget with is_scenario=True and parent_budget_id
     pointing to the original. All budget lines are duplicated.
+
+    DISABLED (fix 7 pre-prod): returns 501 instead of the former stub
+    that silently echoed the ORIGINAL budget as if it had been cloned.
+    Scenario cloning for what-if testing is available through
+    /budget/planning (T-02 path); full support planned for the
+    execution and comparisons phase.
     """
-    # TODO: Implement via BudgetEngine service
-    return crud.get_budget_by_id(db, id_budget)
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "clone-for-scenario is not implemented on this endpoint yet: "
+            "use /budget/planning clone; full support planned for the "
+            "execution and comparisons phase"
+        ),
+    )
 
 
 @router.get("/pnl", response_model=PnLResponse)

@@ -146,7 +146,7 @@ class PlanningLineCreate(BaseModel):
     description: Optional[str] = Field(None, description="Optional description")
     behavior_type: BehaviorTypeEnum = Field(
         BehaviorTypeEnum.FIXED,
-        description="Cost behavior: fixed, variable_sales, variable_receivables",
+        description="Cost behavior: fixed, variable_sales, variable_receivables, variable_outflows",
     )
     variable_rate: Optional[float] = Field(
         None, ge=0, le=1, validate_default=True,
