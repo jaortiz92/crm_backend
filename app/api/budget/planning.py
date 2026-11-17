@@ -45,6 +45,7 @@ The carry-in is pure READ-DERIVATION: it never writes budget_lines
 
 from io import BytesIO
 import math
+import traceback
 from typing import List, Optional, Tuple
 
 from fastapi import (
@@ -349,6 +350,9 @@ async def planning_upload(
         )
     except Exception as e:
         db.rollback()
+        # Diagnóstico (2026-11): el 500 manual no dejaba rastro en los logs
+        # del contenedor; el traceback completo ahora queda en stdout.
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing planning upload: {str(e)}",

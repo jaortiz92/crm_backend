@@ -35,9 +35,10 @@ class BehaviorTypeEnum(str, enum.Enum):
     third variable behavior — its base is the budget's own OUTFLOW total
     of the accrual month (BR-VS-01), NOT a per-CECO income base. Existing
     databases need the manual
-    `ALTER TYPE behaviortypeenum ADD VALUE IF NOT EXISTS 'variable_outflows'
-    AFTER 'variable_receivables';` BEFORE deploying (see §5.7 / note.md —
-    create_all never alters an existing enum)."""
+    `ALTER TYPE behaviortypeenum ADD VALUE IF NOT EXISTS 'VARIABLE_OUTFLOWS';`
+    (UPPERCASE: SQLAlchemy Enum persists the MEMBER NAME, not the str value)
+    BEFORE deploying (see §5.7 / note.md — create_all never alters an
+    existing enum)."""
     FIXED = "fixed"
     VARIABLE_SALES = "variable_sales"
     VARIABLE_RECEIVABLES = "variable_receivables"
