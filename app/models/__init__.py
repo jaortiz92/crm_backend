@@ -5,6 +5,7 @@ from .user import User
 from .storeType import StoreType
 from .originType import OriginType
 from .line import Line
+from .linePaymentRule import LinePaymentRule
 from .brand import Brand
 from .collection import Collection
 from .customer import Customer
@@ -26,3 +27,24 @@ from .query import CustomerSummary, CustomerTripSummary, CollectionSummary
 from .photo import Photo
 from .customerBrand import CustomerBrand
 from .shipment import Shipment, Base
+from .zone import Zone
+from .management import Management
+from .area import Area
+from .reference import Reference
+from .budget import (
+    CostCenter, ActualExpense, ActualCost,
+    Budget, BudgetLine,
+    AccountReceivable, PaymentLedger,
+    BudgetScenario,
+    AccountPayable, PayableLedger,
+    LineCostRate,
+    LinePayableTerm,
+    LineInternmentRate,
+    LineInternmentTerm,
+    CommissionRate,
+    IvaPeriod,
+    Collaborator, CollaboratorSalaryPlan, LaborCostParameter,
+    LaborArlRate, CostComponent, CollaboratorProvisionAccrual,
+    FinancingCredit, FinancingCreditInstallment,
+    TaxProfile, TaxRate, TaxCalendarPeriod, BudgetTaxAssumption, BudgetTaxResult,
+)

@@ -21,6 +21,12 @@ def get_collection_by_id(db: Session, id_collection: int) -> CollectionSchema:
     return result
 
 
+def get_collection_by_short_name(db: Session, short_collection_name: str) -> CollectionSchema:
+    result = db.query(CollectionModel).filter(
+        CollectionModel.short_collection_name == short_collection_name).first()
+    return result
+
+
 def get_collections(db: Session, skip: int = 0, limit: int = 10) -> list[CollectionSchema]:
     return db.query(CollectionModel).order_by(CollectionModel.short_collection_name.asc()).offset(skip).limit(limit).all()
 

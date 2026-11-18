@@ -6,8 +6,9 @@ from .collection import Collection, CollectionCreate, CollectionFull
 from .contact import Contact, ContactCreate, ContactFull
 from .customer import Customer, CustomerCreate, CustomerFull, CustomerBaseWithCity
 from .customerTrip import CustomerTrip, CustomerTripCreate, CustomerTripFull
-from .department import Department
+from .department import Department, DepartmentCreate
 from .line import Line, LineCreate
+from .linePaymentRule import LinePaymentRule, LinePaymentRuleCreate
 from .order import Order, OrderCreate, OrderFull, OrderWithoutTrip
 from .orderDetail import (
     OrderDetail, OrderDetailCreate, OrderDetailFull,
@@ -41,3 +42,64 @@ from .query import (
 )
 from .photo import Photo, PhotoCreate
 from .customerBrand import CustomerBrand, CustomerBrandCreate, CustomerBrandBase
+from .zone import Zone, ZoneCreate
+from .management import Management, ManagementCreate
+from .area import Area, AreaCreate
+from .reference import Reference, ReferenceCreate, BulkUploadResult, BulkDeleteResult
+from .budget import (
+    CostCenter, CostCenterCreate,
+    ActualExpense, ActualExpenseCreate,
+    ActualCost, ActualCostCreate,
+    Budget, BudgetCreate, BudgetFull,
+    BudgetLine, BudgetLineCreate, BudgetLineFull,
+    AccountReceivable, AccountReceivableCreate, AccountReceivableFull,
+    PaymentLedger, PaymentLedgerCreate,
+    BudgetScenario, BudgetScenarioCreate,
+    AccountPayable, AccountPayableCreate, AccountPayableFull,
+    PayableLedger, PayableLedgerCreate,
+    BudgetVsActual, CashFlowProjection, BudgetTrackingSummary,
+    LineCostRate, LineCostRateCreate, LineCostRateUpdate,
+    LinePayableTerm, LinePayableTermCreate,
+    LineInternmentRate, LineInternmentRateCreate,
+    LineInternmentTerm, LineInternmentTermCreate,
+    CommissionRate, CommissionRateBase, CommissionRateCreate, CommissionRateUpdate,
+    PnLResponse, PnLMeta, PnLStatement, PnLComparison,
+    PnLProfit, PnLOpex, PnLTaxType, PnLTaxSummary,
+    OpexBreakdownItem, CogsBudgetTraceItem,
+    CashFlowResponse, CashFlowMeta, CashFlowSummary, CashFlowPoint,
+    CommissionRateTrace, CommissionDetailRow, CommissionSellerBlock,
+    CommissionSummary, CommissionMeta, CommissionResponse,
+    DatasetUploadStatus, UploadStatusResponse,
+    PlanningUploadResult, PlanningCloneRequest, PlanningCellUpdate,
+    PlanningScenarioRow, PlanningSetTargetResult, PlanningDetail,
+    PlanningLineCreate, PlanningLineUpdate,
+    PlanningCarryoverFlag, PlanningCarryoverSource, PlanningCarryoverLine,
+    PlanningCarryoverResult, PayrollSimulationLine, PayrollSimulationOut,
+    PlanningInitialBalanceSide, PlanningInitialBalanceSet,
+    PlanningInitialBalanceDetail,
+    FinancingSimulationLine, FinancingSimulationOut,
+    FinancingPrincipalFlowLine, FinancingPrincipalFlowOut,
+    IvaPeriod, IvaPeriodBase, IvaPeriodCreate,
+    IvaGeneratedBreakdown, IvaDeductibleBreakdown, IvaSettlementPeriod,
+    IvaUnassigned, IvaSettlementTotals, IvaSettlementMeta, IvaSettlementResult,
+    CollaboratorCreate, CollaboratorUpdate, CollaboratorOut,
+    CollaboratorListResponse,
+    SalaryPlanCreate, SalaryPlanOut,
+    TerminateRequest, RecalculateRequest, RecalculateResult,
+    CollaboratorImportResult,
+    CollaboratorDeleteResult,
+    LaborParameterOut, LaborParameterUpsert, LaborParamsResponse, ArlRateOut,
+    CostComponentOut,
+    BreakdownComponentOut, BreakdownOut,
+    ProvisionBalanceOut, ProvisionsOut, MaterializationStatusOut,
+    FinancingCreditCreate, FinancingCreditUpdate, FinancingCreditOut,
+    FinancingCreditDetail, FinancingCreditListResponse,
+    FinancingInstallmentOut, FinancingScheduleTotals, FinancingSchedulePreview,
+    FinancingRecalculateResult, FinancingCloseRequest, FinancingCloseResult,
+    FinancingCreditDeleteResult,
+    TaxProfile, TaxProfileCreate, TaxRate, TaxRateCreate,
+    TaxCalendar, TaxCalendarCreate, BudgetTaxAssumption,
+    BudgetTaxAssumptionCreate, BudgetTaxResult, BudgetTaxTotals,
+    BudgetTaxCalculationResponse, BudgetTaxCashFlowType,
+    BudgetTaxCashFlowPeriod, BudgetTaxCashFlowResponse,
+)

@@ -8,6 +8,7 @@ from .contact import *
 from .order import *
 from .orderDetail import *
 from .line import *
+from .linePaymentRule import *
 from .brand import *
 from .collection import *
 from .storeType import *
@@ -25,3 +26,8 @@ from .role import *
 from .paymentMethod import *
 from .query import *
 from .photo import *
+from .zone import *
+from .management import *
+from .area import *
+from .reference import *
+from .budget import *

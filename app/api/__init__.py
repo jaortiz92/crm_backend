@@ -26,3 +26,9 @@ from .photo import photo
 from .paymentMethod import payment_method
 from .token import token
 from .query import query
+from .zone import zone
+from .management import management
+from .area import area
+from .budget import budget
+from .linePaymentRule import line_payment_rule
+from .reference import reference

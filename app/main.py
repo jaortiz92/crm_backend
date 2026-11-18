@@ -1,4 +1,4 @@
-# FastApi
+﻿# FastApi
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import configure_mappers
@@ -14,9 +14,17 @@ from app.settings import settings
 Base.metadata.create_all(bind=engine)
 
 
-app = FastAPI(
-    docs_url="/"
-)
+# Fix 6 (SECU): Swagger UI completo (estructura de endpoints y schemas)
+# vive hoy en "/" y, junto a redoc/openapi.json, se sirve SIN autenticacion.
+# En produccion se desactiva por completo; en dev se conserva como esta.
+_is_production = settings.ENV.strip().lower() == "production"
+
+if _is_production:
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+else:
+    app = FastAPI(
+        docs_url="/"
+    )
 
 # CORS
 origins = settings.BACKEND_CORS_ORIGINS.split(",")
@@ -39,6 +47,7 @@ except Exception as e:
 app.include_router(activity)
 app.include_router(activity_type)
 app.include_router(advance)
+app.include_router(area)
 app.include_router(brand)
 app.include_router(city)
 app.include_router(collection)
@@ -50,6 +59,7 @@ app.include_router(department)
 app.include_router(invoice)
 app.include_router(invoice_detail)
 app.include_router(line)
+app.include_router(management)
 app.include_router(order)
 app.include_router(order_detail)
 app.include_router(payment_method)
@@ -64,3 +74,7 @@ app.include_router(user)
 app.include_router(token)
 app.include_router(photo)
 app.include_router(query)
+app.include_router(zone)
+app.include_router(budget)
+app.include_router(line_payment_rule)
+app.include_router(reference)

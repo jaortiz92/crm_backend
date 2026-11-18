@@ -16,6 +16,7 @@ class Brand(Base):
     brand_name = Column(String(100), unique=True, index=True)
 
     line = relationship("Line", back_populates="brands")
+    references = relationship("Reference", back_populates="brand")
 
     customers = relationship("Customer", back_populates="brand")
     invoice_details = relationship("InvoiceDetail", back_populates="brand")
