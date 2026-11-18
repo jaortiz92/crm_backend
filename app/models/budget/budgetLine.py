@@ -70,7 +70,16 @@ class BudgetLine(Base):
     id_collection = Column(Integer, ForeignKey("collections.id_collection"), nullable=True)
     projected_amount = Column(Numeric(15, 2), nullable=False, server_default="0")
     description = Column(Text)
-    behavior_type = Column(Enum(BehaviorTypeEnum), nullable=False, server_default="fixed")
+    # server_default="FIXED" — deliberately NOT the enum member and NOT the
+    # lowercase value. SQLAlchemy accepts an Enum member only because this is
+    # a str-mixin enum, and then quotes the member's RAW string content (its
+    # .value, 'fixed') bypassing _db_value_for_elem. That renders
+    # DEFAULT 'fixed', which is not a behaviortypeenum label (the PG enum
+    # stores the member NAMES: FIXED/VARIABLE_...), so create_all crashes on
+    # a fresh DB (prod crash loop, RestartCount=60). 'FIXED' matches the
+    # label and is what existing dev rows already store. Do not normalize
+    # to lowercase and do not replace with the enum member.
+    behavior_type = Column(Enum(BehaviorTypeEnum), nullable=False, server_default="FIXED")
     variable_rate = Column(Float, nullable=True)
     # BE-S10-IVA (spec backend.02_20 §3.1): the ONLY materialized IVA datum.
     # NULL ≡ True is a RULE OF THE DERIVATION (D-S10-3: legacy files /
